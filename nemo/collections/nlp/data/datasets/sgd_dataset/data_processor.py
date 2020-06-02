@@ -49,7 +49,9 @@ class SGDDataProcessor(object):
     """Data generator for SGD dialogues."""
 
     def __init__(
-        self, task_name, data_dir, dialogues_example_dir, tokenizer, schema_emb_processor, overwrite_dial_files=False,
+        self, task_name, data_dir, dialogues_example_dir, tokenizer, schema_emb_processor, 
+        overwrite_dial_files=False,
+        mode='DST'
     ):
         """
         Constructs SGD8DataProcessor
@@ -60,7 +62,12 @@ class SGDDataProcessor(object):
             tokenizer (Tokenizer): such as NemoBertTokenizer
             schema_emb_processor (Obj): contains information about schemas
             overwrite_dial_files (bool): whether to overwite dialogue files
+            mode (str): data processing for DST (dialogue state tracking) or PM (dialogue policy manager)
         """
+        if mode not in ['DST', 'PM']:
+            raise ValueError(f'{mode} mode is not supported. Choose from ["DST", "PM"]')
+
+        self.mode = mode
         self.data_dir = data_dir
         self.dialogues_examples_dir = dialogues_example_dir
 
@@ -190,9 +197,16 @@ class SGDDataProcessor(object):
                     system_utterance = ""
                     system_frames = {}
 
+                if self.mode == 'PM':
+-                    system_turn_next = dialog["turns"][turn_idx + 1]
+-                    # to have labels for NLG module
+-                    system_utterance_next = system_turn_next["utterance"]
+-                    system_frames_next = {f["service"]: f for f in system_turn_next["frames"]}
+
                 turn_id = "{}-{}-{:02d}".format(dataset, dialog_id, turn_idx)
                 turn_examples, prev_states = self._create_examples_from_turn(
-                    turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states, schemas
+                    turn_id, system_utterance, user_utterance, system_frames, user_frames,
+                    prev_states, schemas, system_utterance_next, system_frames_next
                 )
                 examples.extend(turn_examples)
         return examples
@@ -215,7 +229,10 @@ class SGDDataProcessor(object):
         return state_update
 
     def _create_examples_from_turn(
-        self, turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states, schemas
+        self, turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states,
+        schemas,
+        system_utterance_next,
+-       system_frames_next
     ):
         """
         Creates an example for each frame in the user turn.
