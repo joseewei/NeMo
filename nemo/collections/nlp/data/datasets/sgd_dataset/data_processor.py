@@ -52,7 +52,6 @@ class SGDDataProcessor(object):
     def __init__(
         self, task_name, data_dir, dialogues_example_dir, tokenizer, schema_emb_processor, 
         overwrite_dial_files=False,
-        mode='DST'
     ):
         """
         Constructs SGD8DataProcessor
@@ -65,10 +64,6 @@ class SGDDataProcessor(object):
             overwrite_dial_files (bool): whether to overwite dialogue files
             mode (str): data processing for DST (dialogue state tracking) or PM (dialogue policy manager)
         """
-        if mode not in ['DST', 'PM']:
-            raise ValueError(f'{mode} mode is not supported. Choose from ["DST", "PM"]')
-
-        self.mode = mode
         self.data_dir = data_dir
         self.dialogues_examples_dir = dialogues_example_dir
 
@@ -237,17 +232,16 @@ class SGDDataProcessor(object):
                     system_utterance = ""
                     system_frames = {}
 
-                if self.mode == 'PM':
-                     system_turn_next = dialog["turns"][turn_idx + 1]
-                     # to have labels for NLG module
-                     system_utterance_next = system_turn_next["utterance"]
-                     system_frames_next = {f["service"]: f for f in system_turn_next["frames"]}
+                # for PM
+                system_turn_next = dialog["turns"][turn_idx + 1]
+                # to have labels for NLG module
+                system_utterance_next = system_turn_next["utterance"]
+                system_frames_next = {f["service"]: f for f in system_turn_next["frames"]}
 
                 turn_id = "{}-{}-{:02d}".format(dataset, dialog_id, turn_idx)
-
+                import pdb; pdb.set_trace()
                 turn_examples, prev_states, slot_carryover_values = self._create_examples_from_turn(
-                    turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states, schemas, system_utterance_next, system_frames_next
-
+                    turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states, schemas,
                 )
                 examples.extend(turn_examples)
 
@@ -284,9 +278,7 @@ class SGDDataProcessor(object):
 
     def _create_examples_from_turn(
         self, turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states,
-        schemas,
-        system_utterance_next,
--       system_frames_next
+        schemas
     ):
         """
         Creates an example for each frame in the user turn.
@@ -336,7 +328,7 @@ class SGDDataProcessor(object):
             state = user_frame["state"]["slot_values"]
             state_update = self._get_state_update(state, prev_states.get(service, {}))
             states[service] = state
-
+            
             # Populate features in the example.
             example.add_categorical_slots(state_update)
             # The input tokens to bert are in the format [CLS] [S1] [S2] ... [SEP]
