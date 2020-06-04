@@ -235,6 +235,11 @@ parser.add_argument(
     "--checkpoints_to_keep", default=1, type=int, help="The number of last checkpoints to keep",
 )
 
+### GPT-2 args
+parser.add_argument("--vocab_size", default=3200, type=int, help="Vocabulary size")
+parser_text.add_argument("--sample_size", default=1e7, type=int, help="Data sample size.")
+
+
 args = parser.parse_args()
 logging.info(args)
 
@@ -290,40 +295,51 @@ tokenizer = nemo_nlp.data.tokenizers.get_tokenizer(
 
 hidden_size = pretrained_bert_model.hidden_size
 
-# Run SGD preprocessor to generate and store schema embeddings
-schema_preprocessor = SchemaPreprocessor(
-    data_dir=args.data_dir,
-    schema_embedding_dir=args.schema_embedding_dir,
-    schema_config=schema_config,
-    tokenizer=tokenizer,
-    bert_model=pretrained_bert_model,
-    overwrite_schema_emb_files=args.overwrite_schema_emb_files,
-    bert_ckpt_dir=args.checkpoint_dir,
-    nf=nf,
-    mode=args.schema_emb_init,
-    is_trainable=args.train_schema_emb,
+# # Run SGD preprocessor to generate and store schema embeddings
+# schema_preprocessor = SchemaPreprocessor(
+#     data_dir=args.data_dir,
+#     schema_embedding_dir=args.schema_embedding_dir,
+#     schema_config=schema_config,
+#     tokenizer=tokenizer,
+#     bert_model=pretrained_bert_model,
+#     overwrite_schema_emb_files=args.overwrite_schema_emb_files,
+#     bert_ckpt_dir=args.checkpoint_dir,
+#     nf=nf,
+#     mode=args.schema_emb_init,
+#     is_trainable=args.train_schema_emb,
+# )
+
+# dialogues_processor = data_processor.SGDDataProcessor(
+#     task_name=args.task_name,
+#     data_dir=args.data_dir,
+#     dialogues_example_dir=args.dialogues_example_dir,
+#     tokenizer=tokenizer,
+#     schema_emb_processor=schema_preprocessor,
+#     overwrite_dial_files=args.overwrite_dial_files,
+# )
+
+# dataset_split = 'train'
+# datalayer = nemo_nlp.nm.data_layers.SGDDataLayer(
+#     dataset_split=dataset_split,
+#     dialogues_processor=dialogues_processor,
+#     batch_size=args.train_batch_size,
+#     shuffle=not args.no_shuffle if dataset_split == 'train' else False,
+#     num_workers=args.num_workers,
+#     pin_memory=args.enable_pin_memory,
+# )
+# data = datalayer()
+
+# special_tokens = nemo_nlp.data.get_bert_special_tokens('bert')
+
+
+data_desc = nemo_nlp.data.datasets.lm_bert_dataset.BERTPretrainingDataDesc(
+    args.dataset_name,
+    train_data=args.train_data,
+    eval_data=args.eval_data,
+    vocab_size=args.vocab_size,
+    sample_size=args.sample_size,
+    # special_tokens=list(set(special_tokens.values())),
 )
-
-dialogues_processor = data_processor.SGDDataProcessor(
-    task_name=args.task_name,
-    data_dir=args.data_dir,
-    dialogues_example_dir=args.dialogues_example_dir,
-    tokenizer=tokenizer,
-    schema_emb_processor=schema_preprocessor,
-    overwrite_dial_files=args.overwrite_dial_files,
-)
-
-dataset_split = 'train'
-datalayer = nemo_nlp.nm.data_layers.SGDDataLayer(
-        dataset_split=dataset_split,
-        dialogues_processor=dialogues_processor,
-        batch_size=args.train_batch_size,
-        shuffle=not args.no_shuffle if dataset_split == 'train' else False,
-        num_workers=args.num_workers,
-        pin_memory=args.enable_pin_memory,
-    )
-data = datalayer()
-
 # # define model pipeline
 # sgd_encoder = SGDEncoderNM(hidden_size=hidden_size, dropout=args.dropout)
 # sgd_decoder = SGDDecoderNM(

@@ -50,8 +50,7 @@ class SGDDataProcessor(object):
     """Data generator for SGD dialogues."""
 
     def __init__(
-        self, task_name, data_dir, dialogues_example_dir, tokenizer, schema_emb_processor, 
-        overwrite_dial_files=False,
+        self, task_name, data_dir, dialogues_example_dir, tokenizer, schema_emb_processor, overwrite_dial_files=False,
     ):
         """
         Constructs SGD8DataProcessor
@@ -240,9 +239,16 @@ class SGDDataProcessor(object):
 
                 delex_sys_uttr_next = self._delexilize(system_utterance_next, system_frames_next)
                 turn_id = "{}-{}-{:02d}".format(dataset, dialog_id, turn_idx)
-                
+
                 turn_examples, prev_states, slot_carryover_values = self._create_examples_from_turn(
-                    turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states, schemas, delex_sys_uttr_next
+                    turn_id,
+                    system_utterance,
+                    user_utterance,
+                    system_frames,
+                    user_frames,
+                    prev_states,
+                    schemas,
+                    delex_sys_uttr_next,
                 )
                 examples.extend(turn_examples)
 
@@ -278,7 +284,7 @@ class SGDDataProcessor(object):
                 for action in v['actions']:
                     for slot_value in action['values']:
                         if slot_value in uttr:
-                            uttr = uttr.replace(slot_value, '[value_' + action['slot'] +']')
+                            uttr = uttr.replace(slot_value, '[value_' + action['slot'] + ']')
 
         # delex slot_values from DB search results
         for v in frame.values():
@@ -306,8 +312,15 @@ class SGDDataProcessor(object):
         return state_update
 
     def _create_examples_from_turn(
-        self, turn_id, system_utterance, user_utterance, system_frames, user_frames, prev_states,
-        schemas, delex_sys_uttr_next
+        self,
+        turn_id,
+        system_utterance,
+        user_utterance,
+        system_frames,
+        user_frames,
+        prev_states,
+        schemas,
+        delex_sys_uttr_next,
     ):
         """
         Creates an example for each frame in the user turn.
@@ -333,7 +346,13 @@ class SGDDataProcessor(object):
         dialog_id_1, dialog_id_2 = dialog_id.split('_')
         base_example.example_id_num = [int(dialog_id_1), int(dialog_id_2), int(turn_id_)]
         base_example.add_utterance_features(
-            system_tokens, system_inv_alignments, user_tokens, user_inv_alignments, system_utterance, user_utterance, delex_sys_uttr_next
+            system_tokens,
+            system_inv_alignments,
+            user_tokens,
+            user_inv_alignments,
+            system_utterance,
+            user_utterance,
+            delex_sys_uttr_next,
         )
 
         examples = []
@@ -357,7 +376,7 @@ class SGDDataProcessor(object):
             state = user_frame["state"]["slot_values"]
             state_update = self._get_state_update(state, prev_states.get(service, {}))
             states[service] = state
-            
+
             # Populate features in the example.
             example.add_categorical_slots(state_update)
             # The input tokens to bert are in the format [CLS] [S1] [S2] ... [SEP]
@@ -391,7 +410,7 @@ class SGDDataProcessor(object):
                     for prev_slot_name, prev_values in prev_slot_value_list.items():
                         for prev_value in prev_values:
                             slot_carryover_values[prev_value].append((prev_service, prev_slot_name))
-       
+
         return examples, states, slot_carryover_values
 
     def _find_subword_indices(self, slot_values, utterance, char_slot_spans, alignments, subwords, bias):

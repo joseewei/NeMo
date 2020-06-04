@@ -189,7 +189,14 @@ class InputExample(object):
         return summary_dict
 
     def add_utterance_features(
-        self, system_tokens, system_inv_alignments, user_tokens, user_inv_alignments, system_utterance, user_utterance, delex_sys_uttr_next
+        self,
+        system_tokens,
+        system_inv_alignments,
+        user_tokens,
+        user_inv_alignments,
+        system_utterance,
+        user_utterance,
+        delex_sys_uttr_next,
     ):
         """Add utterance related features input to bert.
 

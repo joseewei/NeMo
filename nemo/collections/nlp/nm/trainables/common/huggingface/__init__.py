@@ -18,3 +18,5 @@ from nemo.collections.nlp.nm.trainables.common.huggingface.albert_nm import *
 from nemo.collections.nlp.nm.trainables.common.huggingface.bert_nm import *
 from nemo.collections.nlp.nm.trainables.common.huggingface.huggingface_utils import *
 from nemo.collections.nlp.nm.trainables.common.huggingface.roberta_nm import *
+from nemo.collections.nlp.nm.trainables.common.huggingface.gpt2_nm import *
+
