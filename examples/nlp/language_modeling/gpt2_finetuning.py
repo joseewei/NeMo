@@ -193,7 +193,7 @@ parser.add_argument("--save_epoch_freq", default=1, type=int, help="Save checkpo
 parser.add_argument("--save_step_freq", default=100, type=int, help="Save checkpoints every given iteration.")
 parser.add_argument("--train_step_freq", default=25, type=int, help="Print training metrics every given iteration.")
 parser.add_argument("--eval_step_freq", default=25, type=int, help="Print evaluation metrics every given iteration.")
-
+parser.add_argument("--no_shuffle", action="store_true", help="Whether to shuffle training data")
 parser.add_argument("--num_epochs", default=10, type=int, help="Number of training epochs.")
 parser.add_argument("--num_iters", default=-1, type=int, help="Number of training steps.")
 parser.add_argument("--sample_size", default=1e7, type=int, help="Data sample size.")
@@ -290,13 +290,16 @@ gpt2_model = nemo_nlp.nm.trainables.huggingface.GPT2(
 
 
 def create_pipeline(data_file, batch_size, preprocessed_data=False, batches_per_step=1, train=True):
-    data_layer = nemo_nlp.nm.data_layers.BertPretrainingDataLayer(
-            tokenizer,
-            data_file,
-            args.max_seq_length,
-            batch_size=batch_size,
-            shuffle=train,
+    self, dataset_type, dataset_params, batch_size, shuffle=False, num_workers=-1, pin_memory=False
+
+    dataset_type = nemo_nlp.data.TextDataset(tokenizer=tokenizer, file_path=data_file)
+    data_layer = nemo_nlp.nm.data_layers.TextDataLayer(
+            dataset_type=nemo_nlp.data.TextDataset,
+            dataset_params={'tokenizer':tokenizer, 'file_path':data_file},
+            batch_size=args.batch_size, 
+            shuffle=not args.no_shuffle if train else False
         )
+    
     
     steps_per_epoch = math.ceil(len(data_layer) / (batch_size * args.num_gpus * batches_per_step))
 
