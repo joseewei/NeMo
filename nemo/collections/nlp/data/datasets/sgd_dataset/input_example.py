@@ -71,6 +71,8 @@ class InputExample(object):
 
         self.user_utterance = ''
         self.system_utterance = ''
+        # Delexilized system utterance for the next dialogue turn - used as the ground truth for NLG module
+        self.delex_sys_uttr_next = ''
         # The id of each subword in the vocabulary for BERT.
         self.utterance_ids = [0] * self._max_seq_length
         # Denotes the identity of the sequence. Takes values 0 (system utterance) and 1 (user utterance).
@@ -187,7 +189,7 @@ class InputExample(object):
         return summary_dict
 
     def add_utterance_features(
-        self, system_tokens, system_inv_alignments, user_tokens, user_inv_alignments, system_utterance, user_utterance
+        self, system_tokens, system_inv_alignments, user_tokens, user_inv_alignments, system_utterance, user_utterance, delex_sys_uttr_next
     ):
         """Add utterance related features input to bert.
 
@@ -272,8 +274,9 @@ class InputExample(object):
         self.start_char_idx = start_char_idx
         self.end_char_idx = end_char_idx
 
-        self.user_utterances = user_utterance
+        self.user_utterance = user_utterance
         self.system_utterance = system_utterance
+        self.delex_sys_uttr_next = delex_sys_uttr_next
 
     def make_copy_with_utterance_features(self):
         """Make a copy of the current example with utterance features."""
@@ -292,6 +295,7 @@ class InputExample(object):
         new_example.end_char_idx = list(self.end_char_idx)
         new_example.user_utterance = self.user_utterance
         new_example.system_utterance = self.system_utterance
+        new_example.delex_sys_uttr_next = self.delex_sys_uttr_next
         return new_example
 
     def add_categorical_slots(self, state_update):
