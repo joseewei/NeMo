@@ -51,8 +51,8 @@ class LanguageModelingDataLayer(TextDataLayer):
         """
         return {
             "input_ids": NeuralType(('B', 'T'), ChannelType()),
-            "input_mask": NeuralType(('B', 'T'), ChannelType()),
-            "labels": NeuralType(('B', 'T'), LabelsType()),
+            "input_mask": NeuralType(('B', 'T'), ChannelType(), optional=True),
+            "labels": NeuralType(('B', 'T'), LabelsType(), optional=True),
         }
 
     def __init__(

@@ -237,7 +237,6 @@ parser.add_argument(
 
 ### GPT-2 args
 parser.add_argument("--vocab_size", default=3200, type=int, help="Vocabulary size")
-parser_text.add_argument("--sample_size", default=1e7, type=int, help="Data sample size.")
 
 
 args = parser.parse_args()

@@ -83,3 +83,6 @@ class NemoGPT2Tokenizer(TokenizerSpec):
     @property
     def eos_id(self):
         return self.tokens_to_ids([self.tokenizer.eos_token])[0]
+    @property
+    def max_len(self):
+        return self.tokenizer.max_len
