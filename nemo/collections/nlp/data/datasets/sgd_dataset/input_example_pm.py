@@ -48,14 +48,22 @@ class InputExamplePM(object):
             minibatch.
           tokenizer (Tokenizer): such as NemoGPT2Tokenizer
         """
+        user_special_token = '<|user|>'
+        sys_special_token = '<|system|>'
 
-        context = system_utterance
-        user_tokens = tokenizer.text_to_tokens(user_utterance)
-        system_tokens = tokenizer.text_to_tokens(user_utterance)
+        user_tokens = user_special_token + tokenizer.text_to_tokens(user_utterance)
+        self.user_token_ids = tokenizer.tokens_to_ids(user_tokens)
+        system_tokens = sys_special_token + tokenizer.text_to_tokens(user_utterance)
+        self.system_token_ids = tokenizer.tokens_to_ids(system_tokens)
+
+        token_type_ids = len(user_token_ids) * [tokenizer.tokens_to_ids(user_special_token)] +
+                         len(system_token_ids) * [tokenizer.tokens_to_ids(sys_special_token)] +
 
         import pdb; pdb.set_trace()
 
         print()
+
+
 
 
     

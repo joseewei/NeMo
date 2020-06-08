@@ -267,12 +267,12 @@ class SGDDataProcessor(object):
                 print (user_frames)
                 print (system_frames_next)
                 import pdb; pdb.set_trace()
-                # if self.mode == 'PM':
-                #     pm_examples = InputExamplePM(user_utterance,
-                #                             system_utterance, 
-                #                             user_frames,
-                #                             system_frames_next,
-                #                             self._pm_tokenizer)
+                if self.mode == 'PM':
+                    pm_examples = InputExamplePM(user_utterance,
+                                            system_utterance, 
+                                            user_frames,
+                                            system_frames_next,
+                                            self._pm_tokenizer)
                 examples.extend(turn_examples)
 
                 for value, slots_list in slot_carryover_values.items():
