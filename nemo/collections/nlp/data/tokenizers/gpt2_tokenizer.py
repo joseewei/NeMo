@@ -15,6 +15,7 @@
 # =============================================================================
 
 from transformers import GPT2Tokenizer
+from nemo.utils import logging
 
 from nemo.collections.nlp.data.tokenizers.tokenizer_spec import TokenizerSpec
 
@@ -42,9 +43,33 @@ class NemoGPT2Tokenizer(TokenizerSpec):
             special_tokens_dict["bos_token"] = bos_token
         if self.tokenizer.eos_token is None:
             special_tokens_dict["eos_token"] = eos_token
-        if self.tokenizer.pad_token is None:
-            special_tokens_dict["pad_token"] = "<|pad|>"
+        
+        special_tokens_dict["pad_token"] = "<|pad|>"
+        
+        for k, v in special_tokens_dict.items():
+            setattr(self, k, v)
+
         self.tokenizer.add_special_tokens(special_tokens_dict)
+
+
+    def add_special_tokens(self, special_tokens_dict):
+        """
+        Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
+        to class attributes. If special tokens are NOT in the vocabulary, they are added
+        to it (indexed starting from the last index of the current vocabulary).
+        Using `add_special_tokens` will ensure your special tokens can be used in several ways:
+        - special tokens are carefully handled by the tokenizer (they are never split)
+        - you can easily refer to special tokens using tokenizer class attributes like `tokenizer.cls_token`. This makes it easy to develop model-agnostic training and fine-tuning scripts.
+        When possible, special tokens are already registered for provided pretrained models (ex: BertTokenizer cls_token is already registered to be '[CLS]' and XLM's one is also registered to be '</s>')
+        Args:
+            special_tokens_dict: dict of string. Keys should be in the list of predefined special attributes:
+                [``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``, ``mask_token``,
+                ``additional_special_tokens``].
+                Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+        Returns:
+            Number of tokens added to the vocabulary.
+        """
+        return self.tokenizer.add_special_tokens(special_tokens_dict)
 
     def text_to_tokens(self, text):
         tokens = self.tokenizer.tokenize(text)
@@ -86,3 +111,4 @@ class NemoGPT2Tokenizer(TokenizerSpec):
     @property
     def max_len(self):
         return self.tokenizer.max_len
+

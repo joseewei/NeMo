@@ -23,6 +23,7 @@ src/transformers/data/datasets/language_modeling.py
 import numpy as np
 import os
 
+import torch
 from torch.utils.data import Dataset
 import pickle
 
@@ -30,7 +31,9 @@ from nemo.utils import logging
 import time
 from filelock import FileLock
 
-__all__ = ['TextDataset', 'LineByLineTextDataset']
+__all__ = [
+    'TextDataset', 
+'LineByLineTextDataset']
 
 
 class TextDataset(Dataset):
@@ -87,7 +90,7 @@ class TextDataset(Dataset):
         return len(self.examples)
 
     def __getitem__(self, i):
-        return np.array(self.examples[i])
+        return torch.tensor(self.examples[i], dtype=torch.long)
 
 class LineByLineTextDataset(Dataset):
     """
@@ -101,12 +104,12 @@ class LineByLineTextDataset(Dataset):
 
         with open(file_path, encoding="utf-8") as f:
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
-
         batch_encoding = tokenizer.tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)
         self.examples = batch_encoding["input_ids"]
+        
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, i):
-        return np.array(self.examples[i])
+        return torch.tensor(self.examples[i])

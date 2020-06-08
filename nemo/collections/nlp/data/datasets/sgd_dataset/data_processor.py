@@ -30,6 +30,7 @@ import numpy as np
 import torch
 
 from nemo.collections.nlp.data.datasets.sgd_dataset.input_example import InputExample
+from nemo.collections.nlp.data.datasets.sgd_dataset.input_example_pm import InputExamplePM
 from nemo.utils import logging
 
 __all__ = ['FILE_RANGES', 'PER_FRAME_OUTPUT_FILENAME', 'SGDDataProcessor']
@@ -50,7 +51,12 @@ class SGDDataProcessor(object):
     """Data generator for SGD dialogues."""
 
     def __init__(
-        self, task_name, data_dir, dialogues_example_dir, tokenizer, schema_emb_processor, overwrite_dial_files=False,
+        self, task_name, data_dir, dialogues_example_dir,
+        tokenizer,
+        pm_tokenizer,
+        schema_emb_processor=None,
+        overwrite_dial_files=False,
+        mode='DST'
     ):
         """
         Constructs SGD8DataProcessor
@@ -59,14 +65,19 @@ class SGDDataProcessor(object):
             data_dir (str): path to data directory
             dialogues_example_dir (str): path to  store processed dialogue examples
             tokenizer (Tokenizer): such as NemoBertTokenizer
-            schema_emb_processor (Obj): contains information about schemas
+            schema_emb_processor (Obj): contains information about schemas, None if mode='PM'
             overwrite_dial_files (bool): whether to overwite dialogue files
             mode (str): data processing for DST (dialogue state tracking) or PM (dialogue policy manager)
         """
+        if mode not in ['DST', 'PM']:
+            raise ValueError(f'{mode} mode is not supported')
+        self.mode = mode
+
         self.data_dir = data_dir
         self.dialogues_examples_dir = dialogues_example_dir
 
         self._task_name = task_name
+        
         self.schema_config = schema_emb_processor.schema_config
         self.schema_emb_processor = schema_emb_processor
 
@@ -87,6 +98,7 @@ class SGDDataProcessor(object):
         }
 
         self._tokenizer = tokenizer
+        self._pm_tokenizer = pm_tokenizer
         self._max_seq_length = self.schema_config["MAX_SEQ_LENGTH"]
 
         self.dial_files = {}
@@ -240,6 +252,7 @@ class SGDDataProcessor(object):
                 delex_sys_uttr_next = self._delexilize(system_utterance_next, system_frames_next)
                 turn_id = "{}-{}-{:02d}".format(dataset, dialog_id, turn_idx)
 
+                context = system_utterance + user_utterance
                 turn_examples, prev_states, slot_carryover_values = self._create_examples_from_turn(
                     turn_id,
                     system_utterance,
@@ -250,6 +263,16 @@ class SGDDataProcessor(object):
                     schemas,
                     delex_sys_uttr_next,
                 )
+                
+                print (user_frames)
+                print (system_frames_next)
+                import pdb; pdb.set_trace()
+                # if self.mode == 'PM':
+                #     pm_examples = InputExamplePM(user_utterance,
+                #                             system_utterance, 
+                #                             user_frames,
+                #                             system_frames_next,
+                #                             self._pm_tokenizer)
                 examples.extend(turn_examples)
 
                 for value, slots_list in slot_carryover_values.items():

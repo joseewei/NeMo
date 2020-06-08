@@ -17,15 +17,15 @@
 import os
 import random
 
-import h5py
 import numpy as np
 import torch
 from torch.utils import data as pt_data
+from torch.nn.utils.rnn import pad_sequence
 
 from nemo.backends.pytorch import DataLayerNM
 from nemo.collections.nlp.data import BertPretrainingDataset, BertPretrainingPreprocessedDataset
 from nemo.collections.nlp.nm.data_layers.text_datalayer import TextDataLayer
-from nemo.core import ChannelType, LabelsType, MaskType, NeuralType
+from nemo.core import ChannelType, LabelsType, MaskType, NeuralType, DeviceType
 from nemo.utils.decorators import add_port_docs
 
 __all__ = ['GPT2DataLayer']
@@ -71,14 +71,63 @@ class GPT2DataLayer(TextDataLayer):
         }
 
     def __init__(
-        self, tokenizer, dataset_type, file_path, block_size=-1, overwrite_cache=False, batch_size=64, shuffle=False
+        self, tokenizer, dataset_type, file_path, block_size, batch_size, overwrite_cache=False, shuffle=False, num_workers=0
     ):
         dataset_params = {
             'tokenizer': tokenizer,
             'file_path': file_path,
             'block_size':block_size,
-            'overwrite_cache':overwrite_cache
-        }
-        super().__init__(dataset_type, dataset_params, batch_size, shuffle=shuffle)
+            'overwrite_cache':overwrite_cache}
 
+        super().__init__(dataset_type, dataset_params, batch_size=batch_size, shuffle=shuffle)
+        self.tokenizer = tokenizer
+        if self._placement == DeviceType.AllGpu:
+            sampler = pt_data.distributed.DistributedSampler(self._dataset)
+        else:
+            sampler = None
 
+        self._dataloader = pt_data.DataLoader(
+            dataset=self._dataset,
+            batch_size=batch_size,
+            shuffle=sampler is None,
+            num_workers=num_workers,
+            collate_fn=self._collate_fn,
+            sampler=sampler,
+        )
+
+    @property
+    def dataset(self):
+        return None
+
+    @property
+    def data_iterator(self):
+        return self._dataloader
+        
+    def _collate_fn(self, examples):
+        """
+        Data collator used for language modeling.
+        - collates batches of tensors, honoring their tokenizer's pad_token
+        - preprocesses batches for masked language modeling
+
+        source: transformers/data/data_collator.py
+        """
+
+        def _tensorize_batch(examples):
+            length_of_first = examples[0].size(0)
+            are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
+            if are_tensors_same_length:
+                return torch.stack(examples, dim=0)
+            else:
+                if self.tokenizer.pad_token is None:
+                    raise ValueError(
+                        "You are attempting to pad samples but the tokenizer you are using"
+                        f" ({self.tokenizer.__class__.__name__}) does not have one."
+                    )
+                return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_id)
+
+        batch = _tensorize_batch(examples)
+        import pdb; pdb.set_trace()
+        return batch
+
+   
+    

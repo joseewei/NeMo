@@ -242,13 +242,40 @@ nf = nemo_core.NeuralModuleFactory(
     # TODO gpt2 special tokens?
     # special_tokens = nemo_nlp.data.get_bert_special_tokens('bert')
 
+ATTR_TO_SPECIAL_TOKEN = {'additional_special_tokens':
+                         ['<context>', "<|endofcontext|>", 
+                         '<|user|>', '<|system|>', 
+                         "<|belief|>", "<|endofbelief|>",
+                         "<|action|>""<|endofaction|>", 
+                         "<|response|>", "<|endofresponse|>"]}
 
-tokenizer = nemo_nlp.data.NemoGPT2Tokenizer(pretrained_model=args.pretrained_model_name)
-args.vocab_size = tokenizer.vocab_size
+SPECIAL_TOKENS = ['<|bos|>', '<|eos|>', '<|pad|>'] + ATTR_TO_SPECIAL_TOKEN['additional_special_tokens']
+
+MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
+PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
 gpt2_model = nemo_nlp.nm.trainables.huggingface.GPT2LM(
     pretrained_model_name=args.pretrained_model_name,
 )
+tokenizer = nemo_nlp.data.NemoGPT2Tokenizer(pretrained_model=args.pretrained_model_name,
+bos_token=['<|bos|>'],
+eos_token=['<|eos|>'])
+
+# TODO move to HF utils
+def add_special_tokens_(model, tokenizer):
+    """ Add special tokens to the tokenizer and the model if they have not already been added. """
+    orig_num_tokens = len(tokenizer.tokenizer.encoder)
+    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
+    if num_added_tokens > 0:
+        model.model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
+    logging.info('%s special tokens added', num_added_tokens)
+    tokenizer.vocab_size += num_added_tokens
+
+args.vocab_size = tokenizer.vocab_size
+import pdb; pdb.set_trace()
+add_special_tokens_(gpt2_model, tokenizer)
+
+
 
 # classifier = nemo_nlp.nm.trainables.BertTokenClassifier(
 #     model.hidden_size, num_classes=args.vocab_size, activation=args.hidden_act, log_softmax=True
@@ -270,9 +297,11 @@ def create_pipeline(data_file, train=True):
             dataset_type=nemo_nlp.data.LineByLineTextDataset,
             tokenizer=tokenizer,
             file_path=data_file,
+            block_size=args.max_seq_length,
             batch_size=args.batch_size, 
             shuffle=not args.no_shuffle if train else False,
         )
+
     steps_per_epoch = math.ceil(len(data_layer) / (args.batch_size * args.num_gpus * args.batches_per_step))
 
     input_ids = data_layer()

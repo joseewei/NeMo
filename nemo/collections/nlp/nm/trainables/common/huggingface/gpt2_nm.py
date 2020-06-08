@@ -18,7 +18,7 @@
 
 from typing import List, Optional
 
-from transformers import GPT2Config, GPT2Model,GPT2LMHeadModel, GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers import GPT2Config, GPT2Model,GPT2LMHeadModel, GPT2_PRETRAINED_MODEL_ARCHIVE_LIST, GPT2DoubleHeadsModel
 
 from nemo.backends.pytorch.nm import TrainableNM
 from nemo.core.neural_modules import PretrainedModelInfo
@@ -27,60 +27,13 @@ from nemo.utils.decorators import add_port_docs
 
 __all__ = ['GPT2', 'GPT2LM']
 
-class GPT2LM(TrainableNM):
-    """
-    GPT2 wraps around the Huggingface implementation of GPT2 from their
-    transformers repository for easy use within NeMo.
 
-    Args:
-        # pretrained_model_name (str): If using a pretrained model, this should
-        #     be the model's name. Otherwise, should be left as None.
-        # config_filename (str): path to model configuration file. Optional.
-        # vocab_size (int): Size of the vocabulary file, if not using a
-        #     pretrained model.
-        # hidden_size (int): Size of the encoder and pooler layers.
-        # num_hidden_layers (int): Number of hidden layers in the encoder.
-        # num_attention_heads (int): Number of attention heads for each layer.
-        # intermediate_size (int): Size of intermediate layers in the encoder.
-        # hidden_act (str): Activation function for encoder and pooler layers;
-        #     "gelu", "relu", and "swish" are supported.
-        # max_position_embeddings (int): The maximum number of tokens in a
-        # sequence.
-    """
+class GPT2LM(TrainableNM):
 
     @property
     @add_port_docs()
     def input_ports(self):
-        """Returns definitions of module input ports.
-        input_ids (torch.LongTensor of shape (batch_size, sequence_length)) –
-            Indices of input sequence tokens in the vocabulary.
-            If past is used, optionally only the last input_ids have to be input (see past).
-        past (List[torch.FloatTensor] of length config.n_layers) – Contains pre-computed hidden-states
-            (key and values in the attention blocks) as computed by the model (see past output below).
-            Can be used to speed up sequential decoding. If past is used, the user can optionally input
-            only the last input_ids (those that don’t have their past given to this model) of shape (batch_size, 1)
-            instead of all input_ids of shape (batch_size, sequence_length).
-        attention_mask (torch.FloatTensor of shape (batch_size, sequence_length), optional, defaults to None) –
-            Mask to avoid performing attention on padding token indices. Mask values selected in [0, 1]:
-            1 for tokens that are NOT MASKED, 0 for MASKED tokens.
-        token_type_ids (torch.LongTensor of shape (batch_size, input_ids_length), optional, defaults to None) –
-            input_ids_length = sequence_length if `past is None else 1 Segment token indices to indicate first
-            and second portions of the inputs. Indices are selected in [0, 1]: 0 corresponds to a sentence A token,
-            1 corresponds to a sentence B token If past is used, optionally only the last token_type_ids have to be input (see past).
-        position_ids (torch.LongTensor of shape (batch_size, sequence_length), optional, defaults to None) –
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the 
-            range [0, config.max_position_embeddings - 1].
-        head_mask (torch.FloatTensor of shape (num_heads,) or (num_layers, num_heads), optional, defaults to None)
-             – Mask to nullify selected heads of the self-attention modules. Mask values selected in [0, 1]: 
-             1 indicates the head is not masked, 0 indicates the head is masked.
-        input_embeds (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size), optional, defaults to None)
-            Optionally, instead of passing input_ids you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert input_ids indices into associated vectors
-            than the model’s internal embedding lookup matrix. If past is used, optionally only the last input_embeds
-            have to be input (see past).    
-        use_cache (bool) – If use_cache is True, past key value states are returned and can be used to speed up
-            decoding (see past). Defaults to True.
-        """
+        
         return {
             "input_ids": NeuralType(('B', 'T'), ChannelType()),
             "token_type_ids": NeuralType(('B', 'T'), ChannelType(), optional=True),
@@ -127,7 +80,7 @@ class GPT2LM(TrainableNM):
 
         model.to(self._device)
 
-        self.add_module("gpt2WithLMhead", model)
+        self.add_module("model", model)
         self.config = model.config
         self._hidden_size = model.config.hidden_size
 
