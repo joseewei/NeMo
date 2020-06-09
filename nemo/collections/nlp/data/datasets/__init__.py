@@ -37,8 +37,8 @@ from nemo.collections.nlp.data.datasets.text_classification import (
     BertTextClassificationDataset,
     TextClassificationDataDesc,
 )
+from nemo.collections.nlp.data.datasets.text_dataset import LineByLineTextDataset, TextDataset
 from nemo.collections.nlp.data.datasets.token_classification_dataset import (
     BertTokenClassificationDataset,
     BertTokenClassificationInferDataset,
 )
-from nemo.collections.nlp.data.datasets.text_dataset import TextDataset, LineByLineTextDataset

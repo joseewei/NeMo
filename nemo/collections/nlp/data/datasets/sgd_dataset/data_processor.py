@@ -51,12 +51,15 @@ class SGDDataProcessor(object):
     """Data generator for SGD dialogues."""
 
     def __init__(
-        self, task_name, data_dir, dialogues_example_dir,
+        self,
+        task_name,
+        data_dir,
+        dialogues_example_dir,
         tokenizer,
         pm_tokenizer,
         schema_emb_processor=None,
         overwrite_dial_files=False,
-        mode='DST'
+        mode='DST',
     ):
         """
         Constructs SGD8DataProcessor
@@ -77,7 +80,7 @@ class SGDDataProcessor(object):
         self.dialogues_examples_dir = dialogues_example_dir
 
         self._task_name = task_name
-        
+
         self.schema_config = schema_emb_processor.schema_config
         self.schema_emb_processor = schema_emb_processor
 
@@ -263,16 +266,14 @@ class SGDDataProcessor(object):
                     schemas,
                     delex_sys_uttr_next,
                 )
-                
-                print (user_frames)
-                print (system_frames_next)
-                import pdb; pdb.set_trace()
+
+                # print(user_frames)
+                # print(system_frames_next)
+
                 if self.mode == 'PM':
-                    pm_examples = InputExamplePM(user_utterance,
-                                            system_utterance, 
-                                            user_frames,
-                                            system_frames_next,
-                                            self._pm_tokenizer)
+                    pm_examples = InputExamplePM(
+                        user_utterance, system_utterance, user_frames, system_frames_next, self._pm_tokenizer
+                    )
                 examples.extend(turn_examples)
 
                 for value, slots_list in slot_carryover_values.items():

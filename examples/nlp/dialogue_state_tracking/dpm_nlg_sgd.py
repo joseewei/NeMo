@@ -274,12 +274,19 @@ nf = NeuralModuleFactory(
     add_time_to_log_dir=not args.no_time_to_log_dir,
 )
 
-ATTR_TO_SPECIAL_TOKEN = {'additional_special_tokens':
-                         ['<context>', "<|endofcontext|>", 
-                         '<|user|>', '<|system|>', 
-                         "<|belief|>", "<|endofbelief|>",
-                         "<|action|>""<|endofaction|>", 
-                         "<|response|>", "<|endofresponse|>"]}
+ATTR_TO_SPECIAL_TOKEN = {
+    'additional_special_tokens': [
+        '<context>',
+        "<|endofcontext|>",
+        '<|user|>',
+        '<|system|>',
+        "<|belief|>",
+        "<|endofbelief|>",
+        "<|action|>" "<|endofaction|>",
+        "<|response|>",
+        "<|endofresponse|>",
+    ]
+}
 
 SPECIAL_TOKENS = ['<|bos|>', '<|eos|>', '<|pad|>'] + ATTR_TO_SPECIAL_TOKEN['additional_special_tokens']
 
@@ -287,22 +294,22 @@ MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_ty
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
 MODEL_NAME = 'gpt2'
-gpt2_model = nemo_nlp.nm.trainables.huggingface.GPT2LM(
-    pretrained_model_name=MODEL_NAME,
-)
+gpt2_model = nemo_nlp.nm.trainables.huggingface.GPT2LM(pretrained_model_name=MODEL_NAME,)
 
-gpt2_tokenizer = nemo_nlp.data.NemoGPT2Tokenizer(pretrained_model=MODEL_NAME,bos_token=['<|bos|>'],
-eos_token=['<|eos|>'])
+gpt2_tokenizer = nemo_nlp.data.NemoGPT2Tokenizer(
+    pretrained_model=MODEL_NAME, bos_token=['<|bos|>'], eos_token=['<|eos|>']
+)
 
 # TODO move to HF utils
 def add_special_tokens_(model, tokenizer):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """
     orig_num_tokens = len(tokenizer.tokenizer.encoder)
-    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
+    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN)  # doesn't add if they are already there
     if num_added_tokens > 0:
         model.model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
     logging.info('%s special tokens added', num_added_tokens)
     tokenizer.vocab_size += num_added_tokens
+
 
 args.vocab_size = gpt2_tokenizer.vocab_size
 add_special_tokens_(gpt2_model, gpt2_tokenizer)
@@ -353,7 +360,7 @@ dialogues_processor = data_processor.SGDDataProcessor(
     pm_tokenizer=gpt2_tokenizer,
     schema_emb_processor=schema_preprocessor,
     overwrite_dial_files=args.overwrite_dial_files,
-    mode='PM'
+    mode='PM',
 )
 
 dataset_split = 'train'
@@ -366,9 +373,6 @@ datalayer = nemo_nlp.nm.data_layers.SGDDataLayer(
     pin_memory=args.enable_pin_memory,
 )
 data = datalayer()
-
-
-
 
 
 # # define model pipeline

@@ -90,6 +90,7 @@ https://ngc.nvidia.com/catalog/models/nvidia:bertbasecasedfornemo
 import argparse
 import math
 import os
+import pdb
 import sys
 
 from transformers import BertConfig
@@ -98,8 +99,8 @@ import nemo.backends.pytorch.common as nemo_common
 import nemo.backends.pytorch.common.losses
 import nemo.collections.nlp as nemo_nlp
 import nemo.core as nemo_core
-from nemo.utils import logging
 from nemo.collections.nlp.data.datasets.lm_bert_dataset import BERTPretrainingDataDesc
+from nemo.utils import logging
 from nemo.utils.lr_policies import get_lr_policy
 
 parser = argparse.ArgumentParser(description='BERT pretraining')
@@ -209,21 +210,12 @@ parser.add_argument(
     type=float,
     help="Probability of having a sequence shorter than the maximum sequence length `max_seq_length` in data processing.",
 )
+parser.add_argument("--dataset_name", default="wikitext-2", choices=["wikitext-2"], type=str, help="Dataset name.")
 parser.add_argument(
-    "--dataset_name", default="wikitext-2", choices=["wikitext-2"], type=str, help="Dataset name."
+    "--tokenizer", default="nemogpt2", type=str, choices=["nemogpt2"], help="Text tokenizer type.",
 )
 parser.add_argument(
-    "--tokenizer",
-    default="nemogpt2",
-    type=str,
-    choices=["nemogpt2"],
-    help="Text tokenizer type.",
-)
-parser.add_argument(
-    "--pretrained_model_name",
-    default="gpt2",
-    type=str,
-    help="Name of the pre-trained model",
+    "--pretrained_model_name", default="gpt2", type=str, help="Name of the pre-trained model",
 )
 
 args = parser.parse_args()
@@ -239,42 +231,48 @@ nf = nemo_core.NeuralModuleFactory(
     add_time_to_log_dir=False,
 )
 
-    # TODO gpt2 special tokens?
-    # special_tokens = nemo_nlp.data.get_bert_special_tokens('bert')
+# TODO gpt2 special tokens?
+# special_tokens = nemo_nlp.data.get_bert_special_tokens('bert')
 
-ATTR_TO_SPECIAL_TOKEN = {'additional_special_tokens':
-                         ['<context>', "<|endofcontext|>", 
-                         '<|user|>', '<|system|>', 
-                         "<|belief|>", "<|endofbelief|>",
-                         "<|action|>""<|endofaction|>", 
-                         "<|response|>", "<|endofresponse|>"]}
+ATTR_TO_SPECIAL_TOKEN = {
+    'additional_special_tokens': [
+        '<context>',
+        "<|endofcontext|>",
+        '<|user|>',
+        '<|system|>',
+        "<|belief|>",
+        "<|endofbelief|>",
+        "<|action|>" "<|endofaction|>",
+        "<|response|>",
+        "<|endofresponse|>",
+    ]
+}
 
 SPECIAL_TOKENS = ['<|bos|>', '<|eos|>', '<|pad|>'] + ATTR_TO_SPECIAL_TOKEN['additional_special_tokens']
 
 MODEL_INPUTS = ["input_ids", "mc_token_ids", "lm_labels", "mc_labels", "token_type_ids"]
 PADDED_INPUTS = ["input_ids", "lm_labels", "token_type_ids"]
 
-gpt2_model = nemo_nlp.nm.trainables.huggingface.GPT2LM(
-    pretrained_model_name=args.pretrained_model_name,
+gpt2_model = nemo_nlp.nm.trainables.huggingface.GPT2LM(pretrained_model_name=args.pretrained_model_name,)
+tokenizer = nemo_nlp.data.NemoGPT2Tokenizer(
+    pretrained_model=args.pretrained_model_name, bos_token=['<|bos|>'], eos_token=['<|eos|>']
 )
-tokenizer = nemo_nlp.data.NemoGPT2Tokenizer(pretrained_model=args.pretrained_model_name,
-bos_token=['<|bos|>'],
-eos_token=['<|eos|>'])
 
 # TODO move to HF utils
 def add_special_tokens_(model, tokenizer):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """
     orig_num_tokens = len(tokenizer.tokenizer.encoder)
-    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN) # doesn't add if they are already there
+    num_added_tokens = tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN)  # doesn't add if they are already there
     if num_added_tokens > 0:
         model.model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
     logging.info('%s special tokens added', num_added_tokens)
     tokenizer.vocab_size += num_added_tokens
 
-args.vocab_size = tokenizer.vocab_size
-import pdb; pdb.set_trace()
-add_special_tokens_(gpt2_model, tokenizer)
 
+args.vocab_size = tokenizer.vocab_size
+
+pdb.set_trace()
+add_special_tokens_(gpt2_model, tokenizer)
 
 
 # classifier = nemo_nlp.nm.trainables.BertTokenClassifier(
@@ -294,28 +292,24 @@ args.max_seq_length = min(args.max_seq_length, tokenizer.max_len)
 
 def create_pipeline(data_file, train=True):
     data_layer = nemo_nlp.nm.data_layers.GPT2DataLayer(
-            dataset_type=nemo_nlp.data.LineByLineTextDataset,
-            tokenizer=tokenizer,
-            file_path=data_file,
-            block_size=args.max_seq_length,
-            batch_size=args.batch_size, 
-            shuffle=not args.no_shuffle if train else False,
-        )
+        dataset_type=nemo_nlp.data.LineByLineTextDataset,
+        tokenizer=tokenizer,
+        file_path=data_file,
+        block_size=args.max_seq_length,
+        batch_size=args.batch_size,
+        shuffle=not args.no_shuffle if train else False,
+    )
 
     steps_per_epoch = math.ceil(len(data_layer) / (args.batch_size * args.num_gpus * args.batches_per_step))
 
     input_ids = data_layer()
     loss = gpt2_model(input_ids=input_ids)
     return loss, steps_per_epoch
-    
 
-train_loss, steps_per_epoch = create_pipeline(
-    data_file=args.train_data
-)
 
-eval_loss, eval_steps_per_epoch = create_pipeline(
-    data_file=args.eval_data, train=False
-)
+train_loss, steps_per_epoch = create_pipeline(data_file=args.train_data)
+
+eval_loss, eval_steps_per_epoch = create_pipeline(data_file=args.eval_data, train=False)
 
 
 logging.info("steps per epoch: %s", steps_per_epoch)

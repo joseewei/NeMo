@@ -15,9 +15,9 @@
 # =============================================================================
 
 from transformers import GPT2Tokenizer
-from nemo.utils import logging
 
 from nemo.collections.nlp.data.tokenizers.tokenizer_spec import TokenizerSpec
+from nemo.utils import logging
 
 __all__ = ['NemoGPT2Tokenizer']
 
@@ -43,14 +43,13 @@ class NemoGPT2Tokenizer(TokenizerSpec):
             special_tokens_dict["bos_token"] = bos_token
         if self.tokenizer.eos_token is None:
             special_tokens_dict["eos_token"] = eos_token
-        
+
         special_tokens_dict["pad_token"] = "<|pad|>"
-        
+
         for k, v in special_tokens_dict.items():
             setattr(self, k, v)
 
         self.tokenizer.add_special_tokens(special_tokens_dict)
-
 
     def add_special_tokens(self, special_tokens_dict):
         """
@@ -108,7 +107,7 @@ class NemoGPT2Tokenizer(TokenizerSpec):
     @property
     def eos_id(self):
         return self.tokens_to_ids([self.tokenizer.eos_token])[0]
+
     @property
     def max_len(self):
         return self.tokenizer.max_len
-

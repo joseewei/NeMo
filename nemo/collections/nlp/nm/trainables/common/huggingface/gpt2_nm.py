@@ -18,22 +18,27 @@
 
 from typing import List, Optional
 
-from transformers import GPT2Config, GPT2Model,GPT2LMHeadModel, GPT2_PRETRAINED_MODEL_ARCHIVE_LIST, GPT2DoubleHeadsModel
+from transformers import (
+    GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
+    GPT2Config,
+    GPT2DoubleHeadsModel,
+    GPT2LMHeadModel,
+    GPT2Model,
+)
 
 from nemo.backends.pytorch.nm import TrainableNM
 from nemo.core.neural_modules import PretrainedModelInfo
-from nemo.core.neural_types import ChannelType, NeuralType, LossType
+from nemo.core.neural_types import ChannelType, LossType, NeuralType
 from nemo.utils.decorators import add_port_docs
 
 __all__ = ['GPT2', 'GPT2LM']
 
 
 class GPT2LM(TrainableNM):
-
     @property
     @add_port_docs()
     def input_ports(self):
-        
+
         return {
             "input_ids": NeuralType(('B', 'T'), ChannelType()),
             "token_type_ids": NeuralType(('B', 'T'), ChannelType(), optional=True),
@@ -76,8 +81,6 @@ class GPT2LM(TrainableNM):
 
         model = GPT2LMHeadModel.from_pretrained(pretrained_model_name)
 
- 
-
         model.to(self._device)
 
         self.add_module("model", model)
@@ -107,14 +110,18 @@ class GPT2LM(TrainableNM):
             pretrained_models.append(model_info)
         return pretrained_models
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,
+    def forward(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
         # past=None,
         # position_ids=None,
         # head_mask=None,
         # inputs_embeds=None,
         # labels=None,
         # use_cache=True,
-        ):
+    ):
         return self.model(input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)[0]
 
     def generate(self):
@@ -216,8 +223,6 @@ class GPT2(TrainableNM):
         super().__init__()
 
         model = GPT2Model.from_pretrained(pretrained_model_name)
-
- 
 
         model.to(self._device)
 

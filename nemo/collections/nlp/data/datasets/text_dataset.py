@@ -20,20 +20,18 @@
 src/transformers/data/datasets/language_modeling.py
 '''
 
-import numpy as np
 import os
-
-import torch
-from torch.utils.data import Dataset
 import pickle
+import time
+
+import numpy as np
+import torch
+from filelock import FileLock
+from torch.utils.data import Dataset
 
 from nemo.utils import logging
-import time
-from filelock import FileLock
 
-__all__ = [
-    'TextDataset', 
-'LineByLineTextDataset']
+__all__ = ['TextDataset', 'LineByLineTextDataset']
 
 
 class TextDataset(Dataset):
@@ -92,6 +90,7 @@ class TextDataset(Dataset):
     def __getitem__(self, i):
         return torch.tensor(self.examples[i], dtype=torch.long)
 
+
 class LineByLineTextDataset(Dataset):
     """
     TODO remove overwrite cache
@@ -99,14 +98,13 @@ class LineByLineTextDataset(Dataset):
 
     def __init__(self, tokenizer, file_path, block_size, overwrite_cache):
         assert os.path.isfile(file_path)
-        
+
         logging.info("Creating features from dataset file at %s", file_path)
 
         with open(file_path, encoding="utf-8") as f:
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
         batch_encoding = tokenizer.tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)
         self.examples = batch_encoding["input_ids"]
-        
 
     def __len__(self):
         return len(self.examples)
