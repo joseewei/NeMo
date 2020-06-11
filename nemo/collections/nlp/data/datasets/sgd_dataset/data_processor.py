@@ -56,7 +56,6 @@ class SGDDataProcessor(object):
         data_dir,
         dialogues_example_dir,
         tokenizer,
-        pm_tokenizer,
         schema_emb_processor=None,
         overwrite_dial_files=False,
         pm_max_seq_length=None,
@@ -102,7 +101,6 @@ class SGDDataProcessor(object):
         }
 
         self._tokenizer = tokenizer
-        self._pm_tokenizer = pm_tokenizer
         self._max_seq_length = self.schema_config["MAX_SEQ_LENGTH"]
 
         self.dial_files = {}
@@ -287,7 +285,7 @@ class SGDDataProcessor(object):
                             system_utterance_next,
                             user_frames,
                             system_frames_next,
-                            self._pm_tokenizer,
+                            self._tokenizer,
                         )
                     ]
                 else:

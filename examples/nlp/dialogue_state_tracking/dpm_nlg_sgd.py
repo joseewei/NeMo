@@ -347,15 +347,7 @@ bert_hidden_size = pretrained_bert_model.hidden_size
 # Run SGD preprocessor to generate and store schema embeddings
 schema_preprocessor = SchemaPreprocessor(
     data_dir=args.data_dir,
-    schema_embedding_dir=args.schema_embedding_dir,
-    schema_config=schema_config,
-    tokenizer=bert_tokenizer,
-    bert_model=pretrained_bert_model,
-    overwrite_schema_emb_files=args.overwrite_schema_emb_files,
-    bert_ckpt_dir=args.checkpoint_dir,
-    nf=nf,
-    mode=args.schema_emb_init,
-    is_trainable=args.train_schema_emb,
+    schema_config=schema_config
 )
 ####################################################
 
@@ -365,28 +357,12 @@ dialogues_processor = data_processor.SGDDataProcessor(
     task_name=args.task_name,
     data_dir=args.data_dir,
     dialogues_example_dir=args.dialogues_example_dir,
-    tokenizer=bert_tokenizer,
-    pm_tokenizer=gpt2_tokenizer,
+    tokenizer=gpt2_tokenizer,
     schema_emb_processor=schema_preprocessor,
     overwrite_dial_files=args.overwrite_dial_files,
     pm_max_seq_length=args.max_seq_length,
     mode='PM',
 )
-
-# dataset_split = 'train'
-# datalayer = nemo_nlp.nm.data_layers.GPT2DataLayer(
-#     tokenizer=gpt2_tokenizer,
-#     dataset_split=dataset_split,
-#     dialogues_processor=dialogues_processor,
-#     batch_size=args.train_batch_size,
-#     shuffle=not args.no_shuffle if dataset_split == 'train' else False,
-#     num_workers=args.num_workers,
-#     pin_memory=args.enable_pin_memory,
-# )
-# data = datalayer()
-# print (datalayer._dataset[0])
-# import pdb; pdb.set_trace()
-
 
 def create_pipeline(dataset_split, train=True):
     batch_size = args.train_batch_size if train else args.eval_batch_size
@@ -430,7 +406,7 @@ eval_callback = EvaluatorCallback(
     eval_tensors=[eval_loss],
     user_iter_callback=nemo_nlp.callbacks.lm_bert_callback.eval_iter_callback,
     user_epochs_done_callback=nemo_nlp.callbacks.lm_bert_callback.eval_epochs_done_callback,
-    eval_step=args.eval_step_freq,
+    eval_step=steps_per_epoch,
 )
 
 lr_policy_fn = get_lr_policy(

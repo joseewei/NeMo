@@ -68,13 +68,13 @@ class SchemaPreprocessor:
     def __init__(
         self,
         data_dir,
-        schema_embedding_dir,
         schema_config,
-        tokenizer,
-        bert_model,
-        overwrite_schema_emb_files,
-        bert_ckpt_dir,
-        nf,
+        schema_embedding_dir='',
+        tokenizer=None,
+        bert_model=None,
+        overwrite_schema_emb_files=False,
+        bert_ckpt_dir=None,
+        nf=None,
         datasets=['train', 'test', 'dev'],
         mode='baseline',
         is_trainable=False,
@@ -83,62 +83,62 @@ class SchemaPreprocessor:
         # Dimension of the embedding for intents, slots and categorical slot values in
         # Maximum allowed number of categorical trackable slots for a service.
         self.schema_config = schema_config.copy()
-
-        self.is_trainable = is_trainable
         self.datasets = datasets
-
-        for dataset_split in ['train', 'test', 'dev']:
-            if dataset_split not in self.datasets:
-                logging.warning(
-                    'WARNING: %s set was not included and won\'t be processed. Services from this dataset split '
-                    + 'won\'t be supported',
-                    dataset_split,
-                )
-        os.makedirs(schema_embedding_dir, exist_ok=True)
-
-        tokenizer_type = type(tokenizer.tokenizer).__name__
-        vocab_size = getattr(tokenizer, "vocab_size", 0)
-        self.schema_embedding_file = os.path.join(
-            schema_embedding_dir,
-            "{}_{}_{}_{}_pretrained_schema_embedding.npy".format(
-                '_'.join(self.datasets), mode, tokenizer_type, vocab_size
-            ),
-        )
         all_schema_json_paths = []
         for dataset_split in self.datasets:
             all_schema_json_paths.append(os.path.join(data_dir, dataset_split, "schema.json"))
         self.schemas = schema.Schema(all_schema_json_paths)
 
-        if not os.path.exists(self.schema_embedding_file) or overwrite_schema_emb_files:
-            # Generate the schema embeddings if needed or specified
-            logging.info(f"Start generating the schema embeddings.")
-            dataset_params = {
-                "schema_config": schema_config,
-                "tokenizer": tokenizer,
-                "schemas": self.schemas,
-            }
-            emb_datalayer = BertInferDataLayer(
-                dataset_type=SchemaEmbeddingDataset, dataset_params=dataset_params, batch_size=1, shuffle=False,
+        if nf is not None:
+            self.is_trainable = is_trainable
+            for dataset_split in ['train', 'test', 'dev']:
+                if dataset_split not in self.datasets:
+                    logging.warning(
+                        'WARNING: %s set was not included and won\'t be processed. Services from this dataset split '
+                        + 'won\'t be supported',
+                        dataset_split,
+                    )
+            os.makedirs(schema_embedding_dir, exist_ok=True)
+
+            tokenizer_type = type(tokenizer.tokenizer).__name__
+            vocab_size = getattr(tokenizer, "vocab_size", 0)
+            self.schema_embedding_file = os.path.join(
+                schema_embedding_dir,
+                "{}_{}_{}_{}_pretrained_schema_embedding.npy".format(
+                    '_'.join(self.datasets), mode, tokenizer_type, vocab_size
+                ),
             )
+            
+            if not os.path.exists(self.schema_embedding_file) or overwrite_schema_emb_files:
+                # Generate the schema embeddings if needed or specified
+                logging.info(f"Start generating the schema embeddings.")
+                dataset_params = {
+                    "schema_config": schema_config,
+                    "tokenizer": tokenizer,
+                    "schemas": self.schemas,
+                }
+                emb_datalayer = BertInferDataLayer(
+                    dataset_type=SchemaEmbeddingDataset, dataset_params=dataset_params, batch_size=1, shuffle=False,
+                )
 
-            input_ids, input_mask, input_type_ids = emb_datalayer()
+                input_ids, input_mask, input_type_ids = emb_datalayer()
 
-            hidden_states = bert_model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
-            evaluated_tensors = nf.infer(tensors=[hidden_states], checkpoint_dir=bert_ckpt_dir)
+                hidden_states = bert_model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
+                evaluated_tensors = nf.infer(tensors=[hidden_states], checkpoint_dir=bert_ckpt_dir)
 
-            master_device = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-            if master_device:
-                hidden_states = [concatenate(tensors) for tensors in evaluated_tensors]
-                emb_datalayer.dataset.save_embeddings(hidden_states, self.schema_embedding_file, mode)
-                logging.info(f"Finish generating the schema embeddings.")
+                master_device = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
+                if master_device:
+                    hidden_states = [concatenate(tensors) for tensors in evaluated_tensors]
+                    emb_datalayer.dataset.save_embeddings(hidden_states, self.schema_embedding_file, mode)
+                    logging.info(f"Finish generating the schema embeddings.")
 
-        # wait until the master process writes to the schema embedding file
-        if torch.distributed.is_initialized():
-            torch.distributed.barrier()
+            # wait until the master process writes to the schema embedding file
+            if torch.distributed.is_initialized():
+                torch.distributed.barrier()
 
-        with open(self.schema_embedding_file, "rb") as f:
-            self.schema_embeddings = np.load(f, allow_pickle=True)
-            f.close()
+            with open(self.schema_embedding_file, "rb") as f:
+                self.schema_embeddings = np.load(f, allow_pickle=True)
+                f.close()
 
     def get_schema_embeddings(self):
         # Convert from list of dict to dict of list
