@@ -28,7 +28,7 @@ class InputExamplePM(object):
     """An example for training/inference."""
 
     def __init__(
-        self, user_utterance, system_utterance, user_frames, system_frames_next, tokenizer):
+        self, user_utterance, system_utterance, system_utterance_next, user_frames, system_frames_next, tokenizer):
         """Constructs an InputExample.
 
         Args:
@@ -51,20 +51,24 @@ class InputExamplePM(object):
         belief_end = '<|endofbelief|>'
         action_start = '<|action|>'
         action_end = '<|endofaction|>'
+        response_start = "<|response|>"
+        response_end = "<|endofresponse|>"
 
-        user_tokens =  [user_special_token] + tokenizer.text_to_tokens(user_utterance)
-        system_tokens =  [sys_special_token] + tokenizer.text_to_tokens(system_utterance)
+        # process dialogue_history and add it to token_ids and to token_type_ids
+        system_tokens = [tokenizer.bos_token, context_start]
+        system_tokens +=  [sys_special_token] + tokenizer.text_to_tokens(system_utterance) if len(system_utterance) > 0 else []
+        user_tokens =  [user_special_token] + tokenizer.text_to_tokens(user_utterance) + [context_end]
         
-        dialogue_history = [context_start] + system_tokens + user_tokens + [context_end]
-        self.token_ids = tokenizer.tokens_to_ids(dialogue_history)
-        self.token_type_ids = (len(user_tokens) + 1) * [tokenizer.tokens_to_ids(user_special_token)] + \
-            (len(system_tokens) + 1) * [tokenizer.tokens_to_ids(sys_special_token)]
+        dialogue_history_tokens =  system_tokens + user_tokens
+        self.token_ids = tokenizer.tokens_to_ids(dialogue_history_tokens)
+        self.token_type_ids = len(user_tokens) * [tokenizer.tokens_to_ids(user_special_token)] + \
+            len(system_tokens) * [tokenizer.tokens_to_ids(sys_special_token)]
 
-        assert len(self.token_type_ids) == len(dialogue_history)
-        self.dialogue_history = tokenizer.tokens_to_text(dialogue_history)
+        assert len(self.token_type_ids) == len(dialogue_history_tokens)
+        self.dialogue_history = tokenizer.tokens_to_text(dialogue_history_tokens)
 
         # extract belief state - during inference use SGD tracker instead
-        dialogue_belief = belief_start
+        dialogue_belief = belief_start + ' '
         for service in user_frames:
             belief = service + ', '
 
@@ -78,54 +82,73 @@ class InputExamplePM(object):
             requested_slots = 'requested_slots = '
             requested_slots += ','.join(state['requested_slots']) if len(state['requested_slots']) > 0 else 'none'
             
-            belief += active_intent + slots + requested_slots + belief_end
+            belief += active_intent + slots + requested_slots
 
-            dialogue_belief += belief + belief_end
-
-        # add belief to token_ids and token_type_ids
+            dialogue_belief += belief
+        dialogue_belief += ' ' + belief_end
+        self.dialogue_belief = dialogue_belief
+        # add dialogue belief to token_ids and token_type_ids
         belief_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(dialogue_belief))
         self.token_ids += belief_tokens_ids
         self.token_type_ids += len(belief_tokens_ids) * [tokenizer.tokens_to_ids(belief_start)]
-
-        print('\n', dialogue_belief)
-
-        """
-        {'Restaurants_1': 
-        {'actions': [{'act': 'INFORM', 'canonical_values': ['American'], 'slot': 'cuisine', 'values': ['American']}], 
-         'service': 'Restaurants_1', 'slots': [{'exclusive_end': 34, 'slot': 'cuisine', 'start': 26}],
-         'state': {'active_intent': 'FindRestaurants', 'requested_slots': [], 
-         'slot_values': {'city': ['San Jose'], 'cuisine': ['American']}}}
-        }
-
-        <|belief|> Restaurants_1, intent = FindRestaurants, cuisine = American, city = San Jose, requested_slots = none <|endofbelief|>
-        for service in system_frames_next:
-        service + active_intent + slots + requested_slots
-
-        {'Restaurants_1': {'actions': [{'act': 'REQUEST', 'canonical_values': [], 'slot': 'city', 'values': []}], 'service': 'Restaurants_1', 'slots': []}}
-        """
-        print (system_frames_next)
-        '''
-        add system action
-        possible system acts
-        INFORM, REQUEST, CONFIRM, OFFER, NOTIFY_SUCCESS, NOTIFY_FAILURE, INFORM_COUNT, OFFER_INTENT, REQ_MORE, GOODBYE 
-        '''
+        
+        # process system action, possible system acts: 
+        # INFORM, REQUEST, CONFIRM, OFFER, NOTIFY_SUCCESS, NOTIFY_FAILURE, INFORM_COUNT, OFFER_INTENT, REQ_MORE, GOODBYE 
+        self.use_external_service = {}
+        self.service_results = {}
+        self.service_call = {}
         system_acts = action_start
         for service in system_frames_next:
+            # add DB/service to lexilize the response
+            if 'service_call' in system_frames_next[service]:
+                self.use_external_service[service] = True
+                self.service_call[service] = system_frames_next[service]['service_call']
+                self.service_results[service] = system_frames_next[service]['service_results']
+            else:
+                self.use_external_service[service] = False
+                self.service_call[service] = None
+                self.service_results[service] = None
+
             system_act = ''
             for act in system_frames_next[service]['actions']:
-                
-                act_name = (act['act'].lower() + ' ').replace('_', ' ') # turn NOTIFY_SUCCESS into notify success
-                act_slots = act['slot'] + ' ' + ','.join(act['values']) + ', '
-                system_act += (act_name + act_slots).strip()
+                # turn NOTIFY_SUCCESS into notify success
+                act_name = (act['act'].lower() + ' ').replace('_', ' ') 
+                act_slots = act['slot'] + ' ' + '|'.join(act['values']) + ', '
+                system_act += act_name + act_slots
 
             # remove trailing comma
-            system_acts += ' ' + system_act[:-1] if len(system_act) > 0 else system_act
+            system_act = system_act.strip()
+            system_acts += ' ' + system_act[:-1] if len(system_act) > 0 else system_act 
             system_acts = system_acts.strip()
-        system_acts += action_end
-        
-        print ('\n-------->', system_acts)       
+        system_acts += ' ' + action_end
+
+        self.system_acts = system_acts
+        self.delex_system_acts = self.delexilize(system_acts, system_frames_next)
+        # add delex system acts to token_ids and token_type_ids
+        delex_system_acts_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(self.delex_system_acts))
+        self.token_ids += delex_system_acts_tokens_ids
+        self.token_type_ids += len(delex_system_acts_tokens_ids) * [tokenizer.tokens_to_ids(action_start)]
+
+        # process system response
+        self.response = response_start + system_utterance_next + response_end
+        self.delex_response = self.delexilize(self.response, system_frames_next)
+        # add delex system response to token_ids and token_type_ids
+        delex_response_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(self.delex_response + tokenizer.eos_token))
+        self.token_ids += delex_response_tokens_ids
+        self.token_type_ids += len(delex_response_tokens_ids) * [tokenizer.tokens_to_ids(response_start)]
+
+        assert len(self.token_ids) == len(self.token_type_ids)
+        # TODO add bos and eos tokens
+        print ('-->', tokenizer.tokens_to_text(tokenizer.ids_to_tokens(self.token_ids)))
+        print()
+        print(self.dialogue_history)
+        print(self.dialogue_belief)
+        print(self.delex_system_acts)
+        print(self.delex_response)
+
         import pdb; pdb.set_trace()
-        print()   
+        print()
+
 
     def split_intent(self, intent):
         reformatted_intent = ''
@@ -135,3 +158,63 @@ class InputExamplePM(object):
             else:
                 reformatted_intent += ch
         return reformatted_intent.strip()
+
+    def delexilize(self, uttr, frame):
+        """
+        Delexilizes utterance
+        Args:
+            uttr (str): An agent utterance
+            frame (dict): A dialogue frame is the SGD format
+        Returns:
+            uttr (str): delexilized utterance
+        Example:
+            I see that at 71 Saint Peter there is a good American restaurant which is in San Jose.
+            I see that at [value_restaurant_name] there is a good [value_cuisine] restaurant which is in [value_city].
+        """
+        # delex slot values found in actions
+        for v in frame.values():
+            if 'actions' in v:
+                for action in v['actions']:
+                    for slot_value in action['values']:
+                        if slot_value in uttr:
+                            uttr = uttr.replace(slot_value, '[value_' + action['slot'] + ']')
+
+        # delex slot_values from DB search results
+        for v in frame.values():
+            if 'service_results' in v:
+                for service_result in v['service_results']:
+                    for slot_name, slot_value in service_result.items():
+                        uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
+        return uttr
+
+
+    # def remove_action_slots_from_uttr(self, uttr, frame):
+    #     """
+    #     Delexilizes utterance
+    #     Args:
+    #         uttr (str): An agent utterance
+    #         frame (dict): A dialogue frame is the SGD format
+    #     Returns:
+    #         uttr (str): delexilized utterance
+    #     Example:
+    #         I see that at 71 Saint Peter there is a good American restaurant which is in San Jose.
+    #         I see that at [value_restaurant_name] there is a good [value_cuisine] restaurant which is in [value_city].
+    #     """
+    #     # delex slot values found in actions
+    #     for v in frame.values():
+    #         if 'actions' in v:
+    #             for action in v['actions']:
+    #                 for slot_value in action['values']:
+    #                     if slot_value in uttr:
+    #                         uttr = uttr.replace(slot_value, '[value_' + action['slot'] + ']')
+    #     return uttr
+
+        
+    # def remove_db_results_from_uttr(self, uttr, frame):
+    #     # delex slot_values from DB search results
+    #     for v in frame.values():
+    #         if 'service_results' in v:
+    #             for service_result in v['service_results']:
+    #                 for slot_name, slot_value in service_result.items():
+    #                     uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
+    #     return uttr

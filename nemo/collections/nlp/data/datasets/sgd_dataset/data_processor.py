@@ -251,11 +251,8 @@ class SGDDataProcessor(object):
                 # to have labels for NLG module
                 system_utterance_next = system_turn_next["utterance"]
                 system_frames_next = {f["service"]: f for f in system_turn_next["frames"]}
-
-                delex_sys_uttr_next = self._delexilize(system_utterance_next, system_frames_next)
                 turn_id = "{}-{}-{:02d}".format(dataset, dialog_id, turn_idx)
 
-                context = system_utterance + user_utterance
                 turn_examples, prev_states, slot_carryover_values = self._create_examples_from_turn(
                     turn_id,
                     system_utterance,
@@ -264,7 +261,7 @@ class SGDDataProcessor(object):
                     user_frames,
                     prev_states,
                     schemas,
-                    delex_sys_uttr_next,
+                    system_utterance_next
                 )
 
                 # print(user_frames)
@@ -272,7 +269,7 @@ class SGDDataProcessor(object):
 
                 if self.mode == 'PM':
                     pm_examples = InputExamplePM(
-                        user_utterance, system_utterance, user_frames, system_frames_next, self._pm_tokenizer
+                        user_utterance, system_utterance, system_utterance_next, user_frames, system_frames_next, self._pm_tokenizer
                     )
                 examples.extend(turn_examples)
 
@@ -290,33 +287,7 @@ class SGDDataProcessor(object):
                                 slot_carryover_candlist[(service1, slot1, service2, slot2)] += 1
         return examples
 
-    def _delexilize(self, uttr, frame):
-        """
-        Delexilizes utterance
-        Args:
-            uttr (str): An agent utterance
-            frame (dict): A dialogue frame is the SGD format
-        Returns:
-            uttr (str): delexilized utterance
-        Example:
-            I see that at 71 Saint Peter there is a good American restaurant which is in San Jose.
-            I see that at [value_restaurant_name] there is a good [value_cuisine] restaurant which is in [value_city].
-        """
-        # delex slot values found in actions
-        for v in frame.values():
-            if 'actions' in v:
-                for action in v['actions']:
-                    for slot_value in action['values']:
-                        if slot_value in uttr:
-                            uttr = uttr.replace(slot_value, '[value_' + action['slot'] + ']')
-
-        # delex slot_values from DB search results
-        for v in frame.values():
-            if 'service_results' in v:
-                for service_result in v['service_results']:
-                    for slot_name, slot_value in service_result.items():
-                        uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
-        return uttr
+    
 
     def _get_state_update(self, current_state, prev_state):
         """
@@ -344,7 +315,7 @@ class SGDDataProcessor(object):
         user_frames,
         prev_states,
         schemas,
-        delex_sys_uttr_next,
+        sys_uttr_next,
     ):
         """
         Creates an example for each frame in the user turn.
@@ -376,7 +347,7 @@ class SGDDataProcessor(object):
             user_inv_alignments,
             system_utterance,
             user_utterance,
-            delex_sys_uttr_next,
+            sys_uttr_next,
         )
 
         examples = []
