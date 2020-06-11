@@ -19,7 +19,8 @@ This file contains code artifacts adapted from the original implementation:
 https://github.com/google-research/google-research/blob/master/schema_guided_dst/baseline/data_utils.py
 """
 
-from nemo import logging
+from nemo.utils import logging
+import re
 
 __all__ = ['InputExamplePM']
 
@@ -98,20 +99,17 @@ class InputExamplePM(object):
 
         # process system action, possible system acts:
         # INFORM, REQUEST, CONFIRM, OFFER, NOTIFY_SUCCESS, NOTIFY_FAILURE, INFORM_COUNT, OFFER_INTENT, REQ_MORE, GOODBYE
-        self.use_external_service = {}
-        self.service_results = {}
-        self.service_call = {}
-        system_acts = action_start
+        self.use_external_service = False
+        self.service_results = None
+        self.service_call = None
+        
+        system_acts = ''
         for service in system_frames_next:
             # add DB/service to lexilize the response
             if 'service_call' in system_frames_next[service]:
-                self.use_external_service[service] = True
-                self.service_call[service] = system_frames_next[service]['service_call']
-                self.service_results[service] = system_frames_next[service]['service_results']
-            else:
-                self.use_external_service[service] = False
-                self.service_call[service] = None
-                self.service_results[service] = None
+                self.use_external_service = True
+                self.service_call = system_frames_next[service]['service_call']
+                self.service_results = system_frames_next[service]['service_results']
 
             system_act = ''
             for act in system_frames_next[service]['actions']:
@@ -124,18 +122,28 @@ class InputExamplePM(object):
             system_act = system_act.strip()
             system_acts += ' ' + system_act[:-1] if len(system_act) > 0 else system_act
             system_acts = system_acts.strip()
-        system_acts += ' ' + action_end
 
         self.system_acts = system_acts
-        self.delex_system_acts = self.delexilize(system_acts, system_frames_next)
+        query_db = 'query false, '
+        if self.service_results:
+            query_db = 'query true, '
+        delex_system_acts = self.delexilize(system_acts, system_frames_next, user_frames)
+        self.delex_system_acts = action_start + ' ' + query_db + delex_system_acts + ' ' + action_end
+        
         # add delex system acts to token_ids and token_type_ids
         delex_system_acts_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(self.delex_system_acts))
         self.token_ids += delex_system_acts_tokens_ids
         self.token_type_ids += len(delex_system_acts_tokens_ids) * [tokenizer.tokens_to_ids(action_start)]
 
         # process system response
-        self.response = response_start + system_utterance_next + response_end
-        self.delex_response = self.delexilize(self.response, system_frames_next)
+        self.response = response_start + ' ' + system_utterance_next + ' ' + response_end
+        self.delex_response = self.delexilize(self.response, system_frames_next, user_frames)
+
+        # delex number of DB matches from response
+        digits_in_response = [int(d) for d in re.findall(r'\d+', self.delex_response)]
+        if len(digits_in_response) > 0:
+            logging.info('digits remaining in response: %s', self.delex_response)
+       
         # add delex system response to token_ids and token_type_ids
         # create labels for lm task
         delex_response_tokens_ids = tokenizer.tokens_to_ids(
@@ -166,7 +174,7 @@ class InputExamplePM(object):
                 reformatted_intent += ch
         return reformatted_intent.strip()
 
-    def delexilize(self, uttr, frame):
+    def delexilize(self, uttr, system_frame, user_frames):
         """
         Delexilizes utterance
         Args:
@@ -178,21 +186,89 @@ class InputExamplePM(object):
             I see that at 71 Saint Peter there is a good American restaurant which is in San Jose.
             I see that at [value_restaurant_name] there is a good [value_cuisine] restaurant which is in [value_city].
         """
+            
+        found_values = []
         # delex slot values found in actions
-        for v in frame.values():
-            if 'actions' in v:
-                for action in v['actions']:
+        for service in system_frame.values():
+            if 'actions' in service:
+                for action in service['actions']:
                     for slot_value in action['values']:
                         if slot_value in uttr:
-                            uttr = uttr.replace(slot_value, '[value_' + action['slot'] + ']')
+                            slot_name = action['slot']
+                            found_values.append((slot_value, slot_name, len(slot_value)))
+                            # # spaces added to make sure we're not replacing parts of values
+                            # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + action['slot'] + '] ')
 
         # delex slot_values from DB search results
-        for v in frame.values():
-            if 'service_results' in v:
-                for service_result in v['service_results']:
+        for service in system_frame.values():
+            if 'service_results' in service:
+                for service_result in service['service_results']:
                     for slot_name, slot_value in service_result.items():
-                        uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
+                        found_values.append((slot_value, slot_name, len(slot_value)))
+                        # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + slot_name + '] ')
+        
+        # delex slot_values from user state
+        for service in user_frames.values():
+            if 'state' in service:
+                for slot_name, slot_values in service['state']['slot_values'].items():
+                    for slot_value in slot_values:
+                        found_values.append((slot_value, slot_name, len(slot_value)))
+                        # uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
+
+        found_values = sorted(found_values, key = lambda x: x[2], reverse=True)
+        
+        for match in found_values:
+            slot_value, slot_name, _ = match
+            uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
         return uttr
+
+    # def delexilize(self, uttr, system_frame, user_frames):
+    #     """
+    #     Delexilizes utterance
+    #     Args:
+    #         uttr (str): An agent utterance
+    #         frame (dict): A dialogue frame is the SGD format
+    #     Returns:
+    #         uttr (str): delexilized utterance
+    #     Example:
+    #         I see that at 71 Saint Peter there is a good American restaurant which is in San Jose.
+    #         I see that at [value_restaurant_name] there is a good [value_cuisine] restaurant which is in [value_city].
+    #     """
+    #     def _delex(uttr, system_frame, user_frame):
+    #         found_values = []
+    #         # delex slot values found in actions
+    #         for service in system_frame.values():
+    #             if 'actions' in service:
+    #                 for action in service['actions']:
+    #                     for slot_value in action['values']:
+    #                         if slot_value in uttr:
+    #                             found_values.append(slot_value, slot_name, len(slot_value))
+    #                             # # spaces added to make sure we're not replacing parts of values
+    #                             # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + action['slot'] + '] ')
+
+    #         # delex slot_values from DB search results
+    #         for service in system_frame.values():
+    #             if 'service_results' in service:
+    #                 for service_result in service['service_results']:
+    #                     for slot_name, slot_value in service_result.items():
+    #                         found_values.append(slot_value, slot_name, len(slot_value))
+    #                         # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + slot_name + '] ')
+            
+    #         # delex slot_values from user state
+    #         for service in user_frame.values():
+    #             if 'state' in service:
+    #                 for slot_name, slot_values in service['state']['slot_values'].items():
+    #                     for slot_value in slot_values:
+    #                         found_values.append(slot_value, slot_name, len(slot_value))
+    #                         # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + slot_name + '] ')
+            
+    #         return uttr
+        
+    #     # separate all punctuation and words with space
+    #     uttr = _delex(uttr, system_frame, user_frames)
+    #     uttr = uttr.replace('. ', ' . ').replace(', ', ' , ').replace('? ', ' ? ').replace('! ', ' ! ')
+    #     uttr = _delex(uttr, system_frame, user_frames)
+    #     return uttr
 
     # def remove_action_slots_from_uttr(self, uttr, frame):
     #     """

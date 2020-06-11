@@ -39,7 +39,7 @@ parser = argparse.ArgumentParser(description='Schema_guided_dst')
 # BERT based utterance encoder related arguments
 parser.add_argument(
     "--max_seq_length",
-    default=80,
+    default=1024,
     type=int,
     help="The maximum total input sequence length after WordPiece tokenization. "
     "Sequences longer than this will be truncated, and sequences shorter "
@@ -48,34 +48,11 @@ parser.add_argument(
 parser.add_argument("--dropout", default=0.1, type=float, help="Dropout rate for BERT representations.")
 parser.add_argument(
     "--pretrained_model_name",
-    default="bert-base-cased",
+    default="gpt2",
     type=str,
     help="Name of the pre-trained model",
     choices=nemo_nlp.nm.trainables.get_pretrained_lm_models_list(),
 )
-parser.add_argument("--bert_checkpoint", default=None, type=str, help="Path to model checkpoint")
-parser.add_argument("--bert_config", default=None, type=str, help="Path to bert config file in json format")
-parser.add_argument(
-    "--tokenizer_model",
-    default=None,
-    type=str,
-    help="Path to pretrained tokenizer model, only used if --tokenizer is sentencepiece",
-)
-parser.add_argument(
-    "--tokenizer",
-    default="nemobert",
-    type=str,
-    choices=["nemobert", "sentencepiece"],
-    help="tokenizer to use, only relevant when using custom pretrained checkpoint.",
-)
-parser.add_argument("--vocab_file", default=None, help="Path to the vocab file.")
-parser.add_argument(
-    "--do_lower_case",
-    action='store_true',
-    help="Whether to lower case the input text. True for uncased models, False for cased models. "
-    + "Only applicable when tokenizer is build with vocab file",
-)
-
 # Hyperparameters and optimization related flags.
 parser.add_argument(
     "--checkpoint_dir",
@@ -83,8 +60,7 @@ parser.add_argument(
     type=str,
     help="The folder containing the checkpoints for the model to continue training",
 )
-parser.add_argument("--train_batch_size", default=32, type=int, help="Total batch size for training.")
-parser.add_argument("--eval_batch_size", default=8, type=int, help="Total batch size for eval.")
+parser.add_argument("--batch_size", default=32, type=int, help="Batch size for training and evaluation.")
 parser.add_argument("--num_epochs", default=80, type=int, help="Total number of training epochs to perform.")
 
 parser.add_argument("--optimizer_kind", default="adam_w", type=str)
@@ -122,28 +98,6 @@ parser.add_argument(
     type=str,
     default="output/SGD",
     help="The output directory where the model checkpoints will be written.",
-)
-parser.add_argument(
-    "--schema_embedding_dir",
-    type=str,
-    default='schema_embedding_dir',
-    help="Directory where .npy file for embedding of entities (slots, values, intents) in the dataset_split's schema are stored.",
-)
-parser.add_argument(
-    "--no_overwrite_schema_emb_files",
-    action="store_false",
-    help="Whether to generate a new file saving the dialogue examples.",
-    dest="overwrite_schema_emb_files",
-)
-parser.add_argument(
-    "--joint_acc_across_turn",
-    action="store_true",
-    help="Whether to compute joint accuracy across turn instead of across service. Should be set to True when conducting multiwoz style evaluation.",
-)
-parser.add_argument(
-    "--no_fuzzy_match",
-    action="store_true",
-    help="Whether to use fuzzy string matching when comparing non-categorical slot values. Fuzz match should not be used when conducting multiwoz style evaluation.",
 )
 parser.add_argument(
     "--dialogues_example_dir",
@@ -185,48 +139,10 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--loss_reduction",
-    default='mean',
-    type=str,
-    help="specifies the reduction to apply to the final loss, choose 'mean' or 'sum'",
-)
-
-parser.add_argument(
     "--eval_epoch_freq", default=1, type=int, help="Frequency of evaluation",
 )
-
-parser.add_argument(
-    "--num_workers",
-    default=1,
-    type=int,
-    help="Number of workers for data loading, -1 means set it automatically to the number of CPU cores",
-)
-
 parser.add_argument(
     "--enable_pin_memory", action="store_true", help="Enables the pin_memory feature of Pytroch's DataLoader",
-)
-
-parser.add_argument(
-    "--state_tracker",
-    type=str,
-    default='baseline',
-    choices=['baseline', 'nemotracker'],
-    help="Specifies the state tracker model",
-)
-parser.add_argument(
-    "--schema_emb_init",
-    type=str,
-    default='baseline',
-    choices=['baseline', 'random', 'last_layer_average'],
-    help="Specifies how schema embeddings are generated. Baseline uses ['CLS'] token",
-)
-parser.add_argument(
-    "--train_schema_emb", action="store_true", help="Specifies whether schema embeddings are trainables.",
-)
-parser.add_argument(
-    "--add_attention_head",
-    action="store_true",
-    help="Whether to use attention when computing projections. When False, uses linear projection.",
 )
 parser.add_argument(
     "--debug_mode", action="store_true", help="Enables debug mode with more info on data preprocessing and evaluation",
@@ -322,36 +238,14 @@ def add_special_tokens_(model, tokenizer):
 args.vocab_size = gpt2_tokenizer.vocab_size
 add_special_tokens_(gpt2_model, gpt2_tokenizer)
 
-####################################################
-# TODO remove this, separate schama processor and data processor
-# only for schema emb processor
-pretrained_bert_model = nemo_nlp.nm.trainables.get_pretrained_lm_model(
-    pretrained_model_name=args.pretrained_model_name,
-    config=args.bert_config,
-    vocab=args.vocab_file,
-    checkpoint=args.bert_checkpoint,
-)
-
-schema_config["EMBEDDING_DIMENSION"] = pretrained_bert_model.hidden_size
+args.max_seq_length = min(args.max_seq_length, gpt2_tokenizer.max_len)
 schema_config["MAX_SEQ_LENGTH"] = args.max_seq_length
-
-bert_tokenizer = nemo_nlp.data.tokenizers.get_tokenizer(
-    tokenizer_name=args.tokenizer,
-    pretrained_model_name=args.pretrained_model_name,
-    tokenizer_model=args.tokenizer_model,
-    vocab_file=args.vocab_file,
-    do_lower_case=args.do_lower_case,
-)
-bert_hidden_size = pretrained_bert_model.hidden_size
-
 # Run SGD preprocessor to generate and store schema embeddings
 schema_preprocessor = SchemaPreprocessor(
     data_dir=args.data_dir,
     schema_config=schema_config
 )
-####################################################
 
-args.max_seq_length = min(args.max_seq_length, gpt2_tokenizer.max_len)
 
 dialogues_processor = data_processor.SGDDataProcessor(
     task_name=args.task_name,
@@ -365,18 +259,16 @@ dialogues_processor = data_processor.SGDDataProcessor(
 )
 
 def create_pipeline(dataset_split, train=True):
-    batch_size = args.train_batch_size if train else args.eval_batch_size
     datalayer = nemo_nlp.nm.data_layers.GPT2DataLayer(
         tokenizer=gpt2_tokenizer,
         dataset_split=dataset_split,
         dialogues_processor=dialogues_processor,
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         shuffle=not args.no_shuffle if dataset_split == 'train' else False,
-        num_workers=0,  # args.num_workers,
         pin_memory=args.enable_pin_memory,
     )
 
-    steps_per_epoch = math.ceil(len(datalayer) / (batch_size * args.num_gpus))
+    steps_per_epoch = math.ceil(len(datalayer) / (args.batch_size * args.num_gpus))
 
     data = datalayer()
     loss = gpt2_model(input_ids=data.token_ids, labels=data.labels_lm)
@@ -427,154 +319,3 @@ nf.train(
     },
 )
 
-
-# # define model pipeline
-# sgd_encoder = SGDEncoderNM(hidden_size=hidden_size, dropout=args.dropout)
-# sgd_decoder = SGDDecoderNM(
-#     embedding_dim=hidden_size, schema_emb_processor=schema_preprocessor, add_attention_head=args.add_attention_head
-# )
-# dst_loss = nemo_nlp.nm.losses.SGDDialogueStateLossNM(reduction=args.loss_reduction)
-
-
-# def create_pipeline(dataset_split='train'):
-#     datalayer = nemo_nlp.nm.data_layers.SGDDataLayer(
-#         dataset_split=dataset_split,
-#         dialogues_processor=dialogues_processor,
-#         batch_size=args.train_batch_size,
-#         shuffle=not args.no_shuffle if dataset_split == 'train' else False,
-#         num_workers=args.num_workers,
-#         pin_memory=args.enable_pin_memory,
-#     )
-#     data = datalayer()
-
-#     # Encode the utterances using BERT.
-#     token_embeddings = pretrained_bert_model(
-#         input_ids=data.utterance_ids, attention_mask=data.utterance_mask, token_type_ids=data.utterance_segment,
-#     )
-#     encoded_utterance, token_embeddings = sgd_encoder(hidden_states=token_embeddings)
-#     (
-#         logit_intent_status,
-#         logit_req_slot_status,
-#         logit_cat_slot_status,
-#         logit_cat_slot_value,
-#         logit_noncat_slot_status,
-#         logit_noncat_slot_start,
-#         logit_noncat_slot_end,
-#     ) = sgd_decoder(
-#         encoded_utterance=encoded_utterance,
-#         token_embeddings=token_embeddings,
-#         utterance_mask=data.utterance_mask,
-#         cat_slot_values_mask=data.cat_slot_values_mask,
-#         intent_status_mask=data.intent_status_mask,
-#         service_ids=data.service_id,
-#     )
-
-#     if dataset_split == 'train':
-#         loss = dst_loss(
-#             logit_intent_status=logit_intent_status,
-#             intent_status_labels=data.intent_status_labels,
-#             logit_req_slot_status=logit_req_slot_status,
-#             requested_slot_status=data.requested_slot_status,
-#             req_slot_mask=data.req_slot_mask,
-#             logit_cat_slot_status=logit_cat_slot_status,
-#             categorical_slot_status=data.categorical_slot_status,
-#             cat_slot_status_mask=data.cat_slot_status_mask,
-#             logit_cat_slot_value=logit_cat_slot_value,
-#             categorical_slot_values=data.categorical_slot_values,
-#             logit_noncat_slot_status=logit_noncat_slot_status,
-#             noncategorical_slot_status=data.noncategorical_slot_status,
-#             noncat_slot_status_mask=data.noncat_slot_status_mask,
-#             logit_noncat_slot_start=logit_noncat_slot_start,
-#             logit_noncat_slot_end=logit_noncat_slot_end,
-#             noncategorical_slot_value_start=data.noncategorical_slot_value_start,
-#             noncategorical_slot_value_end=data.noncategorical_slot_value_end,
-#         )
-#         tensors = [loss]
-#     else:
-#         tensors = [
-#             data.example_id_num,
-#             data.service_id,
-#             data.is_real_example,
-#             data.start_char_idx,
-#             data.end_char_idx,
-#             logit_intent_status,
-#             logit_req_slot_status,
-#             logit_cat_slot_status,
-#             logit_cat_slot_value,
-#             logit_noncat_slot_status,
-#             logit_noncat_slot_start,
-#             logit_noncat_slot_end,
-#             data.intent_status_labels,
-#             data.requested_slot_status,
-#             data.categorical_slot_status,
-#             data.categorical_slot_values,
-#             data.noncategorical_slot_status,
-#         ]
-
-#     steps_per_epoch = math.ceil(len(datalayer) / (args.train_batch_size * args.num_gpus))
-#     return steps_per_epoch, tensors
-
-
-# steps_per_epoch, train_tensors = create_pipeline()
-# logging.info(f'Steps per epoch: {steps_per_epoch}')
-
-# # Create trainer and execute training action
-# train_callback = SimpleLossLoggerCallback(
-#     tensors=train_tensors,
-#     print_func=lambda x: logging.info("Loss: {:.8f}".format(x[0].item())),
-#     get_tb_values=lambda x: [["loss", x[0]]],
-#     tb_writer=nf.tb_writer,
-#     step_freq=args.loss_log_freq if args.loss_log_freq > 0 else steps_per_epoch,
-# )
-
-
-# def get_eval_callback(eval_dataset):
-#     _, eval_tensors = create_pipeline(dataset_split=eval_dataset)
-#     eval_callback = EvaluatorCallback(
-#         eval_tensors=eval_tensors,
-#         user_iter_callback=lambda x, y: eval_iter_callback(x, y, schema_preprocessor, eval_dataset),
-#         user_epochs_done_callback=lambda x: eval_epochs_done_callback(
-#             x,
-#             args.task_name,
-#             eval_dataset,
-#             args.data_dir,
-#             nf.work_dir,
-#             args.state_tracker,
-#             args.debug_mode,
-#             dialogues_processor,
-#             schema_preprocessor,
-#             args.joint_acc_across_turn,
-#             args.no_fuzzy_match,
-#         ),
-#         tb_writer=nf.tb_writer,
-#         eval_step=args.eval_epoch_freq * steps_per_epoch,
-#     )
-#     return eval_callback
-
-
-# if args.eval_dataset == 'dev_test':
-#     eval_callbacks = [get_eval_callback('dev'), get_eval_callback('test')]
-# else:
-#     eval_callbacks = [get_eval_callback(args.eval_dataset)]
-
-# ckpt_callback = CheckpointCallback(
-#     folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq, checkpoints_to_keep=1
-# )
-
-# lr_policy_fn = get_lr_policy(
-#     args.lr_policy, total_steps=args.num_epochs * steps_per_epoch, warmup_ratio=args.lr_warmup_proportion
-# )
-
-# nf.train(
-#     tensors_to_optimize=train_tensors,
-#     callbacks=[train_callback, ckpt_callback] + eval_callbacks,
-#     lr_policy=lr_policy_fn,
-#     optimizer=args.optimizer_kind,
-#     optimization_params={
-#         "num_epochs": args.num_epochs,
-#         "lr": args.learning_rate,
-#         "eps": 1e-6,
-#         "weight_decay": args.weight_decay,
-#         "grad_norm_clip": args.grad_norm_clip,
-#     },
-# )
