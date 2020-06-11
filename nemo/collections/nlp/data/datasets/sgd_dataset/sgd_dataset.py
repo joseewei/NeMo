@@ -41,9 +41,9 @@ class SGDDataset(Dataset):
 
     def __getitem__(self, idx):
         ex = self.features[idx]
-        service_id = ex.service_schema.service_id
 
         if self.mode == 'DST':
+            service_id = ex.service_schema.service_id
             return (
                 np.array(ex.example_id_num),
                 np.array(service_id),
@@ -68,5 +68,7 @@ class SGDDataset(Dataset):
                 np.array(ex.intent_status_labels),
             )
 
-        if self.mode == 'DST':
-            return (np.array(ex.input_ids))
+        if self.mode == 'PM':
+            return {'token_ids': ex.token_ids, 'token_type_ids': ex.token_type_ids, 'labels_lm': ex.labels_lm}
+        else:
+            raise ValueError(f'{self.mode} mode is not supported')

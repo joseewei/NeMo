@@ -178,7 +178,8 @@ parser.add_argument(
     type=int,
     help="Frequency of saving checkpoint '-1' - step checkpoint won't be saved",
 )
-
+parser.add_argument("--train_step_freq", default=25, type=int, help="Print training metrics every given iteration.")
+parser.add_argument("--eval_step_freq", default=25, type=int, help="Print evaluation metrics every given iteration.")
 parser.add_argument(
     "--loss_log_freq", default=-1, type=int, help="Frequency of logging loss values, '-1' - at the end of the epoch",
 )
@@ -196,7 +197,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--num_workers",
-    default=2,
+    default=1,
     type=int,
     help="Number of workers for data loading, -1 means set it automatically to the number of CPU cores",
 )
@@ -274,7 +275,10 @@ nf = NeuralModuleFactory(
     add_time_to_log_dir=not args.no_time_to_log_dir,
 )
 
-ATTR_TO_SPECIAL_TOKEN = {'bos_token': '<|bos|>', 'eos_token': '<|eos|>', 'pad_token': '<|pad|>',
+ATTR_TO_SPECIAL_TOKEN = {
+    'bos_token': '<|bos|>',
+    'eos_token': '<|eos|>',
+    'pad_token': '<|pad|>',
     'additional_special_tokens': [
         '<|context|>',
         "<|endofcontext|>",
@@ -285,7 +289,7 @@ ATTR_TO_SPECIAL_TOKEN = {'bos_token': '<|bos|>', 'eos_token': '<|eos|>', 'pad_to
         "<|action|>" "<|endofaction|>",
         "<|response|>",
         "<|endofresponse|>",
-    ]
+    ],
 }
 
 SPECIAL_TOKENS = ['<|bos|>', '<|eos|>', '<|pad|>'] + ATTR_TO_SPECIAL_TOKEN['additional_special_tokens']
@@ -297,17 +301,22 @@ MODEL_NAME = 'gpt2'
 gpt2_model = nemo_nlp.nm.trainables.huggingface.GPT2LM(pretrained_model_name=MODEL_NAME,)
 
 gpt2_tokenizer = nemo_nlp.data.NemoGPT2Tokenizer(
-    pretrained_model=MODEL_NAME) #, special_tokens_dict=ATTR_TO_SPECIAL_TOKEN#bos_token=['<|bos|>'], eos_token=['<|eos|>']
+    pretrained_model=MODEL_NAME
+)  # , special_tokens_dict=ATTR_TO_SPECIAL_TOKEN#bos_token=['<|bos|>'], eos_token=['<|eos|>']
 
 # TODO move to HF utils
 def add_special_tokens_(model, tokenizer):
     """ Add special tokens to the tokenizer and the model if they have not already been added. """
     orig_num_tokens = len(tokenizer.tokenizer.encoder)
-    num_added_tokens = tokenizer.tokenizer.add_special_tokens(ATTR_TO_SPECIAL_TOKEN)  # doesn't add if they are already there
+    num_added_tokens = tokenizer.tokenizer.add_special_tokens(
+        ATTR_TO_SPECIAL_TOKEN
+    )  # doesn't add if they are already there
     if num_added_tokens > 0:
         model.model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
     logging.info('%s special tokens added', num_added_tokens)
     tokenizer.vocab_size += num_added_tokens
+    logging.info('%s vocab_size', tokenizer.vocab_size)
+    print(model)
 
 
 args.vocab_size = gpt2_tokenizer.vocab_size
@@ -350,6 +359,7 @@ schema_preprocessor = SchemaPreprocessor(
 )
 ####################################################
 
+args.max_seq_length = min(args.max_seq_length, gpt2_tokenizer.max_len)
 
 dialogues_processor = data_processor.SGDDataProcessor(
     task_name=args.task_name,
@@ -359,20 +369,88 @@ dialogues_processor = data_processor.SGDDataProcessor(
     pm_tokenizer=gpt2_tokenizer,
     schema_emb_processor=schema_preprocessor,
     overwrite_dial_files=args.overwrite_dial_files,
+    pm_max_seq_length=args.max_seq_length,
     mode='PM',
 )
 
-dataset_split = 'train'
-datalayer = nemo_nlp.nm.data_layers.SGDDataLayer(
-    dataset_split=dataset_split,
-    dialogues_processor=dialogues_processor,
-    batch_size=args.train_batch_size,
-    shuffle=not args.no_shuffle if dataset_split == 'train' else False,
-    num_workers=args.num_workers,
-    pin_memory=args.enable_pin_memory,
+# dataset_split = 'train'
+# datalayer = nemo_nlp.nm.data_layers.GPT2DataLayer(
+#     tokenizer=gpt2_tokenizer,
+#     dataset_split=dataset_split,
+#     dialogues_processor=dialogues_processor,
+#     batch_size=args.train_batch_size,
+#     shuffle=not args.no_shuffle if dataset_split == 'train' else False,
+#     num_workers=args.num_workers,
+#     pin_memory=args.enable_pin_memory,
+# )
+# data = datalayer()
+# print (datalayer._dataset[0])
+# import pdb; pdb.set_trace()
+
+
+def create_pipeline(dataset_split, train=True):
+    batch_size = args.train_batch_size if train else args.eval_batch_size
+    datalayer = nemo_nlp.nm.data_layers.GPT2DataLayer(
+        tokenizer=gpt2_tokenizer,
+        dataset_split=dataset_split,
+        dialogues_processor=dialogues_processor,
+        batch_size=batch_size,
+        shuffle=not args.no_shuffle if dataset_split == 'train' else False,
+        num_workers=0,  # args.num_workers,
+        pin_memory=args.enable_pin_memory,
+    )
+
+    steps_per_epoch = math.ceil(len(datalayer) / (batch_size * args.num_gpus))
+
+    data = datalayer()
+    loss = gpt2_model(input_ids=data.token_ids, labels=data.labels_lm)
+    return loss, steps_per_epoch
+
+
+train_loss, steps_per_epoch = create_pipeline('train')
+eval_loss, eval_steps_per_epoch = create_pipeline('dev', train=False)
+
+
+logging.info("steps per epoch: %s", steps_per_epoch)
+
+# callback which prints training loss and perplexity once in a while
+train_callback = SimpleLossLoggerCallback(
+    tensors=[train_loss],
+    step_freq=args.train_step_freq,
+    print_func=lambda x: logging.info(f'Loss:{str(round(x[0].item(), 3))}'),
+    get_tb_values=lambda x: [["loss", x[0]]],
+    tb_writer=nf.tb_writer,
 )
-data = datalayer()
-import pdb; pdb.set_trace()
+
+ckpt_callback = CheckpointCallback(
+    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq, checkpoints_to_keep=1
+)
+
+eval_callback = EvaluatorCallback(
+    eval_tensors=[eval_loss],
+    user_iter_callback=nemo_nlp.callbacks.lm_bert_callback.eval_iter_callback,
+    user_epochs_done_callback=nemo_nlp.callbacks.lm_bert_callback.eval_epochs_done_callback,
+    eval_step=args.eval_step_freq,
+)
+
+lr_policy_fn = get_lr_policy(
+    args.lr_policy, total_steps=args.num_epochs * steps_per_epoch, warmup_ratio=args.lr_warmup_proportion
+)
+
+nf.train(
+    tensors_to_optimize=[train_loss],
+    callbacks=[train_callback, ckpt_callback, eval_callback],
+    lr_policy=lr_policy_fn,
+    optimizer=args.optimizer_kind,
+    optimization_params={
+        "num_epochs": args.num_epochs,
+        "lr": args.learning_rate,
+        "eps": 1e-6,
+        "weight_decay": args.weight_decay,
+        "grad_norm_clip": args.grad_norm_clip,
+    },
+)
+
 
 # # define model pipeline
 # sgd_encoder = SGDEncoderNM(hidden_size=hidden_size, dropout=args.dropout)

@@ -28,7 +28,7 @@ from transformers import (
 
 from nemo.backends.pytorch.nm import TrainableNM
 from nemo.core.neural_modules import PretrainedModelInfo
-from nemo.core.neural_types import ChannelType, LossType, NeuralType
+from nemo.core.neural_types import ChannelType, LabelsType, LossType, NeuralType
 from nemo.utils.decorators import add_port_docs
 
 __all__ = ['GPT2', 'GPT2LM']
@@ -41,6 +41,7 @@ class GPT2LM(TrainableNM):
 
         return {
             "input_ids": NeuralType(('B', 'T'), ChannelType()),
+            "labels": NeuralType(('B', 'T'), LabelsType()),
             "token_type_ids": NeuralType(('B', 'T'), ChannelType(), optional=True),
             "attention_mask": NeuralType(('B', 'T'), ChannelType(), optional=True),
         }
@@ -113,16 +114,18 @@ class GPT2LM(TrainableNM):
     def forward(
         self,
         input_ids,
-        attention_mask=None,
-        token_type_ids=None,
+        # attention_mask=None,
+        # token_type_ids=None,
         # past=None,
         # position_ids=None,
         # head_mask=None,
         # inputs_embeds=None,
-        # labels=None,
+        labels,
         # use_cache=True,
     ):
-        return self.model(input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)[0]
+        return self.model(input_ids=input_ids, labels=labels)[
+            0
+        ]  # token_type_ids=token_type_ids, attention_mask=attention_mask)[0]
 
     def generate(self):
         pass

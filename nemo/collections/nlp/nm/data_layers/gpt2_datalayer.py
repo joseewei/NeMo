@@ -24,15 +24,15 @@ from torch.utils import data as pt_data
 
 from nemo.backends.pytorch import DataLayerNM
 from nemo.collections.nlp.data import BertPretrainingDataset, BertPretrainingPreprocessedDataset
+from nemo.collections.nlp.data.datasets.sgd_dataset.sgd_dataset import SGDDataset
 from nemo.collections.nlp.nm.data_layers.text_datalayer import TextDataLayer
 from nemo.core import ChannelType, DeviceType, LabelsType, MaskType, NeuralType
 from nemo.utils.decorators import add_port_docs
-from nemo.collections.nlp.data.datasets.sgd_dataset.sgd_dataset import SGDDataset
 
 __all__ = ['GPT2DataLayer']
 
 
-class GPT2DataLayer(TextDataLayer):
+class GPT2DataLayer(DataLayerNM):
     """
     Data layer for masked language modeling task for text data.
 
@@ -63,12 +63,12 @@ class GPT2DataLayer(TextDataLayer):
         labels: 0 or 1 for next sentence prediction classification
         """
         return {
-            "input_ids": NeuralType(('B', 'T'), ChannelType()),
-            # "input_type_ids": NeuralType(('B', 'T'), ChannelType()),
+            "token_ids": NeuralType(('B', 'T'), ChannelType()),
+            # "token_type_ids": NeuralType(('B', 'T'), ChannelType()),
             # "input_mask": NeuralType(('B', 'T'), ChannelType()),
             # "output_ids": NeuralType(('B', 'T'), LabelsType()),
             # "output_mask": NeuralType(('B', 'T'), MaskType()),
-            # "labels": NeuralType(tuple('B'), LabelsType()),
+            "labels_lm": NeuralType(('B', 'T'), LabelsType()),
         }
 
     def __init__(
@@ -79,7 +79,7 @@ class GPT2DataLayer(TextDataLayer):
         dataset_type=SGDDataset,
         shuffle=False,
         batch_size=1,
-        num_workers=-1,
+        num_workers=0,
         pin_memory=False,
     ):
         super().__init__()
@@ -93,7 +93,9 @@ class GPT2DataLayer(TextDataLayer):
             'dataset_split': dataset_split,
             'dialogues_processor': dialogues_processor,
         }
+
         self._dataset = dataset_type(**dataset_params)
+
         self.tokenizer = tokenizer
         if self._placement == DeviceType.AllGpu:
             sampler = pt_data.distributed.DistributedSampler(self._dataset)
@@ -109,6 +111,9 @@ class GPT2DataLayer(TextDataLayer):
             sampler=sampler,
         )
 
+    def __len__(self):
+        return len(self._dataset)
+
     @property
     def dataset(self):
         return None
@@ -117,30 +122,15 @@ class GPT2DataLayer(TextDataLayer):
     def data_iterator(self):
         return self._dataloader
 
-    def _collate_fn(self, examples):
-        """
-        Data collator used for language modeling.
-        - collates batches of tensors, honoring their tokenizer's pad_token
-        - preprocesses batches for masked language modeling
+    def _collate_fn(self, data):
+        item_info = {}
+        for key in data[0]:
+            item_info[key] = [torch.tensor(item[key]) for item in data]
 
-        source: transformers/data/data_collator.py
-        """
+        token_ids = pad_sequence(item_info['token_ids'], batch_first=True, padding_value=self.tokenizer.pad_id)
+        token_type_ids = pad_sequence(
+            item_info['token_type_ids'], batch_first=True, padding_value=self.tokenizer.pad_id
+        )
+        labels_lm = pad_sequence(item_info['labels_lm'], batch_first=True, padding_value=-100)
 
-        def _tensorize_batch(examples):
-            length_of_first = examples[0].size(0)
-            are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
-            if are_tensors_same_length:
-                return torch.stack(examples, dim=0)
-            else:
-                if self.tokenizer.pad_token is None:
-                    raise ValueError(
-                        "You are attempting to pad samples but the tokenizer you are using"
-                        f" ({self.tokenizer.__class__.__name__}) does not have one."
-                    )
-                return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_id)
-
-        batch = _tensorize_batch(examples)
-        import pdb
-
-        pdb.set_trace()
-        return batch
+        return (token_ids.to(self._device), token_type_ids.to(self._device), labels_lm.to(self._device))

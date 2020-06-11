@@ -28,7 +28,8 @@ class InputExamplePM(object):
     """An example for training/inference."""
 
     def __init__(
-        self, user_utterance, system_utterance, system_utterance_next, user_frames, system_frames_next, tokenizer):
+        self, user_utterance, system_utterance, system_utterance_next, user_frames, system_frames_next, tokenizer
+    ):
         """Constructs an InputExample.
 
         Args:
@@ -56,13 +57,16 @@ class InputExamplePM(object):
 
         # process dialogue_history and add it to token_ids and to token_type_ids
         system_tokens = [tokenizer.bos_token, context_start]
-        system_tokens +=  [sys_special_token] + tokenizer.text_to_tokens(system_utterance) if len(system_utterance) > 0 else []
-        user_tokens =  [user_special_token] + tokenizer.text_to_tokens(user_utterance) + [context_end]
-        
-        dialogue_history_tokens =  system_tokens + user_tokens
+        system_tokens += (
+            [sys_special_token] + tokenizer.text_to_tokens(system_utterance) if len(system_utterance) > 0 else []
+        )
+        user_tokens = [user_special_token] + tokenizer.text_to_tokens(user_utterance) + [context_end]
+
+        dialogue_history_tokens = system_tokens + user_tokens
         self.token_ids = tokenizer.tokens_to_ids(dialogue_history_tokens)
-        self.token_type_ids = len(user_tokens) * [tokenizer.tokens_to_ids(user_special_token)] + \
-            len(system_tokens) * [tokenizer.tokens_to_ids(sys_special_token)]
+        self.token_type_ids = len(user_tokens) * [tokenizer.tokens_to_ids(user_special_token)] + len(system_tokens) * [
+            tokenizer.tokens_to_ids(sys_special_token)
+        ]
 
         assert len(self.token_type_ids) == len(dialogue_history_tokens)
         self.dialogue_history = tokenizer.tokens_to_text(dialogue_history_tokens)
@@ -74,14 +78,14 @@ class InputExamplePM(object):
 
             state = user_frames[service]['state']
             active_intent = 'intent = ' + self.split_intent(state['active_intent']) + ', '
-          
+
             slots = ''
             for slot_name, slot_values in state['slot_values'].items():
                 slots += slot_name + ' = ' + ','.join(slot_values) + ', '
 
             requested_slots = 'requested_slots = '
             requested_slots += ','.join(state['requested_slots']) if len(state['requested_slots']) > 0 else 'none'
-            
+
             belief += active_intent + slots + requested_slots
 
             dialogue_belief += belief
@@ -91,9 +95,9 @@ class InputExamplePM(object):
         belief_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(dialogue_belief))
         self.token_ids += belief_tokens_ids
         self.token_type_ids += len(belief_tokens_ids) * [tokenizer.tokens_to_ids(belief_start)]
-        
-        # process system action, possible system acts: 
-        # INFORM, REQUEST, CONFIRM, OFFER, NOTIFY_SUCCESS, NOTIFY_FAILURE, INFORM_COUNT, OFFER_INTENT, REQ_MORE, GOODBYE 
+
+        # process system action, possible system acts:
+        # INFORM, REQUEST, CONFIRM, OFFER, NOTIFY_SUCCESS, NOTIFY_FAILURE, INFORM_COUNT, OFFER_INTENT, REQ_MORE, GOODBYE
         self.use_external_service = {}
         self.service_results = {}
         self.service_call = {}
@@ -112,13 +116,13 @@ class InputExamplePM(object):
             system_act = ''
             for act in system_frames_next[service]['actions']:
                 # turn NOTIFY_SUCCESS into notify success
-                act_name = (act['act'].lower() + ' ').replace('_', ' ') 
+                act_name = (act['act'].lower() + ' ').replace('_', ' ')
                 act_slots = act['slot'] + ' ' + '|'.join(act['values']) + ', '
                 system_act += act_name + act_slots
 
             # remove trailing comma
             system_act = system_act.strip()
-            system_acts += ' ' + system_act[:-1] if len(system_act) > 0 else system_act 
+            system_acts += ' ' + system_act[:-1] if len(system_act) > 0 else system_act
             system_acts = system_acts.strip()
         system_acts += ' ' + action_end
 
@@ -133,20 +137,25 @@ class InputExamplePM(object):
         self.response = response_start + system_utterance_next + response_end
         self.delex_response = self.delexilize(self.response, system_frames_next)
         # add delex system response to token_ids and token_type_ids
-        delex_response_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(self.delex_response + tokenizer.eos_token))
+        # create labels for lm task
+        delex_response_tokens_ids = tokenizer.tokens_to_ids(
+            tokenizer.text_to_tokens(self.delex_response + tokenizer.eos_token)
+        )
+        self.ignore_index = -100
+        self.labels_lm = [self.ignore_index] * len(self.token_ids)
+        self.labels_lm += [self.ignore_index] + delex_response_tokens_ids[1:]
         self.token_ids += delex_response_tokens_ids
         self.token_type_ids += len(delex_response_tokens_ids) * [tokenizer.tokens_to_ids(response_start)]
 
         assert len(self.token_ids) == len(self.token_type_ids)
-        # TODO add bos and eos tokens
-        print ('-->', tokenizer.tokens_to_text(tokenizer.ids_to_tokens(self.token_ids)))
-        print()
-        print(self.dialogue_history)
-        print(self.dialogue_belief)
-        print(self.delex_system_acts)
-        print(self.delex_response)
-        
-
+        assert len(self.token_ids) == len(self.labels_lm)
+        # TODO add DB
+        self.input_text = tokenizer.tokens_to_text(tokenizer.ids_to_tokens(self.token_ids))
+        logging.debug(self.input_text)
+        logging.debug(self.dialogue_history)
+        logging.debug(self.dialogue_belief)
+        logging.debug(self.delex_system_acts)
+        logging.debug(self.delex_response)
 
     def split_intent(self, intent):
         reformatted_intent = ''
@@ -185,7 +194,6 @@ class InputExamplePM(object):
                         uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
         return uttr
 
-
     # def remove_action_slots_from_uttr(self, uttr, frame):
     #     """
     #     Delexilizes utterance
@@ -207,7 +215,6 @@ class InputExamplePM(object):
     #                         uttr = uttr.replace(slot_value, '[value_' + action['slot'] + ']')
     #     return uttr
 
-        
     # def remove_db_results_from_uttr(self, uttr, frame):
     #     # delex slot_values from DB search results
     #     for v in frame.values():

@@ -59,6 +59,7 @@ class SGDDataProcessor(object):
         pm_tokenizer,
         schema_emb_processor=None,
         overwrite_dial_files=False,
+        pm_max_seq_length=None,
         mode='DST',
     ):
         """
@@ -75,7 +76,7 @@ class SGDDataProcessor(object):
         if mode not in ['DST', 'PM']:
             raise ValueError(f'{mode} mode is not supported')
         self.mode = mode
-
+        self.pm_max_seq_length = pm_max_seq_length
         self.data_dir = data_dir
         self.dialogues_examples_dir = dialogues_example_dir
 
@@ -262,7 +263,7 @@ class SGDDataProcessor(object):
                         user_frames,
                         prev_states,
                         schemas,
-                        system_utterance_next
+                        system_utterance_next,
                     )
 
                     for value, slots_list in slot_carryover_values.items():
@@ -279,15 +280,20 @@ class SGDDataProcessor(object):
                                     slot_carryover_candlist[(service1, slot1, service2, slot2)] += 1
 
                 elif self.mode == 'PM':
-                    turn_examples = InputExamplePM(
-                        user_utterance, system_utterance, system_utterance_next, user_frames, system_frames_next, self._pm_tokenizer
-                    )
+                    turn_examples = [
+                        InputExamplePM(
+                            user_utterance,
+                            system_utterance,
+                            system_utterance_next,
+                            user_frames,
+                            system_frames_next,
+                            self._pm_tokenizer,
+                        )
+                    ]
                 else:
-                    raise ValueError(f'{mode} mode is not supported')
+                    raise ValueError(f'{self.mode} mode is not supported')
                 examples.extend(turn_examples)
         return examples
-
-    
 
     def _get_state_update(self, current_state, prev_state):
         """
