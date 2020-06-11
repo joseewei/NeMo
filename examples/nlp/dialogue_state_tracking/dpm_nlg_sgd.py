@@ -271,7 +271,7 @@ def create_pipeline(dataset_split, train=True):
     steps_per_epoch = math.ceil(len(datalayer) / (args.batch_size * args.num_gpus))
 
     data = datalayer()
-    loss = gpt2_model(input_ids=data.token_ids, labels=data.labels_lm)
+    loss = gpt2_model(input_ids=data.token_ids, token_type_ids=data.token_type_ids, labels=data.labels_lm)
     return loss, steps_per_epoch
 
 

@@ -64,7 +64,7 @@ class GPT2DataLayer(DataLayerNM):
         """
         return {
             "token_ids": NeuralType(('B', 'T'), ChannelType()),
-            # "token_type_ids": NeuralType(('B', 'T'), ChannelType()),
+            "token_type_ids": NeuralType(('B', 'T'), ChannelType()),
             # "input_mask": NeuralType(('B', 'T'), ChannelType()),
             # "output_ids": NeuralType(('B', 'T'), LabelsType()),
             # "output_mask": NeuralType(('B', 'T'), MaskType()),

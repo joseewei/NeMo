@@ -115,15 +115,15 @@ class GPT2LM(TrainableNM):
         self,
         input_ids,
         # attention_mask=None,
-        # token_type_ids=None,
+        token_type_ids=None,
         # past=None,
         # position_ids=None,
         # head_mask=None,
         # inputs_embeds=None,
-        labels,
+        labels=None,
         # use_cache=True,
     ):
-        return self.model(input_ids=input_ids, labels=labels)[
+        return self.model(input_ids=input_ids, token_type_ids=token_type_ids, labels=labels)[
             0
         ]  # token_type_ids=token_type_ids, attention_mask=attention_mask)[0]
 
