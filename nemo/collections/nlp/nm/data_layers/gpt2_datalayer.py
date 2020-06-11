@@ -27,6 +27,7 @@ from nemo.collections.nlp.data import BertPretrainingDataset, BertPretrainingPre
 from nemo.collections.nlp.nm.data_layers.text_datalayer import TextDataLayer
 from nemo.core import ChannelType, DeviceType, LabelsType, MaskType, NeuralType
 from nemo.utils.decorators import add_port_docs
+from nemo.collections.nlp.data.datasets.sgd_dataset.sgd_dataset import SGDDataset
 
 __all__ = ['GPT2DataLayer']
 
@@ -73,22 +74,26 @@ class GPT2DataLayer(TextDataLayer):
     def __init__(
         self,
         tokenizer,
-        dataset_type,
-        file_path,
-        block_size,
-        batch_size,
-        overwrite_cache=False,
+        dataset_split,
+        dialogues_processor,
+        dataset_type=SGDDataset,
         shuffle=False,
-        num_workers=0,
+        batch_size=1,
+        num_workers=-1,
+        pin_memory=False,
     ):
-        dataset_params = {
-            'tokenizer': tokenizer,
-            'file_path': file_path,
-            'block_size': block_size,
-            'overwrite_cache': overwrite_cache,
-        }
+        super().__init__()
+        self._batch_size = batch_size
+        self._shuffle = shuffle
+        self._pin_memory = pin_memory
+        if num_workers >= 0:
+            self._num_workers = num_workers
 
-        super().__init__(dataset_type, dataset_params, batch_size=batch_size, shuffle=shuffle)
+        dataset_params = {
+            'dataset_split': dataset_split,
+            'dialogues_processor': dialogues_processor,
+        }
+        self._dataset = dataset_type(**dataset_params)
         self.tokenizer = tokenizer
         if self._placement == DeviceType.AllGpu:
             sampler = pt_data.distributed.DistributedSampler(self._dataset)

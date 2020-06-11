@@ -145,9 +145,7 @@ class InputExamplePM(object):
         print(self.dialogue_belief)
         print(self.delex_system_acts)
         print(self.delex_response)
-
-        import pdb; pdb.set_trace()
-        print()
+        
 
 
     def split_intent(self, intent):

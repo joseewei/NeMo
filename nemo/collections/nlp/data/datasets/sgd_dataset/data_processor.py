@@ -253,38 +253,38 @@ class SGDDataProcessor(object):
                 system_frames_next = {f["service"]: f for f in system_turn_next["frames"]}
                 turn_id = "{}-{}-{:02d}".format(dataset, dialog_id, turn_idx)
 
-                turn_examples, prev_states, slot_carryover_values = self._create_examples_from_turn(
-                    turn_id,
-                    system_utterance,
-                    user_utterance,
-                    system_frames,
-                    user_frames,
-                    prev_states,
-                    schemas,
-                    system_utterance_next
-                )
+                if self.mode == 'DST':
+                    turn_examples, prev_states, slot_carryover_values = self._create_examples_from_turn(
+                        turn_id,
+                        system_utterance,
+                        user_utterance,
+                        system_frames,
+                        user_frames,
+                        prev_states,
+                        schemas,
+                        system_utterance_next
+                    )
 
-                # print(user_frames)
-                # print(system_frames_next)
+                    for value, slots_list in slot_carryover_values.items():
+                        if value in ["True", "False"]:
+                            continue
+                        if len(slots_list) > 1:
+                            for service1, slot1 in slots_list:
+                                for service2, slot2 in slots_list:
+                                    if service1 == service2:
+                                        continue
+                                    if service1 > service2:
+                                        service1, service2 = service2, service1
+                                        slot1, slot2 = slot2, slot1
+                                    slot_carryover_candlist[(service1, slot1, service2, slot2)] += 1
 
-                if self.mode == 'PM':
-                    pm_examples = InputExamplePM(
+                elif self.mode == 'PM':
+                    turn_examples = InputExamplePM(
                         user_utterance, system_utterance, system_utterance_next, user_frames, system_frames_next, self._pm_tokenizer
                     )
+                else:
+                    raise ValueError(f'{mode} mode is not supported')
                 examples.extend(turn_examples)
-
-                for value, slots_list in slot_carryover_values.items():
-                    if value in ["True", "False"]:
-                        continue
-                    if len(slots_list) > 1:
-                        for service1, slot1 in slots_list:
-                            for service2, slot2 in slots_list:
-                                if service1 == service2:
-                                    continue
-                                if service1 > service2:
-                                    service1, service2 = service2, service1
-                                    slot1, slot2 = slot2, slot1
-                                slot_carryover_candlist[(service1, slot1, service2, slot2)] += 1
         return examples
 
     

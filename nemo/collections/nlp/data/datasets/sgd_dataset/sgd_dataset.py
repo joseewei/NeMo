@@ -43,31 +43,30 @@ class SGDDataset(Dataset):
         ex = self.features[idx]
         service_id = ex.service_schema.service_id
 
-        output = [
-            np.array(ex.example_id_num),
-            np.array(service_id),
-            np.array(ex.is_real_example, dtype=int),
-            np.array(ex.utterance_ids),
-            np.array(ex.utterance_segment),
-            np.array(ex.utterance_mask, dtype=np.long),
-            np.array(ex.categorical_slot_status),
-            np.array(ex.cat_slot_status_mask),
-            np.array(ex.categorical_slot_values),
-            np.array(ex.cat_slot_values_mask),
-            np.array(ex.noncategorical_slot_status),
-            np.array(ex.noncat_slot_status_mask),
-            np.array(ex.noncategorical_slot_value_start),
-            np.array(ex.noncategorical_slot_value_end),
-            np.array(ex.start_char_idx),  # noncat_alignment_start
-            np.array(ex.end_char_idx),  # noncat_alignment_end
-            np.array(ex.num_slots),  # num_requested_slots
-            np.array(ex.requested_slot_status, dtype=np.float32),
-            np.array(ex.requested_slot_mask),
-            np.array(ex.intent_status_mask),
-            np.array(ex.intent_status_labels),
-        ]
+        if self.mode == 'DST':
+            return (
+                np.array(ex.example_id_num),
+                np.array(service_id),
+                np.array(ex.is_real_example, dtype=int),
+                np.array(ex.utterance_ids),
+                np.array(ex.utterance_segment),
+                np.array(ex.utterance_mask, dtype=np.long),
+                np.array(ex.categorical_slot_status),
+                np.array(ex.cat_slot_status_mask),
+                np.array(ex.categorical_slot_values),
+                np.array(ex.cat_slot_values_mask),
+                np.array(ex.noncategorical_slot_status),
+                np.array(ex.noncat_slot_status_mask),
+                np.array(ex.noncategorical_slot_value_start),
+                np.array(ex.noncategorical_slot_value_end),
+                np.array(ex.start_char_idx),  # noncat_alignment_start
+                np.array(ex.end_char_idx),  # noncat_alignment_end
+                np.array(ex.num_slots),  # num_requested_slots
+                np.array(ex.requested_slot_status, dtype=np.float32),
+                np.array(ex.requested_slot_mask),
+                np.array(ex.intent_status_mask),
+                np.array(ex.intent_status_labels),
+            )
 
         if self.mode == 'DST':
-            return output
-        # else:
-        #     output += [np.array(ex.intent_status_labels)]
+            return (np.array(ex.input_ids))

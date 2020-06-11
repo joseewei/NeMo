@@ -372,7 +372,7 @@ datalayer = nemo_nlp.nm.data_layers.SGDDataLayer(
     pin_memory=args.enable_pin_memory,
 )
 data = datalayer()
-
+import pdb; pdb.set_trace()
 
 # # define model pipeline
 # sgd_encoder = SGDEncoderNM(hidden_size=hidden_size, dropout=args.dropout)
