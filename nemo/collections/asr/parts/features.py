@@ -63,7 +63,7 @@ class WaveformFeaturizer(object):
     def max_augmentation_length(self, length):
         return self.augmentor.max_augmentation_length(length)
 
-    def process(self, file_path, offset=0, duration=0, trim=False):
+    def process(self, file_path, offset=0, duration=0, trim=False, orig_sr=None):
         audio = AudioSegment.from_file(
             file_path,
             target_sr=self.sample_rate,
@@ -72,10 +72,10 @@ class WaveformFeaturizer(object):
             duration=duration,
             trim=trim,
         )
-        return self.process_segment(audio)
+        return self.process_segment(audio, orig_sr=orig_sr)
 
-    def process_segment(self, audio_segment):
-        self.augmentor.perturb(audio_segment)
+    def process_segment(self, audio_segment, orig_sr=None):
+        self.augmentor.perturb(audio_segment, orig_sr)
         return torch.tensor(audio_segment.samples, dtype=torch.float)
 
     @classmethod

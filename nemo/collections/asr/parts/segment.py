@@ -16,11 +16,14 @@ class AudioSegment(object):
     :raises TypeError: If the sample data type is not float or int.
     """
 
-    def __init__(self, samples, sample_rate, target_sr=None, trim=False, trim_db=60):
+    def __init__(self, samples, sample_rate, target_sr=None, trim=False, trim_db=60, downsample_rate=None):
         """Create audio segment from samples.
         Samples are convert float32 internally, with int scaled to [-1, 1].
         """
         samples = self._convert_samples_to_float32(samples)
+        if downsample_rate and downsample_rate < sample_rate:
+            librosa.core.resample(samples, sample_rate, downsample_rate)
+            sample_rate = downsample_rate
         if target_sr is not None and target_sr != sample_rate:
             samples = librosa.core.resample(samples, sample_rate, target_sr)
             sample_rate = target_sr
@@ -75,7 +78,7 @@ class AudioSegment(object):
 
     @classmethod
     def from_file(
-        cls, audio_file, target_sr=None, int_values=False, offset=0, duration=0, trim=False,
+        cls, audio_file, target_sr=None, int_values=False, offset=0, duration=0, trim=False, downsample_rate=None
     ):
         """
         Load a file supported by librosa and return as an AudioSegment.
@@ -97,7 +100,7 @@ class AudioSegment(object):
                 samples = f.read(dtype=dtype)
 
         samples = samples.transpose()
-        return cls(samples, sample_rate, target_sr=target_sr, trim=trim)
+        return cls(samples, sample_rate, target_sr=target_sr, trim=trim, downsample_rate=downsample_rate)
 
     @classmethod
     def segment_from_file(cls, audio_file, target_sr=None, n_segments=0, trim=False):

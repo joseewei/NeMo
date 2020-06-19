@@ -12,6 +12,7 @@ import nemo.utils.argparse as nm_argparse
 from nemo.collections.asr.helpers import monitor_asr_train_progress, process_evaluation_batch, process_evaluation_epoch
 from nemo.utils import logging
 from nemo.utils.lr_policies import CosineAnnealing
+#import wandb
 
 
 def parse_args():
@@ -76,7 +77,7 @@ def create_all_dags(args, neural_factory):
 
     # Calculate num_workers for dataloader
     total_cpus = os.cpu_count()
-    cpu_per_traindl = max(int(total_cpus / neural_factory.world_size), 1)
+    cpu_per_traindl = 1 #max(int(total_cpus / neural_factory.world_size), 1)
 
     # create data layer for training
     train_dl_params = copy.deepcopy(quartz_params["AudioToTextDataLayer"])
@@ -85,12 +86,16 @@ def create_all_dags(args, neural_factory):
     del train_dl_params["eval"]
     # del train_dl_params["normalize_transcripts"]
 
+    # Look for augmentations
+    audio_augmentor = quartz_params.get('AudioAugmentor', None)
+
     data_layer_train = nemo_asr.AudioToTextDataLayer(
         manifest_filepath=args.train_dataset,
         sample_rate=sample_rate,
         labels=vocab,
         batch_size=args.batch_size,
         num_workers=cpu_per_traindl,
+        augmentor=audio_augmentor,
         **train_dl_params,
         # normalize_transcripts=False
     )
@@ -190,6 +195,13 @@ def create_all_dags(args, neural_factory):
         )
 
         callbacks.append(chpt_callback)
+        # Log training metrics to wandb
+    # wand_callback = nemo.core.WandbCallback(train_tensors=[loss_t],
+    #                                         wandb_name=args.exp_name, wandb_project=args.project,
+    #                                         update_freq=args.update_freq,
+    #                                         args=args
+    #                                         )
+    # callbacks.append(wand_callback)
 
     # assemble eval DAGs
     for i, eval_dl in enumerate(data_layers_eval):
