@@ -310,6 +310,9 @@ class RirAndNoisePerturbation(Perturbation):
         snr_db = self._rng.uniform(self._min_snr_db, self._max_snr_db)
         noise = self.get_one_audio_sample(self._noise_manifest, data.sample_rate, tarred_audio=self.rir_tarred_audio,
                                           audiodata=self.noise_data, orig_sr=orig_sr)
+
+        logging.debug("noise file: num_samples=%d, sample_rate=%d, duration=%.2fsec",
+                      noise.num_samples, noise.sample_rate, noise.duration)
         noise_gain_db = min(data.rms_db - noise.rms_db - snr_db, self._max_gain_db)
 
 
