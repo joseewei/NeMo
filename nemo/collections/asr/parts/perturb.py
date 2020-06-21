@@ -286,6 +286,7 @@ class RirAndNoisePerturbation(Perturbation):
             manifest_entry = manifest[manifest_idx]
 
             offset = manifest_entry.offset
+            logging.debug("audio file: %s", file_id)
             if offset is None:
                 offset = 0
         else:
