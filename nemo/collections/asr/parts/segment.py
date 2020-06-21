@@ -5,7 +5,7 @@ import random
 import librosa
 import numpy as np
 import soundfile as sf
-
+from nemo import logging
 
 class AudioSegment(object):
     """Monaural audio segment abstraction.
