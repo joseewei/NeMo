@@ -314,6 +314,8 @@ class RirAndNoisePerturbation(Perturbation):
         logging.debug("noise file: num_samples=%d, sample_rate=%d, duration=%.2fsec",
                       noise.num_samples, noise.sample_rate, noise.duration)
         noise_gain_db = min(data.rms_db - noise.rms_db - snr_db, self._max_gain_db)
+        logging.debug("noise file: num_samples=%d, sample_rate=%d, duration=%.2fsec",
+                      noise.num_samples, noise.sample_rate, noise.duration)
 
 
         # logging.debug("noise: %s %s %s", snr_db, noise_gain_db, noise_record.audio_file)
