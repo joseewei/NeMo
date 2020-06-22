@@ -141,7 +141,7 @@ class AudioSegment(object):
     def rms_db(self):
         mean_square = np.mean(self._samples ** 2)
         #if mean_square == 0.0:
-        logging.debug("mean_square %s", str(self))
+        logging.debug("mean_square %s %f", str(self), mean_square)
         return 10 * np.log10(mean_square)
 
     def gain_db(self, gain):
