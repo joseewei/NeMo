@@ -313,8 +313,11 @@ class RirAndNoisePerturbation(Perturbation):
 
         logging.debug("noise file: num_samples=%d, sample_rate=%d, duration=%.2fsec",
                       noise.num_samples, noise.sample_rate, noise.duration)
+
         datarms = data.rms_db
+        logging.debug("called data rms = %.10f", datarms)
         noiserms = noise.rms_db
+        logging.debug("called noise rms =%.10f",noiserms)
         noise_gain_db = min(datarms - noiserms - snr_db, self._max_gain_db)
         logging.debug("noise file: num_samples=%d, sample_rate=%d, duration=%.2fsec rms1=%.10f rms2=%.10f",
                       noise.num_samples, noise.sample_rate, noise.duration,datarms,noiserms )
