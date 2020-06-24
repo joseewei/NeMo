@@ -370,6 +370,8 @@ class NoisePerturbation(Perturbation):
         if noise.duration > (data.duration - 1):
             noise.subsegment(start_time=0, end_time=data.duration-1)
         n_additions = self._rng.randint(1,max_additions)
+        logging.info("data dur: %f, data shape:%d, noise dur:%f noise shape:%d",  data.duration, data._samples.shape[0],
+                     noise.duration, noise._samples.shape[0])
         for _ in range(n_additions):
             noise_idx = self._rng.randint(0, data._samples.shape[0] - noise._samples.shape[0])
             data._samples[noise_idx : noise_idx + noise._samples.shape[0]] += noise._samples
