@@ -359,6 +359,8 @@ class NoisePerturbation(Perturbation):
         if not data_rms:
             data_rms = data.rms_db
 
+        if data.duration < max_noise_dur:
+            return
         noise_gain_db = min(data_rms - noise.rms_db - snr_db, self._max_gain_db)
         # adjust gain for snr purposes and superimpose
         noise.gain_db(noise_gain_db)
@@ -370,10 +372,11 @@ class NoisePerturbation(Perturbation):
         if noise.duration > (data.duration - 1):
             noise.subsegment(start_time=0, end_time=data.duration-1)
         n_additions = self._rng.randint(1,max_additions)
-        logging.info("data dur: %f, data shape:%d, noise dur:%f noise shape:%d",  data.duration, data._samples.shape[0],
+        logging.debug("data dur: %f, data shape:%d, noise dur:%f noise shape:%d",  data.duration, data._samples.shape[0],
                      noise.duration, noise._samples.shape[0])
-        for _ in range(n_additions):
-            noise_idx = self._rng.randint(0, data._samples.shape[0] - noise._samples.shape[0])
+        n_additions = int(data.duration / (2*max_noise_dur))
+        for i in range(n_additions):
+            noise_idx = self._rng.randint(2*i, data._samples.shape[0] - noise._samples.shape[0])
             data._samples[noise_idx : noise_idx + noise._samples.shape[0]] += noise._samples
 
     def perturb_with_input_noise(self, data, noise, data_rms=None):
