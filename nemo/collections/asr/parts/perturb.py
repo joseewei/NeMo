@@ -249,12 +249,14 @@ class ImpulsePerturbation(Perturbation):
     def perturb(self, data, orig_sr=None):
         impulse = read_one_audiosegment(self._manifest, data.sample_rate, self._rng, tarred_audio=self._tarred_audio,
                                         audiodata=self._data_iterator, orig_sr=orig_sr)
-        #impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
-        max_ind = np.argmax(impulse.samples)
-
-        impulse_resp = impulse.samples[max_ind:]
-        delay_after = len(impulse_resp)
-        data._samples = signal.fftconvolve(data._samples, impulse_resp, "full")[:-delay_after]
+        impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
+        data._samples = signal.fftconvolve(data._samples, impulse_norm, "same")
+        # #impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
+        # max_ind = np.argmax(impulse.samples)
+        #
+        # impulse_resp = impulse.samples[max_ind:]
+        # delay_after = len(impulse_resp)
+        # data._samples = signal.fftconvolve(data._samples, impulse_resp, "full")[:-delay_after]
 
 
 class ShiftPerturbation(Perturbation):
