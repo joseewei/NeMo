@@ -16,13 +16,14 @@
 
 import argparse
 
+from nemo.core import DeviceType, NeuralGraph, NeuralModuleFactory, OperationMode, SimpleLossLoggerCallback
+from nemo.utils import logging
 import nemo.utils.argparse as nm_argparse
 from nemo.collections.cv.modules.data_layers import MNISTDataLayer
 from nemo.collections.cv.modules.losses import NLLLoss
 from nemo.collections.cv.modules.non_trainables import NonLinearity, ReshapeTensor
 from nemo.collections.cv.modules.trainables import FeedForwardNetwork
-from nemo.core import DeviceType, NeuralGraph, NeuralModuleFactory, OperationMode, SimpleLossLoggerCallback
-from nemo.utils import logging
+from nemo.collections.cv.modules.non_trainables.data_viewer import DataViewer
 
 if __name__ == "__main__":
     # Create the default parser.
@@ -44,6 +45,8 @@ if __name__ == "__main__":
     # Loss.
     nll_loss = NLLLoss()
     viewer = DataViewer(log_frequency=freq)
+
+    print("\n\n after viewer!!! \n\n")
 
     # Create a training graph.
     with NeuralGraph(operation_mode=OperationMode.training) as training_graph:
