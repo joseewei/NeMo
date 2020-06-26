@@ -315,12 +315,11 @@ class RirAndNoisePerturbation(Perturbation):
         #     if noise.rms_db == float("-inf"):
         #         logging.info("0 file")
 
-        n_additions = self._rng.randint(0, self._max_additions)
-        if self._apply_noise_rir:
-            self._rir_perturber.perturb(noise)
-        self._fg_noise_perturber.perturb_with_point_noise(data, noise, max_noise_dur=self._max_duration, max_additions=self._max_additions)
-        if self._bg_noise_perturber:
-            self._bg_noise_perturber.perturb(data, orig_sr, data_rms)
+        # if self._apply_noise_rir:
+        #     self._rir_perturber.perturb(noise)
+        # self._fg_noise_perturber.perturb_with_point_noise(data, noise, max_noise_dur=self._max_duration, max_additions=self._max_additions)
+        # if self._bg_noise_perturber:
+        #     self._bg_noise_perturber.perturb(data, orig_sr, data_rms)
 
 
 
