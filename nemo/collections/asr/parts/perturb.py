@@ -344,7 +344,7 @@ class NoisePerturbation(Perturbation):
         self._max_snr_db = max_snr_db
         self._max_gain_db = max_gain_db
 
-    def get_one_noise_sample(self, target_sr, orig_sr):
+    def get_one_noise_sample(self, target_sr, orig_sr=None):
         return read_one_audiosegment(self._manifest, target_sr, self._rng, tarred_audio=self._tarred_audio,
                               audiodata=self._data_iterator, orig_sr=orig_sr)
 
