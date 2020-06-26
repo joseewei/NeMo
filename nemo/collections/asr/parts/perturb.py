@@ -252,9 +252,9 @@ class ImpulsePerturbation(Perturbation):
         # impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
         # data._samples = signal.fftconvolve(data._samples, impulse_norm, "same")
         impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
-        max_ind = np.argmax(impulse_norm.samples)
+        max_ind = np.argmax(impulse_norm)
 
-        impulse_resp = impulse_norm.samples[max_ind:]
+        impulse_resp = impulse_norm[max_ind:]
         delay_after = len(impulse_resp)
         data._samples = signal.fftconvolve(data._samples, impulse_resp, "full")[:-delay_after]
 
