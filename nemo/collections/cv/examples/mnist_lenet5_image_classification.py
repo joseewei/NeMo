@@ -35,7 +35,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Instantiate Neural Factory.
-    nf = NeuralModuleFactory(local_rank=args.local_rank, placement=DeviceType.CPU)
+    nf = NeuralModuleFactory(local_rank=args.local_rank, placement=DeviceType.GPU)
     # Print frequency.
     freq = 10
 
@@ -64,9 +64,9 @@ if __name__ == "__main__":
         p = lenet5(images=x)
         loss_e = nll_loss(predictions=p, targets=y)
 
-    # Perform operations on CPU.
-    training_graph.to(DeviceType.CPU)
-    evaluation_graph.to(DeviceType.CPU)
+    # Perform operations on GPU.
+    training_graph.to(DeviceType.GPU)
+    evaluation_graph.to(DeviceType.GPU)
 
     # Create optimizer.
     opt = optim.Adam(training_graph.parameters(), lr=0.001)

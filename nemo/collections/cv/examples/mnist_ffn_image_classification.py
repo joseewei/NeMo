@@ -31,7 +31,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Instantiate Neural Factory.
-    nf = NeuralModuleFactory(local_rank=args.local_rank, placement=DeviceType.CPU)
+    nf = NeuralModuleFactory(local_rank=args.local_rank, placement=DeviceType.GPU)
+    # Print frequency.
+    freq = 10
 
     # Data layers for training and validation.
     dl = MNISTDataLayer(height=28, width=28, train=True)
@@ -41,14 +43,16 @@ if __name__ == "__main__":
     nl = NonLinearity(type="logsoftmax", sizes=[-1, 10])
     # Loss.
     nll_loss = NLLLoss()
+    viewer = DataViewer(log_frequency=freq)
 
     # Create a training graph.
     with NeuralGraph(operation_mode=OperationMode.training) as training_graph:
-        _, imgs, tgts, _ = dl()
+        ix, imgs, tgts, labels = dl()
         res_imgs = reshaper(inputs=imgs)
         logits = ffn(inputs=res_imgs)
         preds = nl(inputs=logits)
         loss = nll_loss(predictions=preds, targets=tgts)
+        viewer(indices=ix, labels=labels)
         # Set output - that output will be used for training.
         training_graph.outputs["loss"] = loss
 
