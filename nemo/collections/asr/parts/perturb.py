@@ -310,6 +310,11 @@ class RirAndNoisePerturbation(Perturbation):
         self._rir_perturber.perturb(data)
         data_rms = data.rms_db
         noise = self._fg_noise_perturber.get_one_noise_sample(data.sample_rate, orig_sr)
+        # while True:
+        #     noise = self._fg_noise_perturber.get_one_noise_sample(data.sample_rate, orig_sr)
+        #     if noise.rms_db == float("-inf"):
+        #         logging.info("0 file")
+
         n_additions = self._rng.randint(0, self._max_additions)
         if self._apply_noise_rir:
             self._rir_perturber.perturb(noise)
@@ -365,19 +370,21 @@ class NoisePerturbation(Perturbation):
         # adjust gain for snr purposes and superimpose
         noise.gain_db(noise_gain_db)
         # logging.debug("noise: %s %s %s", snr_db, noise_gain_db, noise_record.audio_file)
-        noise_dur = self._rng.uniform(0.0, max_noise_dur)
-        start_time = self._rng.uniform(0.0, max(noise.duration, noise.duration - data.duration))
-        if noise_dur and noise.duration > start_time + noise_dur:
-            noise.subsegment(start_time=start_time, end_time=start_time + noise_dur)
-        if noise.duration > (data.duration - 1):
-            noise.subsegment(start_time=0, end_time=data.duration-1)
-        n_additions = self._rng.randint(1,max_additions)
-        logging.debug("data dur: %f, data shape:%d, noise dur:%f noise shape:%d",  data.duration, data._samples.shape[0],
-                     noise.duration, noise._samples.shape[0])
         n_additions = int(data.duration / (2*max_noise_dur))
         for i in range(n_additions):
-            noise_idx = self._rng.randint(2*i, data._samples.shape[0] - noise._samples.shape[0])
-            data._samples[noise_idx : noise_idx + noise._samples.shape[0]] += noise._samples
+            noise_dur = self._rng.uniform(0.0, max_noise_dur)
+            start_time = self._rng.uniform(0.0, noise.duration)
+            start_sample = int(round(start_time * noise.sample_rate))
+            end_sample = int(round( min(noise.duration, (start_time + noise_dur)) * noise.sample_rate))
+            noise_samples = noise._samples[start_sample:end_sample]
+            if noise_samples.shape[0] > data._samples.shape[0]:
+                noise_samples=noise_samples[0:data._samples.shape[0]-1]
+
+
+            logging.debug("data dur: %f, data shape:%d, noise dur:%f noise shape:%d",  data.duration, data._samples.shape[0],
+                            noise_dur, noise._samples.shape[0])
+            noise_idx = self._rng.randint(0, data._samples.shape[0] - noise_samples.shape[0])
+            data._samples[noise_idx : noise_idx + noise_samples.shape[0]] += noise_samples
 
     def perturb_with_input_noise(self, data, noise, data_rms=None):
 
