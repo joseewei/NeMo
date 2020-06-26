@@ -31,10 +31,8 @@
 
 __author__ = "Tomasz Kornuta"
 
-"""
-This file contains code artifacts adapted from the original implementation:
-https://github.com/IBM/pytorchpipe/blob/develop/ptp/components/transforms/reshape_tensor.py
-"""
+# This file contains code artifacts adapted from the original implementation:
+# https://github.com/IBM/pytorchpipe/blob/develop/ptp/components/transforms/reshape_tensor.py
 
 from typing import List, Optional
 

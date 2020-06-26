@@ -18,12 +18,15 @@ import argparse
 
 from torch import optim
 
+from nemo.core import DeviceType, NeuralGraph, NeuralModuleFactory, OperationMode
+from nemo.utils import logging
 import nemo.utils.argparse as nm_argparse
+
 from nemo.collections.cv.modules.data_layers import MNISTDataLayer
 from nemo.collections.cv.modules.losses import NLLLoss
 from nemo.collections.cv.modules.trainables import LeNet5
-from nemo.core import DeviceType, NeuralGraph, NeuralModuleFactory, OperationMode
-from nemo.utils import logging
+from nemo.collections.cv.modules.non_trainables.data_viewer import DataViewer
+
 
 if __name__ == "__main__":
     # Create the default parser.
@@ -32,7 +35,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Instantiate Neural Factory.
-    nf = NeuralModuleFactory(local_rank=args.local_rank)
+    nf = NeuralModuleFactory(local_rank=args.local_rank, placement=DeviceType.CPU)
+    # Print frequency.
+    freq = 10
 
     # Data layers for training and validation.
     dl = MNISTDataLayer(height=32, width=32, train=True)
@@ -41,12 +46,14 @@ if __name__ == "__main__":
     lenet5 = LeNet5()
     # Loss.
     nll_loss = NLLLoss()
+    viewer = DataViewer(log_frequency=freq)
 
     # Create a training graph.
     with NeuralGraph(operation_mode=OperationMode.training) as training_graph:
-        _, x, y, _ = dl()
+        ix, x, y, labels = dl()
         p = lenet5(images=x)
         loss = nll_loss(predictions=p, targets=y)
+        viewer(indices=ix, labels=labels)
 
     # Display the graph summmary.
     logging.info(training_graph.summary())
@@ -57,15 +64,13 @@ if __name__ == "__main__":
         p = lenet5(images=x)
         loss_e = nll_loss(predictions=p, targets=y)
 
-    # Perform operations on GPU.
-    training_graph.to(DeviceType.GPU)
-    evaluation_graph.to(DeviceType.GPU)
+    # Perform operations on CPU.
+    training_graph.to(DeviceType.CPU)
+    evaluation_graph.to(DeviceType.CPU)
 
     # Create optimizer.
     opt = optim.Adam(training_graph.parameters(), lr=0.001)
 
-    # Print frequency.
-    freq = 10
     # Train for 5 epochs.
     for epoch in range(5):
         # Configure data loader - once per epoch.

@@ -16,3 +16,4 @@
 
 from nemo.collections.cv.modules.non_trainables.non_linearity import *
 from nemo.collections.cv.modules.non_trainables.reshape_tensor import *
+from nemo.collections.cv.modules.non_trainables.data_viewer import *

@@ -96,7 +96,6 @@ class MNISTDataLayer(DataLayerNM, Dataset):
     def output_ports(self):
         """
         Creates definitions of output ports.
-        By default, it sets image width and height to 32.
         """
         return {
             "indices": NeuralType(tuple('B'), elements_type=Index()),
@@ -109,7 +108,7 @@ class MNISTDataLayer(DataLayerNM, Dataset):
                 ),
                 elements_type=NormalizedImageValue(),  # float, <0-1>
             ),
-            "targets": NeuralType(tuple('B'), elements_type=ClassificationTarget()),  # Target are ints!
+            "targets": NeuralType(tuple('B'), elements_type=ClassificationTarget()),  # Targets are ints!
             "labels": NeuralType(tuple('B'), elements_type=StringLabel()),  # Labels is string!
         }
 
