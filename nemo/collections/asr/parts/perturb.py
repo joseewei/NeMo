@@ -251,10 +251,10 @@ class ImpulsePerturbation(Perturbation):
                                         audiodata=self._data_iterator, orig_sr=orig_sr)
         # impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
         # data._samples = signal.fftconvolve(data._samples, impulse_norm, "same")
-        # #impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
-        max_ind = np.argmax(impulse.samples)
+        impulse_norm = (impulse.samples - min(impulse.samples)) / (max(impulse.samples) - min(impulse.samples))
+        max_ind = np.argmax(impulse_norm.samples)
 
-        impulse_resp = impulse.samples[max_ind:]
+        impulse_resp = impulse_norm.samples[max_ind:]
         delay_after = len(impulse_resp)
         data._samples = signal.fftconvolve(data._samples, impulse_resp, "full")[:-delay_after]
 
