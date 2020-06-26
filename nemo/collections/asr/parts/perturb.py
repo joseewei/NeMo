@@ -309,7 +309,7 @@ class RirAndNoisePerturbation(Perturbation):
     def perturb(self, data, orig_sr=None):
         self._rir_perturber.perturb(data)
         data_rms = data.rms_db
-        noise = self._fg_noise_perturber.get_one_noise_sample(data.sample_rate, orig_sr)
+        noise = self._fg_noise_perturber.get_one_noise_sample(data.sample_rate)
         # while True:
         #     noise = self._fg_noise_perturber.get_one_noise_sample(data.sample_rate, orig_sr)
         #     if noise.rms_db == float("-inf"):
