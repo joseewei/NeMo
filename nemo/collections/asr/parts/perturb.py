@@ -410,7 +410,7 @@ class NoisePerturbation(Perturbation):
         # adjust gain for snr purposes and superimpose
         noise_samples *= 10.0 ** (noise_gain_db / 20.0)
         #noise.gain_db(noise_gain_db)
-        data._samples += noise_samples
+        data._samples[0: noise_samples.shape[0]] += noise_samples
 
         # if noise_samples.shape[0] < data._samples.shape[0]:
         #     noise_idx = self._rng.randint(0, data._samples.shape[0] - noise._samples.shape[0])
