@@ -503,12 +503,17 @@ class AugmentationDataset(IterableDataset):
                     f"by number of distributed workers ({world_size})."
                 )
 
-            ind = random.randint(0,len(audio_tar_filepaths)-1)
-            # begin_idx = (len(audio_tar_filepaths) // world_size) * global_rank
-            #
-            # end_idx = begin_idx + (len(audio_tar_filepaths) // world_size)
-            audio_tar_filepaths = audio_tar_filepaths[ind]
+        ind1 = random.randint(0,len(audio_tar_filepaths)-1)
+        ind2 = random.randint(0, len(audio_tar_filepaths) - 1)
+        # begin_idx = (len(audio_tar_filepaths) // world_size) * global_rank
+        #
+        # end_idx = begin_idx + (len(audio_tar_filepaths) // world_size)
+        if isinstance(audio_tar_filepaths, str):
+            audio_tar_filepaths = list(braceexpand.braceexpand(audio_tar_filepaths))
 
+        audio_tar_filepaths1 = [audio_tar_filepaths[ind1], audio_tar_filepaths[ind2]]
+
+        audio_tar_filepaths=audio_tar_filepaths1
         self._noise_list = []
 
 
