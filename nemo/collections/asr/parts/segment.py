@@ -16,7 +16,7 @@ class AudioSegment(object):
     :raises TypeError: If the sample data type is not float or int.
     """
 
-    def __init__(self, samples, sample_rate, target_sr=None, trim=False, trim_db=60, downsample_rate=None):
+    def __init__(self, samples, sample_rate, target_sr=None, trim=False, trim_db=60, downsample_rate=None, read_only=False):
         """Create audio segment from samples.
         Samples are convert float32 internally, with int scaled to [-1, 1].
         """
@@ -33,6 +33,14 @@ class AudioSegment(object):
         self._sample_rate = sample_rate
         if self._samples.ndim >= 2:
             self._samples = np.mean(self._samples, 1)
+        self._read_only = read_only
+
+        self._duration_val = None
+        self._rms_db_val = None
+        if self._read_only:
+            self._duration_val = self._samples.shape[0] / float(self._sample_rate)
+            mean_square = np.mean(self._samples ** 2)
+            self._rms_db_val = 10 * np.log10(mean_square)
 
     def __eq__(self, other):
         """Return whether two objects are equal."""
@@ -77,7 +85,8 @@ class AudioSegment(object):
 
     @classmethod
     def from_file(
-        cls, audio_file, target_sr=None, int_values=False, offset=0, duration=0, trim=False, downsample_rate=None
+        cls, audio_file, target_sr=None, int_values=False, offset=0, duration=0, trim=False, downsample_rate=None,
+            read_only=False,
     ):
         """
         Load a file supported by librosa and return as an AudioSegment.
@@ -99,7 +108,7 @@ class AudioSegment(object):
                 samples = f.read(dtype=dtype)
 
         samples = samples.transpose()
-        return cls(samples, sample_rate, target_sr=target_sr, trim=trim, downsample_rate=downsample_rate)
+        return cls(samples, sample_rate, target_sr=target_sr, trim=trim, downsample_rate=downsample_rate, read_only=read_only)
 
     @classmethod
     def segment_from_file(cls, audio_file, target_sr=None, n_segments=0, trim=False):
@@ -135,10 +144,14 @@ class AudioSegment(object):
 
     @property
     def duration(self):
+        if self._read_only:
+            return self._duration_val
         return self._samples.shape[0] / float(self._sample_rate)
 
     @property
     def rms_db(self):
+        if self._read_only:
+            return self._rms_db_val
         mean_square = np.mean(self._samples ** 2)
         #if mean_square == 0.0:
         logging.debug("mean_square %s %.10f", str(self), mean_square)

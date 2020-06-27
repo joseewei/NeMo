@@ -243,7 +243,7 @@ class ImpulsePerturbation(Perturbation):
 
         if audio_tar_filepaths:
             self._tarred_audio = True
-            self._audiodataset = AugmentationDataset(manifest_path, audio_tar_filepaths, shuffle_n)
+            self._audiodataset = AugmentationDataset(manifest_path, audio_tar_filepaths, shuffle_n=shuffle_n)
             self._noise_list = []
             self._data_iterator = iter(self._audiodataset)
 
@@ -320,7 +320,9 @@ class RirAndNoisePerturbation(Perturbation):
 
         if self._apply_noise_rir:
             self._rir_perturber.perturb(noise)
-        self._fg_noise_perturber.perturb_with_point_noise(data, noise, max_noise_dur=self._max_duration, max_additions=self._max_additions)
+        self._fg_noise_perturber.perturb_with_point_noise(data, noise, data_rms=data_rms,
+                                                          max_noise_dur=self._max_duration,
+                                                          max_additions=self._max_additions)
         if self._bg_noise_perturber:
             self._bg_noise_perturber.perturb(data, orig_sr, data_rms)
 
@@ -336,7 +338,7 @@ class NoisePerturbation(Perturbation):
 
         if audio_tar_filepaths:
             self._tarred_audio = True
-            self._audiodataset = AugmentationDataset(manifest_path, audio_tar_filepaths, shuffle_n)
+            self._audiodataset = AugmentationDataset(manifest_path, audio_tar_filepaths, shuffle_n=shuffle_n)
             self._noise_list = []
             self._data_iterator = iter(self._audiodataset)
 
@@ -356,28 +358,31 @@ class NoisePerturbation(Perturbation):
             self._noise_list = self._audiodataset.get_all_data(data.sample_rate, orig_sr=orig_sr)
         noise = read_one_audiosegment(self._manifest, data.sample_rate, self._rng, tarred_audio=self._tarred_audio,
                                       audiodata=self._data_iterator, orig_sr=orig_sr, noise_data=self._noise_list)
-        self.perturb_with_input_noise(data, noise)
+        self.perturb_with_input_noise(data, noise, data_rms=data_rms)
 
     def perturb_with_point_noise(self, data, noise, data_rms=None, max_noise_dur=5, max_additions=1,):
         snr_db = self._rng.uniform(self._min_snr_db, self._max_snr_db)
         if not data_rms:
             data_rms = data.rms_db
 
-        if data.duration < max_noise_dur:
-            return
+        #if data.duration < max_noise_dur:
+        #    return
         noise_gain_db = min(data_rms - noise.rms_db - snr_db, self._max_gain_db)
         # adjust gain for snr purposes and superimpose
-        noise.gain_db(noise_gain_db)
+        #noise.gain_db(noise_gain_db)
         # logging.debug("noise: %s %s %s", snr_db, noise_gain_db, noise_record.audio_file)
-        n_additions = int(data.duration / (2*max_noise_dur))
+        n_additions = self._rng.randint(1,max_additions)
         for i in range(n_additions):
             noise_dur = self._rng.uniform(0.0, max_noise_dur)
             start_time = self._rng.uniform(0.0, noise.duration)
             start_sample = int(round(start_time * noise.sample_rate))
             end_sample = int(round( min(noise.duration, (start_time + noise_dur)) * noise.sample_rate))
-            noise_samples = noise._samples[start_sample:end_sample]
+            noise_samples = np.copy(noise._samples[start_sample:end_sample])
+            # adjust gain for snr purposes and superimpose
+            noise_samples *= 10.0 ** (noise_gain_db / 20.0)
+
             if noise_samples.shape[0] > data._samples.shape[0]:
-                noise_samples=noise_samples[0:data._samples.shape[0]-1]
+                noise_samples = noise_samples[0:data._samples.shape[0]]
 
 
             logging.debug("data dur: %f, data shape:%d, noise dur:%f noise shape:%d",  data.duration, data._samples.shape[0],
@@ -395,19 +400,24 @@ class NoisePerturbation(Perturbation):
         # logging.debug("noise: %s %s %s", snr_db, noise_gain_db, noise_record.audio_file)
 
         # calculate noise segment to use
-        start_time = self._rng.uniform(0.0, noise.duration - data.duration)
-        if noise.duration > (start_time + data.duration):
-            noise.subsegment(start_time=start_time, end_time=start_time + data.duration)
+        start_time = max(0, self._rng.uniform(0.0, noise.duration - data.duration))
+        start_sample = int(round(start_time * noise.sample_rate))
+        end_sample = int(round(min(noise.duration, (start_time + data.duration)) * noise.sample_rate))
+        noise_samples = np.copy(noise._samples[start_sample:end_sample])
+        #if noise.duration > (start_time + data.duration):
+        #    noise.subsegment(start_time=start_time, end_time=start_time + data.duration)
 
         # adjust gain for snr purposes and superimpose
-        noise.gain_db(noise_gain_db)
+        noise_samples *= 10.0 ** (noise_gain_db / 20.0)
+        #noise.gain_db(noise_gain_db)
+        data._samples += noise_samples
 
-        if noise._samples.shape[0] < data._samples.shape[0]:
-            noise_idx = self._rng.randint(0, data._samples.shape[0] - noise._samples.shape[0])
-            data._samples[noise_idx : noise_idx + noise._samples.shape[0]] += noise._samples
-
-        else:
-            data._samples += noise._samples
+        # if noise_samples.shape[0] < data._samples.shape[0]:
+        #     noise_idx = self._rng.randint(0, data._samples.shape[0] - noise._samples.shape[0])
+        #     data._samples[noise_idx : noise_idx + noise._samples.shape[0]] += noise._samples
+        #
+        # else:
+        #     data._samples += noise_samples
 
 class WhiteNoisePerturbation(Perturbation):
     def __init__(self, min_level=-90, max_level=-46, rng=None):
@@ -470,7 +480,6 @@ class AudioAugmentor(object):
             ptbs.append((p['prob'], perturbation(**p['cfg'])))
         return cls(perturbations=ptbs)
 
-
 class AugmentationDataset(IterableDataset):
     """Change the actual and nominal length of an IterableDataset.
 
@@ -486,14 +495,16 @@ class AugmentationDataset(IterableDataset):
 
     """
 
-    def __init__(self, manifest_path, audio_tar_filepaths, shuffle_n=100):
+    def __init__(self, manifest_path, audio_tar_filepaths, n_tars_per_worker=1, shuffle_n=100):
         self._manifest = collections.ASRAudioText(manifest_path, parser=parsers.make_parser([]),
                                                       index_by_file_id=True)
 
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             global_rank = torch.distributed.get_rank()
             world_size = torch.distributed.get_world_size()
-
+        if True:
+            global_rank = 5
+            world_size = 64
             if isinstance(audio_tar_filepaths, str):
                 audio_tar_filepaths = list(braceexpand.braceexpand(audio_tar_filepaths))
 
@@ -503,19 +514,18 @@ class AugmentationDataset(IterableDataset):
                     f"by number of distributed workers ({world_size})."
                 )
 
-        ind1 = random.randint(0,len(audio_tar_filepaths)-1)
-        ind2 = random.randint(0, len(audio_tar_filepaths) - 1)
-        # begin_idx = (len(audio_tar_filepaths) // world_size) * global_rank
-        #
-        # end_idx = begin_idx + (len(audio_tar_filepaths) // world_size)
-        if isinstance(audio_tar_filepaths, str):
-            audio_tar_filepaths = list(braceexpand.braceexpand(audio_tar_filepaths))
+            if n_tars_per_worker * world_size < len(audio_tar_filepaths):
+                logging.warning(
+                    f"Number of shards in tarred dataset ({len(audio_tar_filepaths)}) is greater than "
+                    f"number of tars per worker ({n_tars_per_worker}) * number of distributed workers ({world_size})."
+                )
 
-        audio_tar_filepaths1 = [audio_tar_filepaths[ind1], audio_tar_filepaths[ind2]]
+            tar_list = []
+            for i in range(n_tars_per_worker):
+                tar_list.append(audio_tar_filepaths[((global_rank*n_tars_per_worker) + i )% len(audio_tar_filepaths)])
+            audio_tar_filepaths = tar_list
 
-        audio_tar_filepaths=audio_tar_filepaths1
         self._noise_list = []
-
 
         self.audio_dataset = (
             wd.Dataset(audio_tar_filepaths).shuffle(shuffle_n).rename(audio='wav', key='__key__')
@@ -581,7 +591,7 @@ class AugmentationDataset(IterableDataset):
                 # Convert audio bytes to IO stream for processing (for SoundFile to read)
                 audio_file = io.BytesIO(audio_bytes)
                 sample = (audio_file, file_id)
-                self._noise_list.append(AudioSegment.from_file(audio_file, target_sr=target_sr, downsample_rate=orig_sr))
+                self._noise_list.append(AudioSegment.from_file(audio_file, target_sr=target_sr, downsample_rate=orig_sr, read_only=True))
                 if self._noise_list[-1].rms_db == float("-inf"):
                     logging.info("0 file found: %s", file_id )
         return self._noise_list
