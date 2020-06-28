@@ -511,11 +511,11 @@ class AugmentationDataset(IterableDataset):
                     f"by number of distributed workers ({world_size})."
                 )
 
-            if n_tars_per_worker * world_size < len(audio_tar_filepaths):
-                logging.warning(
-                    f"global rank {global_rank} worldsize {world_size}Number of shards in tarred dataset ({len(audio_tar_filepaths)}) is greater than "
-                    f"number of tars per worker ({n_tars_per_worker}) * number of distributed workers ({world_size})."
-                )
+            #if n_tars_per_worker * world_size < len(audio_tar_filepaths):
+            logging.warning(
+                f"global rank {global_rank} worldsize {world_size}Number of shards in tarred dataset ({len(audio_tar_filepaths)}) is greater than "
+                f"number of tars per worker ({n_tars_per_worker}) * number of distributed workers ({world_size})."
+            )
 
             tar_list = []
             for i in range(n_tars_per_worker):
