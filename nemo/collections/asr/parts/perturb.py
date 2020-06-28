@@ -502,9 +502,6 @@ class AugmentationDataset(IterableDataset):
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             global_rank = torch.distributed.get_rank()
             world_size = torch.distributed.get_world_size()
-        if True:
-            global_rank = 5
-            world_size = 64
             if isinstance(audio_tar_filepaths, str):
                 audio_tar_filepaths = list(braceexpand.braceexpand(audio_tar_filepaths))
 
@@ -516,7 +513,7 @@ class AugmentationDataset(IterableDataset):
 
             if n_tars_per_worker * world_size < len(audio_tar_filepaths):
                 logging.warning(
-                    f"Number of shards in tarred dataset ({len(audio_tar_filepaths)}) is greater than "
+                    f"global rank {global_rank} worldsize {world_size}Number of shards in tarred dataset ({len(audio_tar_filepaths)}) is greater than "
                     f"number of tars per worker ({n_tars_per_worker}) * number of distributed workers ({world_size})."
                 )
 
