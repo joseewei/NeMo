@@ -91,6 +91,7 @@ class DataViewer(NonTrainableNM):
 
         # Display.
         logging.info(disp_str)
+        print("\n\n {} \n\n".format(disp_str))
 
         # Return empty
         return {}
