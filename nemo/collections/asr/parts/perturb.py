@@ -38,7 +38,7 @@ def read_one_audiosegment(manifest, target_sr, rng, tarred_audio=False, audiodat
         audio_file = audio_record.audio_file
         offset = audio_record.offset
 
-    return AudioSegment.from_file(audio_file, target_sr=target_sr, offset=offset, downsample_rate=orig_sr)
+    return AudioSegment.from_file(audio_file, target_sr=target_sr, offset=offset)
 
 class Perturbation(object):
     def max_augmentation_length(self, length):
