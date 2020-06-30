@@ -282,37 +282,60 @@ class ShiftPerturbation(Perturbation):
 
 class RirAndNoisePerturbation(Perturbation):
     def __init__(
-        self, rir_manifest_path=None, noise_manifest_path=None, min_snr_db=10, max_snr_db=50,
+        self, rir_manifest_path=None, noise_manifest_paths=None, min_snr_db=10, max_snr_db=50,
         max_gain_db=300.0, rng=None, rir_tar_filepaths=None, rir_shuffle_n=100,
-        noise_tar_filepaths=None, noise_shuffle_n=100, apply_noise_rir=False
+        noise_tar_filepaths=None, noise_shuffle_n=None, apply_noise_rir=False, max_frequency=None
     ):
         logging.info("Called init")
         self._rir_perturber = ImpulsePerturbation(manifest_path=rir_manifest_path, rng=rng,
                                                    audio_tar_filepaths=rir_tar_filepaths, shuffle_n=rir_shuffle_n)
-        self._fg_noise_perturber = NoisePerturbation(manifest_path=noise_manifest_path, min_snr_db=min_snr_db,
-                                                    max_snr_db=max_snr_db, max_gain_db=max_gain_db, rng=rng,
-                                                    audio_tar_filepaths=noise_tar_filepaths, shuffle_n=noise_shuffle_n)
+        self._fg_noise_perturbers = {}
+        if noise_manifest_paths:
+            for i in range(len(noise_manifest_paths)):
+                if noise_shuffle_n is None:
+                    shuffle_n = 100
+                else:
+                    shuffle_n = noise_shuffle_n[i]
+                if max_frequency is None:
+                    max_freq = 16000
+                else:
+                    max_freq = max_frequency[i]
+                self._fg_noise_perturbers[max_freq] = NoisePerturbation(manifest_path=noise_manifest_paths[i], min_snr_db=min_snr_db[i],
+                                      max_snr_db=max_snr_db[i], max_gain_db=max_gain_db[i], rng=rng,
+                                      audio_tar_filepaths=noise_tar_filepaths[i], shuffle_n=shuffle_n,
+                                      max_freq=max_freq)
+
+
+
+        # self._fg_noise_perturber = NoisePerturbation(manifest_path=noise_manifest_path, min_snr_db=min_snr_db,
+        #                                             max_snr_db=max_snr_db, max_gain_db=max_gain_db, rng=rng,
+        #                                             audio_tar_filepaths=noise_tar_filepaths, shuffle_n=noise_shuffle_n,
+        #                                             max_freq=16000)
         self._apply_noise_rir = apply_noise_rir
 
     def perturb(self, data, orig_sr=None):
         self._rir_perturber.perturb(data)
+        if orig_sr==None:
+            orig_sr=16000
+        perturber = self._fg_noise_perturbers[orig_sr]
         if self._apply_noise_rir:
-            noise = self._fg_noise_perturber.get_one_noise_sample(data.sample_rate, orig_sr)
+            noise = perturber.get_one_noise_sample(data.sample_rate, orig_sr)
             self._rir_perturber.perturb(noise)
-            self._fg_noise_perturber.perturb_with_input_noise(data, noise)
+            perturber.perturb_with_input_noise(data, noise)
         else:
-            self._fg_noise_perturber.perturb(data, orig_sr)
+            perturber.perturb(data, orig_sr)
 
 
 class NoisePerturbation(Perturbation):
     def __init__(
         self, manifest_path=None, min_snr_db=40, max_snr_db=50, max_gain_db=300.0, rng=None,
-        audio_tar_filepaths = None, shuffle_n = 100
+        audio_tar_filepaths = None, shuffle_n = 100, max_freq = 16000,
     ):
         self._manifest = collections.ASRAudioText(manifest_path, parser=parsers.make_parser([]),
                                                   index_by_file_id=True)
         self._audiodataset = None
         self._tarred_audio = False
+        self._max_freq = max_freq
 
         if audio_tar_filepaths:
             self._tarred_audio = True
@@ -324,9 +347,13 @@ class NoisePerturbation(Perturbation):
         self._max_snr_db = max_snr_db
         self._max_gain_db = max_gain_db
 
+    @property
+    def max_freq(self):
+        return self._max_freq
+
     def get_one_noise_sample(self, target_sr, orig_sr):
         return read_one_audiosegment(self._manifest, target_sr, self._rng, tarred_audio=self._tarred_audio,
-                              audiodata=self._data_iterator, orig_sr=orig_sr)
+                              audiodata=self._data_iterator)
 
     def perturb(self, data, orig_sr=None):
         noise = read_one_audiosegment(self._manifest, data.sample_rate, self._rng, tarred_audio=self._tarred_audio,
