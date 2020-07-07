@@ -3,7 +3,11 @@
 import random
 import os
 import io
+import datetime
 import webdataset as wd
+import torch
+import soundfile as sf
+import subprocess
 
 import librosa
 import numpy as np
@@ -339,7 +343,7 @@ class RirAndNoisePerturbation(Perturbation):
     def perturb(self, data, orig_sr=None):
         prob = self._rng.uniform(0.0, 1.0)
 
-        if prob > self._rir_prob:
+        if prob < self._rir_prob:
             self._rir_perturber.perturb(data)
         if orig_sr==None:
             orig_sr=16000
@@ -455,6 +459,46 @@ class WhiteNoisePerturbation(Perturbation):
         noise_signal = self._rng.randn(data._samples.shape[0]) * (10.0 ** (noise_level_db / 20.0))
         data._samples += noise_signal
 
+class AMRTranscodePerturbation(Perturbation):
+    def __init__(self, scratch_dir, amr_prob=1.0, rng=None):
+        os.makedirs(scratch_dir, exist_ok = True)
+        self._scratch_dir = scratch_dir
+        self._prob = amr_prob
+        self._rng = np.random.RandomState() if rng is None else rng
+
+    def perturb(self, data, orig_sr=None):
+        if orig_sr != 8000:
+            return
+        prob = self._rng.uniform(0.0, 1.0)
+        if prob > self._prob:
+            return
+
+        temp = torch.utils.data.get_worker_info()
+        worker_id = torch.utils.data.get_worker_info().id
+        global_rank = 0
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            global_rank = torch.distributed.get_rank()
+        basename = "rank_" + str(global_rank) + "_worker_" + str(worker_id)
+        suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S") + ".wav"
+        fname = "_".join([basename, suffix])  # e.g. 'mylogfile_120508_171442'
+
+        orig_f = os.path.join(self._scratch_dir, fname)
+        sf.write(orig_f, data._samples.transpose(), 16000)
+        newfile1 = orig_f.replace(".wav", ".amr-nb")
+        newfile2 = orig_f.replace(".wav", "_amr.wav")
+        rate = random.randint(0, 7)
+        _ = subprocess.check_output(
+            f"sox {orig_f} -C {rate} {newfile1}", shell=True)
+        os.remove(orig_f)
+        _ = subprocess.check_output(
+            f"sox {newfile1} -b 16 -r 16000 {newfile2}", shell=True)
+        os.remove(newfile1)
+        new_data = AudioSegment.from_file(newfile2, target_sr=16000, offset=0)
+        os.remove(newfile2)
+
+        data._samples = new_data._samples[0:data._samples.shape[0]]
+        return
+
 
 perturbation_types = {
     "speed": SpeedPerturbation,
@@ -465,6 +509,7 @@ perturbation_types = {
     "noise": NoisePerturbation,
     "white_noise": WhiteNoisePerturbation,
     "rir_noise": RirAndNoisePerturbation,
+    "amr_transcode": AMRTranscodePerturbation,
 }
 
 
