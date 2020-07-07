@@ -491,7 +491,7 @@ class AMRTranscodePerturbation(Perturbation):
             f"sox {orig_f} -V0 -C {rate} {newfile1}", shell=True)
         os.remove(orig_f)
         _ = subprocess.check_output(
-            f"sox {newfile1} -b 16 -r 16000 {newfile2}", shell=True)
+            f"sox {newfile1} -V0 -b 16 -r 16000 {newfile2}", shell=True)
         os.remove(newfile1)
         new_data = AudioSegment.from_file(newfile2, target_sr=16000, offset=0)
         os.remove(newfile2)
