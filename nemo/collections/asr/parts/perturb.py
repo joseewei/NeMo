@@ -295,7 +295,7 @@ class RirAndNoisePerturbation(Perturbation):
         bg_noise_tar_filepaths=None, bg_noise_shuffle_n=None, bg_max_frequency=None,
     ):
         logging.info("Called init")
-        self._rir_prob=0.5
+        self._rir_prob=rir_prob
         self._rng = random.Random() if rng is None else rng
         self._rir_perturber = ImpulsePerturbation(manifest_path=rir_manifest_path, rng=rng,
                                                    audio_tar_filepaths=rir_tar_filepaths, shuffle_n=rir_shuffle_n)
@@ -419,7 +419,7 @@ class NoisePerturbation(Perturbation):
             data._samples += noise._samples
 
     def perturb_with_point_noise(self, data, noise, data_rms=None, max_noise_dur=5, max_additions=1,):
-        snr_db = self._rng.uniform(self._min_snr_db, self._max_snr_db)
+        snr_db = 0 #self._rng.uniform(self._min_snr_db, self._max_snr_db)
         if not data_rms:
             data_rms = data.rms_db
 
@@ -460,11 +460,12 @@ class WhiteNoisePerturbation(Perturbation):
         data._samples += noise_signal
 
 class AMRTranscodePerturbation(Perturbation):
-    def __init__(self, scratch_dir, amr_prob=1.0, rng=None):
+    def __init__(self, scratch_dir, amr_prob=1.0, rate=None, rng=None):
         os.makedirs(scratch_dir, exist_ok = True)
         self._scratch_dir = scratch_dir
         self._prob = amr_prob
         self._rng = np.random.RandomState() if rng is None else rng
+        self._rate = rate
 
     def perturb(self, data, orig_sr=None):
         if orig_sr != 8000:
@@ -473,20 +474,21 @@ class AMRTranscodePerturbation(Perturbation):
         if prob > self._prob:
             return
 
-        temp = torch.utils.data.get_worker_info()
         worker_id = torch.utils.data.get_worker_info().id
         global_rank = 0
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             global_rank = torch.distributed.get_rank()
         basename = "rank_" + str(global_rank) + "_worker_" + str(worker_id)
-        suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S") + ".wav"
-        fname = "_".join([basename, suffix])  # e.g. 'mylogfile_120508_171442'
+        suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S%f") + ".wav"
+        fname = "_".join([basename, suffix])
 
         orig_f = os.path.join(self._scratch_dir, fname)
         sf.write(orig_f, data._samples.transpose(), 16000)
         newfile1 = orig_f.replace(".wav", ".amr-nb")
         newfile2 = orig_f.replace(".wav", "_amr.wav")
-        rate = random.randint(0, 7)
+        rate = 0
+        if self._rate:
+            rate = self._rate[random.randint(0, len(self._rate))]
         _ = subprocess.check_output(
             f"sox {orig_f} -V0 -C {rate} {newfile1}", shell=True)
         os.remove(orig_f)
