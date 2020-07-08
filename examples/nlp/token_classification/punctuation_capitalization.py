@@ -290,10 +290,12 @@ train_callback = nemo.core.SimpleLossLoggerCallback(
     tensors=losses + train_logits,
     print_func=lambda x: logging.info("Loss: {:.3f}".format(x[0].item())),
     get_tb_values=lambda x: [["loss", x[0]]],
+    step_freq=args.loss_log_freq if args.loss_log_freq > 0 else steps_per_epoch,
     tb_writer=nf.tb_writer,
 )
 ckpt_callback = nemo.core.CheckpointCallback(
-    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq
+    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq,
+    checkpoints_to_keep=1
 )
 callbacks = [train_callback, ckpt_callback]
 
@@ -325,7 +327,7 @@ lr_policy_fn = get_lr_policy(
 
 nf.train(
     tensors_to_optimize=[losses[0]],
-    callbacks=[train_callback, eval_callback, ckpt_callback],
+    callbacks=callbacks,
     lr_policy=lr_policy_fn,
     optimizer=args.optimizer_kind,
     optimization_params={"num_epochs": args.num_epochs, "lr": args.lr},
