@@ -28,7 +28,7 @@ from nemo.collections.nlp.callbacks.punctuation_capitalization_callback import (
 # from nemo.collections.nlp.callbacks.OLD_punctuation_capitalization_callback import (
 #     eval_epochs_done_callback,
 #     eval_iter_callback,
-)
+# )
 from nemo.collections.nlp.data.datasets.datasets_utils import calc_class_weights
 from nemo.collections.nlp.nm.data_layers import PunctuationCapitalizationDataLayer
 from nemo.collections.nlp.nm.trainables import TokenClassifier
@@ -91,7 +91,7 @@ parser.add_argument(
     help="The output directory where the model prediction\
                     and checkpoints will be written.",
 )
-parser.add_argument("--use_cache", action='store_true', help="Whether to cache preprocessed data")
+parser.add_argument("--overwrite_processed_files", action='store_true', help="Whether to cache preprocessed data")
 parser.add_argument(
     "--save_epoch_freq",
     default=1,
@@ -106,7 +106,12 @@ parser.add_argument(
     help="Frequency of saving checkpoint \
                     '-1' - step checkpoint won't be saved",
 )
-parser.add_argument("--loss_step_freq", default=250, type=int, help="Frequency of printing loss")
+parser.add_argument(
+    "--eval_epoch_freq", default=1, type=int, help="Frequency of evaluation",
+)
+parser.add_argument(
+    "--loss_log_freq", default=50, type=int, help="Frequency of logging loss values, '-1' - at the end of the epoch",
+)
 parser.add_argument(
     "--use_weighted_loss_punct",
     action='store_true',
@@ -114,6 +119,12 @@ parser.add_argument(
                     to mitigate classs unbalancing for the punctuation task",
 )
 parser.add_argument('--checkpoint_dir', type=str)
+parser.add_argument(
+    "--wandb_project", default=None, type=str, help='Project name for tracking with Weights and Biases'
+)
+parser.add_argument(
+    "--wandb_exp_name", default=None, type=str, help='Experiment name for tracking with Weights and Biases'
+)
 
 args = parser.parse_args()
 
@@ -162,7 +173,7 @@ def create_pipeline(
     capit_label_ids=None,
     ignore_extra_tokens=args.ignore_extra_tokens,
     ignore_start_end=args.ignore_start_end,
-    use_cache=args.use_cache,
+    overwrite_processed_files=args.overwrite_processed_files,
     dropout=args.fc_dropout,
     punct_num_layers=args.punct_num_fc_layers,
     punct_classifier=TokenClassifier,
@@ -200,7 +211,7 @@ def create_pipeline(
         shuffle=shuffle,
         ignore_extra_tokens=ignore_extra_tokens,
         ignore_start_end=ignore_start_end,
-        use_cache=use_cache,
+        overwrite_processed_files=overwrite_processed_files,
     )
 
     (input_ids, input_type_ids, input_mask, loss_mask, subtokens_mask, punct_labels, capit_labels) = data_layer()
@@ -281,20 +292,32 @@ train_callback = nemo.core.SimpleLossLoggerCallback(
     get_tb_values=lambda x: [["loss", x[0]]],
     tb_writer=nf.tb_writer,
 )
+ckpt_callback = nemo.core.CheckpointCallback(
+    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq
+)
+callbacks = [train_callback, ckpt_callback]
+
+if args.wandb_project is not None:
+    wand_callback = nemo.core.WandbCallback(
+        train_tensors=[losses[0]],
+        wandb_name=args.wandb_exp_name,
+        wandb_project=args.wandb_project,
+        update_freq=args.loss_log_freq if args.loss_log_freq > 0 else steps_per_epoch,
+        args=args,
+    )
+    callbacks.append(wand_callback)
 
 eval_callback = nemo.core.EvaluatorCallback(
     eval_tensors=eval_tensors,
     user_iter_callback=lambda x, y: eval_iter_callback(x, y),
     user_epochs_done_callback=lambda x: eval_epochs_done_callback(
-        x, punct_label_ids, capit_label_ids, f'{nf.work_dir}/graphs'
-    ),
+        x, punct_label_ids, capit_label_ids),
     tb_writer=nf.tb_writer,
-    eval_step=steps_per_epoch,
+    eval_step=args.eval_epoch_freq * steps_per_epoch,
+    wandb_name=args.wandb_exp_name,
+    wandb_project=args.wandb_project,
 )
-
-ckpt_callback = nemo.core.CheckpointCallback(
-    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq
-)
+callbacks.append(eval_callback)
 
 lr_policy_fn = get_lr_policy(
     args.lr_policy, total_steps=args.num_epochs * steps_per_epoch, warmup_ratio=args.lr_warmup_proportion
