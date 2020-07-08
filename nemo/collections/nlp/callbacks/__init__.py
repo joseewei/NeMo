@@ -20,6 +20,7 @@ from nemo.collections.nlp.callbacks.lm_bert_callback import *
 from nemo.collections.nlp.callbacks.lm_transformer_callback import *
 from nemo.collections.nlp.callbacks.machine_translation_callback import *
 from nemo.collections.nlp.callbacks.punctuation_capitalization_callback import *
+from nemo.collections.nlp.callbacks.OLD_punctuation_capitalization_callback import *
 from nemo.collections.nlp.callbacks.qa_squad_callback import *
 from nemo.collections.nlp.callbacks.text_classification_callback import *
 from nemo.collections.nlp.callbacks.token_classification_callback import *

@@ -14,112 +14,126 @@
 # limitations under the License.
 # =============================================================================
 
-import random
-
 import numpy as np
+import torch
+import os
 
-from nemo import logging
-from nemo.collections.nlp.utils.callback_utils import (
-    get_classification_report,
-    list2str,
-    plot_confusion_matrix,
-    tensor2list,
-)
+from nemo.collections.nlp.utils.callback_utils import get_classification_report, plot_confusion_matrix, tensor2list
+from nemo.utils import logging
 
 __all__ = ['eval_iter_callback', 'eval_epochs_done_callback']
 
 
 def eval_iter_callback(tensors, global_vars):
-    if "punct_all_preds" not in global_vars.keys():
-        global_vars["punct_all_preds"] = []
-    if "punct_all_labels" not in global_vars.keys():
-        global_vars["punct_all_labels"] = []
-    if "capit_all_preds" not in global_vars.keys():
-        global_vars["capit_all_preds"] = []
-    if "capit_all_labels" not in global_vars.keys():
-        global_vars["capit_all_labels"] = []
-    if "all_subtokens_mask" not in global_vars.keys():
-        global_vars["all_subtokens_mask"] = []
+    GLOBAL_KEYS = ['punct_labels', 'capit_labels', 'punct_preds', 'capit_preds']
+    for key in GLOBAL_KEYS:
+        if key not in global_vars:
+            global_vars[key] = []
 
-    all_subtokens_mask = []
-    punct_all_logits, punct_all_labels = [], []
-    capit_all_logits, capit_all_labels = [], []
+    output = {}
+    for k, v in tensors.items():
+        name = k.split('~~~')
+        if len(name) > 1:
+            if name[0] == 'logits':
+                if 'Capitalization' in k:
+                    output['capit_logits'] = torch.cat(v)
+                elif 'Punctuation' in k:
+                    output['punct_logits'] = torch.cat(v)
+            else:
+                output[name[0]] = torch.cat(v)
 
-    for kv, v in tensors.items():
-        if 'Punctuation' in kv and 'logits' in kv:
-            for v_tensor in v:
-                for logit_tensor in v_tensor:
-                    punct_all_logits.append(tensor2list(logit_tensor))
+    subtokens_mask = output['subtokens_mask'] > 0.5
+    punct_preds = torch.argmax(output['punct_logits'], axis=-1)
+    global_vars['punct_preds'].extend(tensor2list(punct_preds[subtokens_mask]))
+    global_vars['capit_preds'].extend(tensor2list(torch.argmax(output['capit_logits'], axis=-1)[subtokens_mask]))
+    global_vars['punct_labels'].extend(tensor2list(output['punct_labels'][subtokens_mask]))
+    global_vars['capit_labels'].extend(tensor2list(output['capit_labels'][subtokens_mask]))
+  
+    if 'part_sent_logits' in output:
+        if 'part_sent_preds' not in global_vars:
+            global_vars['part_sent_preds'] = []
+            global_vars['part_sent_labels'] = []
+            global_vars['punct_corr_preds'] = []
+            global_vars['punct_corr_labels'] = []
 
-        elif kv.startswith('punct_labels'):
-            for v_tensor in v:
-                for label_tensor in v_tensor:
-                    punct_all_labels.extend(tensor2list(label_tensor))
+        num_examples = output['punct_logits'].shape[0]
+        part_sent_preds = tensor2list(torch.argmax(output['part_sent_logits'], -1))
 
-        elif 'Capitalization' in kv and 'logits' in kv:
-            for v_tensor in v:
-                for logit_tensor in v_tensor:
-                    capit_all_logits.append(tensor2list(logit_tensor))
+        for i in range(num_examples):
+            punct_pred = tensor2list(punct_preds[i, :][(output['subtokens_mask'] > 0.5)[i, :]])
+            # if the sentence is predicated to be partial, sent the punct of the last word to pad_label 'O'
+            if part_sent_preds[i] == 1:
+                punct_pred[-1] = 0
+                print('corrected')
 
-        elif kv.startswith('capit_labels'):
-            for v_tensor in v:
-                for label_tensor in v_tensor:
-                    capit_all_labels.extend(tensor2list(label_tensor))
-
-        elif kv.startswith('subtokens_mask'):
-            for v_tensor in v:
-                for subtokens_mask_tensor in v_tensor:
-                    all_subtokens_mask.extend(tensor2list(subtokens_mask_tensor))
-
-    punct_all_preds = list(np.argmax(np.asarray(punct_all_logits), 2).flatten())
-    global_vars["punct_all_preds"].extend(punct_all_preds)
-    global_vars["punct_all_labels"].extend(punct_all_labels)
-
-    capit_all_preds = list(np.argmax(np.asarray(capit_all_logits), 2).flatten())
-    global_vars["capit_all_preds"].extend(capit_all_preds)
-    global_vars["capit_all_labels"].extend(capit_all_labels)
-
-    global_vars["all_subtokens_mask"].extend(all_subtokens_mask)
+            global_vars['punct_corr_preds'].extend(punct_pred)
+        global_vars['punct_corr_labels'].extend(tensor2list(output['punct_labels'][subtokens_mask]))
+        global_vars['part_sent_labels'].extend(tensor2list(output['part_sent_labels']))
+        global_vars['part_sent_preds'].extend(part_sent_preds)
 
 
-def eval_epochs_done_callback(global_vars, punct_label_ids, capit_label_ids, graph_fold=None, normalize_cm=True):
+def _get_result_dict(tag, class_report):
+    results = {}
+    for label in class_report:
+        if label != 'accuracy':
+            label_name = label[: label.index('(label id') - 1] if 'label id' in label else label
+            results[tag + 'F1 ' + label_name] = round(class_report[label]['f1-score'] * 100, 2)
+            results[tag + 'PR ' + label_name] = round(class_report[label]['precision'] * 100, 2)
+            results[tag + 'R ' + label_name] = round(class_report[label]['recall'] * 100, 2)
+        else:
+            results[tag + 'Acc'] = round(class_report[label] * 100, 2)
+    return results
+
+
+def eval_epochs_done_callback(
+    global_vars, punct_label_ids, capit_label_ids, part_sent_label_ids=None, work_dir=None, graph_fold=None, normalize_cm=True
+):
     '''
     Args:
       graph_fold (str): path to output folder
       normalize_cm (bool): flag to indicate whether to
         normalize confusion matrix
     '''
+    results = {}
+    punct_class_report = _eval_epochs_done_callback('punct', global_vars, punct_label_ids, work_dir, graph_fold, normalize_cm)
+    results.update(_get_result_dict('p', punct_class_report))
 
-    punct_accuracy = _eval_epochs_done_callback('punct', global_vars, punct_label_ids, graph_fold, normalize_cm)
+    if 'punct_corr_preds' in global_vars:
+        punct_class_report = _eval_epochs_done_callback('punct_corr', global_vars, punct_label_ids, work_dir, graph_fold, normalize_cm)
+        results.update(_get_result_dict('p', punct_class_report))
 
-    capit_accuracy = _eval_epochs_done_callback('capit', global_vars, capit_label_ids, graph_fold, normalize_cm)
+    capit_class_report = _eval_epochs_done_callback('capit', global_vars, capit_label_ids, work_dir, graph_fold, normalize_cm)
+    results.update(_get_result_dict('c', capit_class_report))
+   
+    if 'part_sent_preds' in global_vars:
+        part_sent_labels = np.asarray(global_vars['part_sent_labels'])
+        part_sent_preds = np.asarray(global_vars['part_sent_preds'])
+        part_sent_class_report = _eval_epochs_done_callback(
+            'part_sent', global_vars, part_sent_label_ids, work_dir, graph_fold, normalize_cm
+        )
+        results.update(_get_result_dict('t', part_sent_class_report))
+        part_sent_acc = np.mean(part_sent_labels == part_sent_preds)
+        logging.info(f'Partial sent task accuracy: {part_sent_acc}')
+        results['Part_sent_acc'] = round(part_sent_acc * 100, 2)
+    logging.info(f'results: {results}')
+    return results
 
-    return {"Punctuation_task_accuracy": punct_accuracy, "Capitalization_task_accuracy": capit_accuracy}
 
-
-def _eval_epochs_done_callback(task_name, global_vars, label_ids, graph_fold=None, normalize_cm=True):
-    labels = np.asarray(global_vars[task_name + '_all_labels'])
-    preds = np.asarray(global_vars[task_name + '_all_preds'])
-    subtokens_mask = np.asarray(global_vars['all_subtokens_mask']) > 0.5
-
-    labels = labels[subtokens_mask]
-    preds = preds[subtokens_mask]
-
-    accuracy = sum(labels == preds) / labels.shape[0]
-    logging.info(f'Accuracy for task {task_name}: {accuracy}')
-
-    # print predictions and labels for a small random subset of data
-    sample_size = 20
-    i = 0
-    if preds.shape[0] > sample_size + 1:
-        i = random.randint(0, preds.shape[0] - sample_size - 1)
-    logging.info("Sampled preds: [%s]" % list2str(preds[i : i + sample_size]))
-    logging.info("Sampled labels: [%s]" % list2str(labels[i : i + sample_size]))
-
-    classification_report = get_classification_report(labels, preds, label_ids)
-    logging.info(classification_report)
+def _eval_epochs_done_callback(task_name, global_vars, label_ids, work_dir=None, graph_fold=None, normalize_cm=True):
+    labels = np.array(global_vars[task_name + '_labels'])
+    preds = np.array(global_vars[task_name + '_preds'])
+  
+    if work_dir is not None:
+        with open(os.path.join(work_dir, task_name + '_labels_preds.txt'), 'w') as f:
+            f.write(' '.join(list(map(str, labels))))
+            f.write('\n')
+            f.write(' '.join(list(map(str, preds))))
+            
+        logging.info(f'labels and preds are saved at {work_dir}')
 
     # calculate and plot confusion_matrix
     if graph_fold:
         plot_confusion_matrix(labels, preds, graph_fold, label_ids, normalize=normalize_cm, prefix=task_name)
-    return accuracy
+
+    logging.info(f'{get_classification_report(labels, preds, label_ids)}')
+    return get_classification_report(labels, preds, label_ids, output_dict=True)

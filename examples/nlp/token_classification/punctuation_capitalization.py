@@ -25,6 +25,10 @@ from nemo.collections.nlp.callbacks.punctuation_capitalization_callback import (
     eval_epochs_done_callback,
     eval_iter_callback,
 )
+# from nemo.collections.nlp.callbacks.OLD_punctuation_capitalization_callback import (
+#     eval_epochs_done_callback,
+#     eval_iter_callback,
+)
 from nemo.collections.nlp.data.datasets.datasets_utils import calc_class_weights
 from nemo.collections.nlp.nm.data_layers import PunctuationCapitalizationDataLayer
 from nemo.collections.nlp.nm.trainables import TokenClassifier
@@ -47,7 +51,8 @@ parser.add_argument("--weight_decay", default=0, type=float)
 parser.add_argument("--optimizer_kind", default="adam", type=str)
 parser.add_argument("--amp_opt_level", default="O0", type=str, choices=["O0", "O1", "O2"])
 parser.add_argument("--data_dir", default="/data", type=str)
-parser.add_argument("--punct_num_fc_layers", default=3, type=int)
+parser.add_argument("--punct_num_fc_layers", default=1, type=int)
+parser.add_argument("--capit_num_fc_layers", default=1, type=int)
 parser.add_argument("--fc_dropout", default=0.1, type=float)
 parser.add_argument("--ignore_start_end", action='store_false')
 parser.add_argument("--ignore_extra_tokens", action='store_false')
@@ -108,6 +113,7 @@ parser.add_argument(
     help="Flag to indicate whether to use weighted loss \
                     to mitigate classs unbalancing for the punctuation task",
 )
+parser.add_argument('--checkpoint_dir', type=str)
 
 args = parser.parse_args()
 
@@ -121,7 +127,8 @@ nf = nemo.core.NeuralModuleFactory(
     log_dir=args.work_dir,
     create_tb_writer=True,
     files_to_copy=[__file__],
-    add_time_to_log_dir=True,
+    add_time_to_log_dir=False,
+    checkpoint_dir=args.checkpoint_dir
 )
 
 logging.info(args)
@@ -221,7 +228,7 @@ def create_pipeline(
 
         # Initialize capitalization loss
         capit_classifier = capit_classifier(
-            hidden_size=hidden_size, num_classes=len(capit_label_ids), dropout=dropout, name='Capitalization'
+            hidden_size=hidden_size, num_classes=len(capit_label_ids), dropout=dropout, num_layers=args.capit_num_fc_layers, name='Capitalization'
         )
         capit_loss = CrossEntropyLossNM(logits_ndim=3)
 
