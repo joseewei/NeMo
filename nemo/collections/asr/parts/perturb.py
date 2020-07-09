@@ -372,6 +372,7 @@ class NoisePerturbation(Perturbation):
         self._audiodataset = None
         self._tarred_audio = False
         self._max_freq = max_freq
+        self._data_iterator = None
 
         if audio_tar_filepaths:
             self._tarred_audio = True
