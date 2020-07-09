@@ -101,7 +101,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--save_step_freq",
-    default=200,
+    default=-1,
     type=int,
     help="Frequency of saving checkpoint \
                     '-1' - step checkpoint won't be saved",
@@ -125,6 +125,7 @@ parser.add_argument(
 parser.add_argument(
     "--wandb_exp_name", default=None, type=str, help='Experiment name for tracking with Weights and Biases'
 )
+parser.add_argument("--punct_loss_weight", default=0.5, type=float, help="Punctuation task weight loss")
 
 args = parser.parse_args()
 
@@ -243,7 +244,7 @@ def create_pipeline(
         )
         capit_loss = CrossEntropyLossNM(logits_ndim=3)
 
-        task_loss = LossAggregatorNM(num_inputs=2)
+        task_loss = LossAggregatorNM(num_inputs=2, weights=[args.punct_loss_weight, 1.0 - args.punct_loss_weight])
 
     hidden_states = model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
 
