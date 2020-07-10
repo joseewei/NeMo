@@ -283,6 +283,8 @@ if args.mode == 'examples':
             print(f'Query: {query}')
             print(f'Combined: {output.strip()}')
             print(f'Gr truth: {args.ground_truth_queries[i].strip()}\n')
+    logging.info(f'Number of correct predictions: {correct}')
+    logging.info(f'Number of wrong predictions: {wrong}')
 elif args.mode == 'interactive':
     while True:
         logging.info("Type your text, use STOP to exit and RESTART to start a new dialogue.")
@@ -338,18 +340,15 @@ else:
             punct_label_ids=punct_label_ids,
             capit_label_ids=capit_label_ids,
             max_seq_length=args.max_seq_length,
-            batch_size=args.batch_size,
-            part_sent_label_ids={v:k for k, v in part_sent_labels_dict.items()} if part_sent_labels_dict is not None else None,
-            add_part_sent_head=args.add_part_sent_head,
+            batch_size=args.batch_size
         )
 
     data = data_layer()
     hidden_states = model(input_ids=data.input_ids, token_type_ids=data.input_type_ids, attention_mask=data.input_mask)
-    punct_logits, capit_logits, part_sent_logits = classifier(hidden_states=hidden_states)
+    punct_logits = punct_classifier(hidden_states=hidden_states)
+    capit_logits = capit_classifier(hidden_states=hidden_states)
 
     logits = [punct_logits, capit_logits]
-    if args.add_part_sent_head:
-        logits.append(part_sent_logits)
 
     evaluated_tensors = nf.infer(tensors=logits + [data.punct_labels, data.capit_labels, data.subtokens_mask], checkpoint_dir=args.checkpoint_dir)
 
@@ -369,46 +368,42 @@ else:
                 output += ' '
             return output
 
-    if args.add_part_sent_head:
-        punct_logits, capit_logits, part_sent_logits, punct_labels, capit_labels, subtokens_mask = [concatenate(tensors) for tensors in evaluated_tensors]
-        part_sent_preds = 0
-    else:
-        punct_logits, capit_logits, punct_labels, capit_labels, subtokens_mask = [concatenate(tensors) for tensors in evaluated_tensors]
+    punct_logits, capit_logits, punct_labels, capit_labels, subtokens_mask = [concatenate(tensors) for tensors in evaluated_tensors]
 
     punct_preds = np.argmax(punct_logits, axis=2)
     capit_preds = np.argmax(capit_logits, axis=2)
   
     logging.info(f'\n {get_classification_report(punct_labels[subtokens_mask>0.5], punct_preds[subtokens_mask>0.5], label_ids=punct_label_ids)}')
     logging.info(f'\n {get_classification_report(capit_labels[subtokens_mask>0.5], capit_preds[subtokens_mask>0.5], label_ids=capit_label_ids)}')
-    correct = 0
-    wrong = 0
+#     correct = 0
+#     wrong = 0
     
-    file_for_errors_path = os.path.join(args.data_dir, args.checkpoint_dir.replace('/', '-') + '.txt')
-    file_for_errors = open(file_for_errors_path, 'w')
-    with open(text_file, 'r') as f:
-        for i, line in enumerate(f):
-            punct_pred = punct_preds[i][subtokens_mask[i] > 0.5]
-            punct_label = punct_labels[i][subtokens_mask[i] > 0.5]
-            capit_pred = capit_preds[i][subtokens_mask[i] > 0.5]
-            capit_label = capit_labels[i][subtokens_mask[i] > 0.5]
-            words = line.strip().split()
-            if len(punct_pred) != len(words) or len(capit_pred) != len(words):
-                print(f'{i} skipped')
-                continue
-                # raise ValueError('Pred and words must be of the same length')
+#     file_for_errors_path = os.path.join(args.data_dir, args.checkpoint_dir.replace('/', '-') + '.txt')
+#     file_for_errors = open(file_for_errors_path, 'w')
+#     with open(text_file, 'r') as f:
+#         for i, line in enumerate(f):
+#             punct_pred = punct_preds[i][subtokens_mask[i] > 0.5]
+#             punct_label = punct_labels[i][subtokens_mask[i] > 0.5]
+#             capit_pred = capit_preds[i][subtokens_mask[i] > 0.5]
+#             capit_label = capit_labels[i][subtokens_mask[i] > 0.5]
+#             words = line.strip().split()
+#             if len(punct_pred) != len(words) or len(capit_pred) != len(words):
+#                 print(f'{i} skipped')
+#                 continue
+#                 # raise ValueError('Pred and words must be of the same length')
             
-            prediction = _combine(words, punct_pred, capit_pred, add_capit=False).strip()
-            ground_truth = _combine(words, punct_label, capit_label, add_capit=False).strip()
+#             prediction = _combine(words, punct_pred, capit_pred, add_capit=False).strip()
+#             ground_truth = _combine(words, punct_label, capit_label, add_capit=False).strip()
 
-            if prediction == ground_truth:
-                correct += 1
-            else:
-                wrong += 1
-                file_for_errors.write('Pred: ' + prediction + '\n')
-                file_for_errors.write('True: ' + ground_truth + '\n\n')
+#             if prediction == ground_truth:
+#                 correct += 1
+#             else:
+#                 wrong += 1
+#                 file_for_errors.write('Pred: ' + prediction + '\n')
+#                 file_for_errors.write('True: ' + ground_truth + '\n\n')
 
-    logging.info(f'Incorrect examples saved to : {file_for_errors_path}')
-if args.mode != 'interactive':
-    logging.info(f'Number of correct predictions: {correct}')
-    logging.info(f'Number of wrong predictions: {wrong}')
+#     logging.info(f'Incorrect examples saved to : {file_for_errors_path}')
+# if args.mode != 'interactive':
+#     logging.info(f'Number of correct predictions: {correct}')
+#     logging.info(f'Number of wrong predictions: {wrong}')
         
