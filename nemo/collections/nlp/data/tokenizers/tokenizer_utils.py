@@ -15,7 +15,7 @@
 # =============================================================================
 import os
 
-from transformers import AlbertTokenizer, BertTokenizer, RobertaTokenizer
+from transformers import AlbertTokenizer, BertTokenizer, RobertaTokenizer, DistilBertTokenizer
 
 import nemo
 
@@ -25,6 +25,15 @@ logging = nemo.logging
 
 MODEL_SPECIAL_TOKENS = {
     'bert': {
+        'unk_token': '[UNK]',
+        'sep_token': '[SEP]',
+        'pad_token': '[PAD]',
+        'bos_token': '[CLS]',
+        'mask_token': '[MASK]',
+        'eos_token': '[SEP]',
+        'cls_token': '[CLS]',
+    },
+    'distilbert': {
         'unk_token': '[UNK]',
         'sep_token': '[SEP]',
         'pad_token': '[PAD]',
@@ -54,7 +63,7 @@ MODEL_SPECIAL_TOKENS = {
 }
 
 
-TOKENIZERS = {'bert': BertTokenizer, 'albert': AlbertTokenizer, 'roberta': RobertaTokenizer}
+TOKENIZERS = {'bert': BertTokenizer, 'albert': AlbertTokenizer, 'roberta': RobertaTokenizer, 'distilbert': DistilBertTokenizer,}
 
 
 def get_bert_special_tokens(bert_derivative):

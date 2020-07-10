@@ -246,7 +246,10 @@ def create_pipeline(
 
         task_loss = LossAggregatorNM(num_inputs=2, weights=[args.punct_loss_weight, 1.0 - args.punct_loss_weight])
 
-    hidden_states = model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
+    if 'distil' in args.pretrained_model_name:
+        hidden_states = model(input_ids=input_ids, attention_mask=input_mask)
+    else:
+        hidden_states = model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
 
     punct_logits = punct_classifier(hidden_states=hidden_states)
     capit_logits = capit_classifier(hidden_states=hidden_states)

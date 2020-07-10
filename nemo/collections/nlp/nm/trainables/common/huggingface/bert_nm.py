@@ -66,7 +66,7 @@ class BERT(TrainableNM):
         """
         return {
             "input_ids": NeuralType(('B', 'T'), ChannelType()),
-            "token_type_ids": NeuralType(('B', 'T'), ChannelType()),
+            "token_type_ids": NeuralType(('B', 'T'), ChannelType(), optional=True),
             "attention_mask": NeuralType(('B', 'T'), ChannelType()),
         }
 
@@ -142,7 +142,7 @@ class BERT(TrainableNM):
             )
 
         model.to(self._device)
-
+        self.name = pretrained_model_name
         self.add_module("bert", model)
         self.config = model.config
         self._hidden_size = model.config.hidden_size
@@ -178,5 +178,7 @@ class BERT(TrainableNM):
             pretrained_models.append(model_info)
         return pretrained_models
 
-    def forward(self, input_ids, token_type_ids, attention_mask):
-        return self.bert(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)[0]
+    def forward(self, input_ids, attention_mask, token_type_ids=None):
+        if 'distil' in self.name:
+            return self.bert(input_ids=input_ids, attention_mask=attention_mask)[0]
+        return self.bert(input_ids, token_type_ids, attention_mask)[0]
