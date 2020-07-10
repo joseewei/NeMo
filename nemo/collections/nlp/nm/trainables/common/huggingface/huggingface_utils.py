@@ -41,6 +41,7 @@ def get_huggingface_model(pretrained_model_name, bert_config=None):
 
 MODELS = {
     'bert': {'default': 'bert-base-uncased', 'class': BERT},
+    'distilbert': {'default': 'distilbert-base-uncased', 'class': BERT},
     'roberta': {'default': 'roberta-base', 'class': Roberta},
     'albert': {'default': 'albert-base-v2', 'class': Albert},
 }

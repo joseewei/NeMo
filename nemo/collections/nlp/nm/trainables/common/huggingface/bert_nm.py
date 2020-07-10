@@ -20,10 +20,11 @@ from typing import List, Optional
 
 from transformers import (
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BertConfig,
     BertModel,
+    DistilBertModel
 )
 
 from nemo.backends.pytorch.nm import TrainableNM
@@ -128,7 +129,10 @@ class BERT(TrainableNM):
             )
             model = BertModel(config)
         elif pretrained_model_name is not None:
-            model = BertModel.from_pretrained(pretrained_model_name)
+            if 'distil' in pretrained_model_name:
+                model = DistilBertModel.from_pretrained(pretrained_model_name)
+            else:
+                model = BertModel.from_pretrained(pretrained_model_name)
         elif config_filename is not None:
             config = BertConfig.from_json_file(config_filename)
             model = BertModel(config)
@@ -156,7 +160,7 @@ class BERT(TrainableNM):
     @staticmethod
     def list_pretrained_models() -> Optional[List[PretrainedModelInfo]]:
         pretrained_models = []
-        for key in BERT_PRETRAINED_MODEL_ARCHIVE_LIST:
+        for key in BERT_PRETRAINED_MODEL_ARCHIVE_MAP:
             model_info = PretrainedModelInfo(
                 pretrained_model_name=key,
                 description="weights by HuggingFace",
