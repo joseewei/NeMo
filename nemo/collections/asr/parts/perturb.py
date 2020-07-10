@@ -489,7 +489,7 @@ class AMRTranscodePerturbation(Perturbation):
         newfile2 = orig_f.replace(".wav", "_amr.wav")
         rate = 0
         if self._rate:
-            rate = self._rate[random.randint(0, len(self._rate))]
+            rate = self._rate[random.randint(0, len(self._rate)-1)]
         _ = subprocess.check_output(
             f"sox {orig_f} -V0 -C {rate} {newfile1}", shell=True)
         os.remove(orig_f)
