@@ -246,10 +246,7 @@ def create_pipeline(
 
         task_loss = LossAggregatorNM(num_inputs=2, weights=[args.punct_loss_weight, 1.0 - args.punct_loss_weight])
 
-    if 'distil' in args.pretrained_model_name:
-        hidden_states = model(input_ids=input_ids, attention_mask=input_mask)
-    else:
-        hidden_states = model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
+    hidden_states = model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
 
     punct_logits = punct_classifier(hidden_states=hidden_states)
     capit_logits = capit_classifier(hidden_states=hidden_states)
@@ -323,7 +320,7 @@ eval_callback = nemo.core.EvaluatorCallback(
     wandb_name=args.wandb_exp_name,
     wandb_project=args.wandb_project,
 )
-callbacks.append(eval_callback)
+# callbacks.append(eval_callback)
 
 lr_policy_fn = get_lr_policy(
     args.lr_policy, total_steps=args.num_epochs * steps_per_epoch, warmup_ratio=args.lr_warmup_proportion

@@ -212,6 +212,7 @@ if args.add_part_sent_head:
 model = nemo_nlp.nm.trainables.get_huggingface_model(
     bert_config=args.bert_config, pretrained_model_name=args.pretrained_model_name
 )
+logging.info(f'Number of weights: {model.num_weights}')
 
 tokenizer = nemo.collections.nlp.data.tokenizers.get_tokenizer(
     tokenizer_name=args.tokenizer,
