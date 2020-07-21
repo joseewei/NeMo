@@ -26,9 +26,8 @@ import os
 
 import nemo.collections.nlp as nemo_nlp
 import nemo.collections.nlp.data.datasets.sgd_dataset.data_processor as data_processor
-from nemo.collections.nlp.callbacks.sgd_callback import eval_epochs_done_callback, eval_iter_callback
+from nemo.collections.nlp.callbacks.lm_gpt2_callback import eval_epochs_done_callback, eval_iter_callback
 from nemo.collections.nlp.data.datasets.sgd_dataset.schema_processor import SchemaPreprocessor
-from nemo.collections.nlp.nm.trainables import SGDDecoderNM, SGDEncoderNM
 from nemo.core import Backend, CheckpointCallback, EvaluatorCallback, NeuralModuleFactory, SimpleLossLoggerCallback
 from nemo.utils import logging
 from nemo.utils.lr_policies import get_lr_policy
@@ -60,7 +59,7 @@ parser.add_argument(
     type=str,
     help="The folder containing the checkpoints for the model to continue training",
 )
-parser.add_argument("--batch_size", default=32, type=int, help="Batch size for training and evaluation.")
+parser.add_argument("--batch_size", default=16, type=int, help="Batch size for training and evaluation.")
 parser.add_argument("--num_epochs", default=80, type=int, help="Total number of training epochs to perform.")
 
 parser.add_argument("--optimizer_kind", default="adam_w", type=str)
@@ -153,7 +152,7 @@ parser.add_argument(
 )
 
 ### GPT-2 args
-parser.add_argument("--vocab_size", default=3200, type=int, help="Vocabulary size")
+parser.add_argument("--vocab_size", default=-1, type=int, help="Vocabulary size")
 
 
 args = parser.parse_args()
@@ -231,11 +230,12 @@ def add_special_tokens_(model, tokenizer):
         model.model.resize_token_embeddings(new_num_tokens=orig_num_tokens + num_added_tokens)
     logging.info('%s special tokens added', num_added_tokens)
     tokenizer.vocab_size += num_added_tokens
-    logging.info('%s vocab_size', tokenizer.vocab_size)
+    logging.info('%s new vocab_size', tokenizer.vocab_size)
     print(model)
 
 
 args.vocab_size = gpt2_tokenizer.vocab_size
+logging.info(f'Vocab size: {args.vocab_size}')
 add_special_tokens_(gpt2_model, gpt2_tokenizer)
 
 args.max_seq_length = min(args.max_seq_length, gpt2_tokenizer.max_len)
@@ -296,8 +296,8 @@ ckpt_callback = CheckpointCallback(
 
 eval_callback = EvaluatorCallback(
     eval_tensors=[eval_loss],
-    user_iter_callback=nemo_nlp.callbacks.lm_bert_callback.eval_iter_callback,
-    user_epochs_done_callback=nemo_nlp.callbacks.lm_bert_callback.eval_epochs_done_callback,
+    user_iter_callback=eval_iter_callback,
+    user_epochs_done_callback=eval_epochs_done_callback,
     eval_step=steps_per_epoch,
 )
 

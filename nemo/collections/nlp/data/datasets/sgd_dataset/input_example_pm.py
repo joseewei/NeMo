@@ -143,6 +143,8 @@ class InputExamplePM(object):
         digits_in_response = [int(d) for d in re.findall(r'\d+', self.delex_response)]
         if len(digits_in_response) > 0:
             logging.info('digits remaining in response: %s', self.delex_response)
+            with open('/home/ebakhturina/Desktop/responses_with_digits', 'a') as f:
+                f.write(self.delex_response + '\n')
        
         # add delex system response to token_ids and token_type_ids
         # create labels for lm task
@@ -164,6 +166,15 @@ class InputExamplePM(object):
         logging.debug(self.dialogue_belief)
         logging.debug(self.delex_system_acts)
         logging.debug(self.delex_response)
+
+    def _remove_star_rating(text):
+        replacement = "[star rating]"
+        star_rating_regeex = re.compile(r'\d.\d stars')
+        mo = star_rating_regeex.search(text)
+        if mo is not None:
+            logging.debug(f'Original text: {text}')
+            text = text.replace(mo.group(), replacement)
+            logging.debug(f'Remove rating: {text}')
 
     def split_intent(self, intent):
         reformatted_intent = ''

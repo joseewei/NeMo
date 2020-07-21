@@ -41,7 +41,6 @@ class SGDDataset(Dataset):
 
     def __getitem__(self, idx):
         ex = self.features[idx]
-
         if self.mode == 'DST':
             service_id = ex.service_schema.service_id
             return (
