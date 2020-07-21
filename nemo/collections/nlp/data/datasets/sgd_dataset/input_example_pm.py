@@ -143,8 +143,8 @@ class InputExamplePM(object):
         digits_in_response = [int(d) for d in re.findall(r'\d+', self.delex_response)]
         if len(digits_in_response) > 0:
             logging.info('digits remaining in response: %s', self.delex_response)
-            with open('/home/ebakhturina/Desktop/responses_with_digits', 'a') as f:
-                f.write(self.delex_response + '\n')
+            # with open('/home/ebakhturina/Desktop/responses_with_digits', 'a') as f:
+            #     f.write(self.delex_response + '\n')
        
         # add delex system response to token_ids and token_type_ids
         # create labels for lm task
