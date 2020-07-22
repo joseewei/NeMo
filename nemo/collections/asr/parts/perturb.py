@@ -469,8 +469,6 @@ class AMRTranscodePerturbation(Perturbation):
         self._rate = rate
 
     def perturb(self, data, orig_sr=None):
-        if orig_sr != 8000:
-            return
         prob = self._rng.uniform(0.0, 1.0)
         if prob > self._prob:
             return
