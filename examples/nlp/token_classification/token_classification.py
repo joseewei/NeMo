@@ -121,7 +121,12 @@ parser.add_argument(
 )
 parser.add_argument("--bert_checkpoint", default=None, type=str, help="Path to bert pretrained  checkpoint")
 parser.add_argument("--bert_config", default=None, type=str, help="Path to bert config file in json format")
-
+parser.add_argument(
+    "--wandb_project", default=None, type=str, help='Project name for tracking with Weights and Biases'
+)
+parser.add_argument(
+    "--wandb_exp_name", default=None, type=str, help='Experiment name for tracking with Weights and Biases'
+)
 
 args = parser.parse_args()
 logging.info(args)
@@ -243,7 +248,6 @@ def create_pipeline(
         return tensors_to_evaluate, data_layer
 
 
-callbacks = []
 train_tensors, train_loss, steps_per_epoch, label_ids, classifier = create_pipeline()
 logging.info(f"steps_per_epoch = {steps_per_epoch}")
 # Create trainer and execute training action
@@ -254,8 +258,21 @@ train_callback = nemo.core.SimpleLossLoggerCallback(
     step_freq=args.loss_step_freq,
     tb_writer=nf.tb_writer,
 )
-callbacks.append(train_callback)
 
+ckpt_callback = nemo.core.CheckpointCallback(
+    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq
+)
+callbacks = [train_callback, ckpt_callback]
+
+if args.wandb_project is not None:
+    wand_callback = nemo.core.WandbCallback(
+        train_tensors=[train_loss],
+        wandb_name=args.wandb_exp_name,
+        wandb_project=args.wandb_project,
+        update_freq=args.loss_step_freq if args.loss_step_freq > 0 else steps_per_epoch,
+        args=args,
+    )
+    callbacks.append(wand_callback)
 
 if "eval" in args.mode:
     eval_tensors, data_layer = create_pipeline(mode='dev', label_ids=label_ids, classifier=classifier)
@@ -265,13 +282,12 @@ if "eval" in args.mode:
         user_epochs_done_callback=lambda x: eval_epochs_done_callback(x, label_ids, f'{nf.work_dir}/graphs'),
         tb_writer=nf.tb_writer,
         eval_step=args.eval_step_freq if args.eval_step_freq > 0 else steps_per_epoch,
+        wandb_name=args.wandb_exp_name,
+        wandb_project=args.wandb_project,
     )
     callbacks.append(eval_callback)
 
-ckpt_callback = nemo.core.CheckpointCallback(
-    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq
-)
-callbacks.append(ckpt_callback)
+
 
 lr_policy_fn = get_lr_policy(
     args.lr_policy, total_steps=args.num_epochs * steps_per_epoch, warmup_ratio=args.lr_warmup_proportion
