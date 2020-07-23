@@ -88,8 +88,19 @@ def eval_epochs_done_callback(global_vars, label_ids, graph_fold=None, normalize
     classification_report = get_classification_report(labels, preds, label_ids)
     logging.info(classification_report)
 
-    # calculate and plot confusion_matrix
-    if graph_fold:
-        plot_confusion_matrix(labels, preds, graph_fold, label_ids, normalize=normalize_cm)
+    # # calculate and plot confusion_matrix
+    # if graph_fold:
+    #     plot_confusion_matrix(labels, preds, graph_fold, label_ids, normalize=normalize_cm)
 
-    return dict({'Accuracy': accuracy})
+
+    results = {}
+    class_report = get_classification_report(labels, preds, label_ids, True)
+    for label in class_report:
+        if label != 'accuracy':
+            label_name = label[: label.index('(label id') - 1] if 'label id' in label else label
+            results['F1 ' + label_name] = round(class_report[label]['f1-score'] * 100, 2)
+            results['PR ' + label_name] = round(class_report[label]['precision'] * 100, 2)
+            results['R ' + label_name] = round(class_report[label]['recall'] * 100, 2)
+        else:
+            results['Acc'] = round(class_report[label] * 100, 2)
+    return results
