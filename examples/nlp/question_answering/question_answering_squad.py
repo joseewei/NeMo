@@ -28,7 +28,8 @@ def main(cfg: DictConfig) -> None:
     trainer = pl.Trainer(**cfg.trainer)
     exp_manager(trainer, cfg.get("exp_manager", None))
     question_answering_model = QAModel(cfg.model, trainer=trainer)
-    question_answering_model.restore_from(cfg.model.checkpoint)
+    # question_answering_model.restore_from(cfg.model.checkpoint)
+    model=QAModel.load_from_checkpoint(checkpoint_path='/home/yzhang/data/results/squad/nemo1.0/1330706/QA/2020-07-28_00-41-18/checkpoints/QA--last.ckpt')
     trainer.fit(question_answering_model)
 
 
