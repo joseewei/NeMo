@@ -20,12 +20,14 @@ from nemo.core.classes import NeuralModule
 from nemo.core.neural_types import ChannelType, MaskType, NeuralType
 from nemo.utils import logging
 from nemo.utils.decorators import experimental
+from nemo.core.classes.exportable import Exportable
+from collections import OrderedDict
 
 __all__ = ['BertModule']
 
 
 @experimental
-class BertModule(NeuralModule):
+class BertModule(NeuralModule, Exportable):
     @property
     def input_types(self) -> Optional[Dict[str, NeuralType]]:
         return {
@@ -61,3 +63,20 @@ class BertModule(NeuralModule):
         pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
         model_dict.update(pretrained_dict)
         self.load_state_dict(model_dict)
+
+
+
+    def _prepare_for_export(self):
+        """
+        Returns a pair in input, output examples for tracing.
+        Returns:
+            A pair of (input, output) examples.
+        """
+        args = (
+            torch.randint(low=0, high=16, size=(2, 16)),
+            torch.randint(low=0, high=2, size=(2, 16)),
+            torch.randint(low=0, high=2, size=(2, 16)),
+        )
+        output_example = self.forward(*args)
+        return args, output_example
+

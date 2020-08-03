@@ -24,6 +24,7 @@ from nemo.core.classes import typecheck
 from nemo.utils import logging
 from nemo.utils.decorators import experimental
 
+
 try:
     from megatron.initialize import initialize_megatron
     from megatron.model.bert_model import bert_attention_mask_func, bert_extended_attention_mask, bert_position_ids
@@ -34,7 +35,6 @@ except ModuleNotFoundError as err:
 
 
 __all__ = ['MegatronBertEncoder']
-
 
 @experimental
 class MegatronBertEncoder(BertModule):
@@ -107,7 +107,8 @@ class MegatronBertEncoder(BertModule):
         return self._hidden_size
 
     @typecheck()
-    def forward(self, input_ids, attention_mask, token_type_ids):
+    def forward(self, *args, **kwargs):
+        input_ids, attention_mask, token_type_ids = args
         extended_attention_mask = bert_extended_attention_mask(
             attention_mask, next(self.language_model.parameters()).dtype
         )
