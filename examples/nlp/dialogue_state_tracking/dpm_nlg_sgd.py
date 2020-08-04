@@ -258,7 +258,7 @@ dialogues_processor = data_processor.SGDDataProcessor(
     mode='PM',
 )
 
-def create_pipeline(dataset_split, train=True):
+def create_pipeline(dataset_split):
     datalayer = nemo_nlp.nm.data_layers.GPT2DataLayer(
         tokenizer=gpt2_tokenizer,
         dataset_split=dataset_split,
@@ -276,7 +276,7 @@ def create_pipeline(dataset_split, train=True):
 
 
 train_loss, steps_per_epoch = create_pipeline('train')
-eval_loss, eval_steps_per_epoch = create_pipeline('dev', train=False)
+eval_loss, eval_steps_per_epoch = create_pipeline('dev')
 
 
 logging.info("steps per epoch: %s", steps_per_epoch)
