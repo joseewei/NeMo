@@ -30,10 +30,6 @@ def eval_iter_callback(tensors, global_vars):
             for loss in v:
                 global_vars["loss"].append(loss.item())
 
-    import pdb
-
-    pdb.set_trace()
-
 
 def eval_epochs_done_callback(global_vars):
     res = {}
