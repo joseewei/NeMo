@@ -28,7 +28,14 @@ import nemo.collections.nlp as nemo_nlp
 import nemo.collections.nlp.data.datasets.sgd_dataset.data_processor as data_processor
 from nemo.collections.nlp.callbacks.lm_gpt2_callback import eval_epochs_done_callback, eval_iter_callback
 from nemo.collections.nlp.data.datasets.sgd_dataset.schema_processor import SchemaPreprocessor
-from nemo.core import Backend, CheckpointCallback, EvaluatorCallback, NeuralModuleFactory, SimpleLossLoggerCallback
+from nemo.core import (
+    Backend,
+    CheckpointCallback,
+    EvaluatorCallback,
+    NeuralModuleFactory,
+    SimpleLossLoggerCallback,
+    WandbCallback,
+)
 from nemo.utils import logging
 from nemo.utils.lr_policies import get_lr_policy
 
@@ -150,6 +157,12 @@ parser.add_argument(
 parser.add_argument(
     "--checkpoints_to_keep", default=1, type=int, help="The number of last checkpoints to keep",
 )
+parser.add_argument(
+    "--wandb_project", default=None, type=str, help='Project name for tracking with Weights and Biases'
+)
+parser.add_argument(
+    "--wandb_exp_name", default=None, type=str, help='Experiment name for tracking with Weights and Biases'
+)
 
 ### GPT-2 args
 parser.add_argument("--vocab_size", default=-1, type=int, help="Vocabulary size")
@@ -241,10 +254,7 @@ add_special_tokens_(gpt2_model, gpt2_tokenizer)
 args.max_seq_length = min(args.max_seq_length, gpt2_tokenizer.max_len)
 schema_config["MAX_SEQ_LENGTH"] = args.max_seq_length
 # Run SGD preprocessor to generate and store schema embeddings
-schema_preprocessor = SchemaPreprocessor(
-    data_dir=args.data_dir,
-    schema_config=schema_config
-)
+schema_preprocessor = SchemaPreprocessor(data_dir=args.data_dir, schema_config=schema_config)
 
 
 dialogues_processor = data_processor.SGDDataProcessor(
@@ -257,6 +267,7 @@ dialogues_processor = data_processor.SGDDataProcessor(
     pm_max_seq_length=args.max_seq_length,
     mode='PM',
 )
+
 
 def create_pipeline(dataset_split):
     datalayer = nemo_nlp.nm.data_layers.GPT2DataLayer(
@@ -294,12 +305,27 @@ ckpt_callback = CheckpointCallback(
     folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq, checkpoints_to_keep=1
 )
 
+callbacks = [train_callback, ckpt_callback]
+
+if args.wandb_project is not None:
+    wand_callback = WandbCallback(
+        train_tensors=[train_loss],
+        wandb_name=args.wandb_exp_name,
+        wandb_project=args.wandb_project,
+        update_freq=args.loss_log_freq if args.loss_log_freq > 0 else steps_per_epoch,
+        args=args,
+    )
+    callbacks.append(wand_callback)
+
 eval_callback = EvaluatorCallback(
     eval_tensors=[eval_loss],
     user_iter_callback=eval_iter_callback,
     user_epochs_done_callback=eval_epochs_done_callback,
     eval_step=steps_per_epoch,
+    wandb_name=args.wandb_exp_name,
+    wandb_project=args.wandb_project,
 )
+callbacks.append(eval_callback)
 
 lr_policy_fn = get_lr_policy(
     args.lr_policy, total_steps=args.num_epochs * steps_per_epoch, warmup_ratio=args.lr_warmup_proportion
@@ -307,7 +333,7 @@ lr_policy_fn = get_lr_policy(
 
 nf.train(
     tensors_to_optimize=[train_loss],
-    callbacks=[train_callback, ckpt_callback, eval_callback],
+    callbacks=callbacks,
     lr_policy=lr_policy_fn,
     optimizer=args.optimizer_kind,
     optimization_params={
@@ -318,4 +344,3 @@ nf.train(
         "grad_norm_clip": args.grad_norm_clip,
     },
 )
-

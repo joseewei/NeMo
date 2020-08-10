@@ -19,8 +19,9 @@ This file contains code artifacts adapted from the original implementation:
 https://github.com/google-research/google-research/blob/master/schema_guided_dst/baseline/data_utils.py
 """
 
-from nemo.utils import logging
 import re
+
+from nemo.utils import logging
 
 __all__ = ['InputExamplePM']
 
@@ -102,7 +103,7 @@ class InputExamplePM(object):
         self.use_external_service = False
         self.service_results = None
         self.service_call = None
-        
+
         system_acts = ''
         for service in system_frames_next:
             # add DB/service to lexilize the response
@@ -129,7 +130,7 @@ class InputExamplePM(object):
             query_db = 'query true, '
         delex_system_acts = self.delexilize(system_acts, system_frames_next, user_frames)
         self.delex_system_acts = action_start + ' ' + query_db + delex_system_acts + ' ' + action_end
-        
+
         # add delex system acts to token_ids and token_type_ids
         delex_system_acts_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(self.delex_system_acts))
         self.token_ids += delex_system_acts_tokens_ids
@@ -145,7 +146,7 @@ class InputExamplePM(object):
             logging.info('digits remaining in response: %s', self.delex_response)
             # with open('/home/ebakhturina/Desktop/responses_with_digits', 'a') as f:
             #     f.write(self.delex_response + '\n')
-       
+
         # add delex system response to token_ids and token_type_ids
         # create labels for lm task
         delex_response_tokens_ids = tokenizer.tokens_to_ids(
@@ -197,7 +198,7 @@ class InputExamplePM(object):
             I see that at 71 Saint Peter there is a good American restaurant which is in San Jose.
             I see that at [value_restaurant_name] there is a good [value_cuisine] restaurant which is in [value_city].
         """
-            
+
         found_values = []
         # delex slot values found in actions
         for service in system_frame.values():
@@ -217,7 +218,7 @@ class InputExamplePM(object):
                     for slot_name, slot_value in service_result.items():
                         found_values.append((slot_value, slot_name, len(slot_value)))
                         # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + slot_name + '] ')
-        
+
         # delex slot_values from user state
         for service in user_frames.values():
             if 'state' in service:
@@ -226,8 +227,8 @@ class InputExamplePM(object):
                         found_values.append((slot_value, slot_name, len(slot_value)))
                         # uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
 
-        found_values = sorted(found_values, key = lambda x: x[2], reverse=True)
-        
+        found_values = sorted(found_values, key=lambda x: x[2], reverse=True)
+
         for match in found_values:
             slot_value, slot_name, _ = match
             uttr = uttr.replace(slot_value, '[value_' + slot_name + ']')
@@ -264,7 +265,7 @@ class InputExamplePM(object):
     #                     for slot_name, slot_value in service_result.items():
     #                         found_values.append(slot_value, slot_name, len(slot_value))
     #                         # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + slot_name + '] ')
-            
+
     #         # delex slot_values from user state
     #         for service in user_frame.values():
     #             if 'state' in service:
@@ -272,9 +273,9 @@ class InputExamplePM(object):
     #                     for slot_value in slot_values:
     #                         found_values.append(slot_value, slot_name, len(slot_value))
     #                         # uttr = uttr.replace(' ' + slot_value + ' ', ' [value_' + slot_name + '] ')
-            
+
     #         return uttr
-        
+
     #     # separate all punctuation and words with space
     #     uttr = _delex(uttr, system_frame, user_frames)
     #     uttr = uttr.replace('. ', ' . ').replace(', ', ' , ').replace('? ', ' ? ').replace('! ', ' ! ')

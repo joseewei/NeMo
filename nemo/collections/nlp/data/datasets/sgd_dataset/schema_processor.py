@@ -108,7 +108,7 @@ class SchemaPreprocessor:
                     '_'.join(self.datasets), mode, tokenizer_type, vocab_size
                 ),
             )
-            
+
             if not os.path.exists(self.schema_embedding_file) or overwrite_schema_emb_files:
                 # Generate the schema embeddings if needed or specified
                 logging.info(f"Start generating the schema embeddings.")
@@ -123,7 +123,9 @@ class SchemaPreprocessor:
 
                 input_ids, input_mask, input_type_ids = emb_datalayer()
 
-                hidden_states = bert_model(input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask)
+                hidden_states = bert_model(
+                    input_ids=input_ids, token_type_ids=input_type_ids, attention_mask=input_mask
+                )
                 evaluated_tensors = nf.infer(tensors=[hidden_states], checkpoint_dir=bert_ckpt_dir)
 
                 master_device = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0

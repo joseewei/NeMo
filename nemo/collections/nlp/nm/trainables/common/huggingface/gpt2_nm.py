@@ -123,9 +123,7 @@ class GPT2LM(TrainableNM):
         labels=None,
         # use_cache=True,
     ):
-        return self.model(input_ids=input_ids, token_type_ids=token_type_ids, labels=labels)[
-            0
-        ]  # token_type_ids=token_type_ids, attention_mask=attention_mask)[0]
+        return self.model(input_ids=input_ids, token_type_ids=token_type_ids, labels=labels)[0]
 
     def generate(self):
         pass

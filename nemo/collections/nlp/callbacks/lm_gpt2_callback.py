@@ -36,7 +36,9 @@ def eval_epochs_done_callback(global_vars):
     if 'loss' in global_vars:
         loss = np.mean(global_vars["loss"])
         logging.info("Dev loss: {0}".format(np.round(loss, 3)))
-        logging.info("Dev perplexity: {0}".format(np.round(np.exp(loss), 3)))
+        perplexity = np.exp(loss)
+        logging.info("Dev perplexity: {0}".format(np.round(perplexity, 3)))
         global_vars["loss"] = []
         res["Dev loss"] = loss
+        res["Dev perplexity"] = perplexity
     return res
