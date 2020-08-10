@@ -163,7 +163,8 @@ parser.add_argument(
 parser.add_argument(
     "--wandb_exp_name", default=None, type=str, help='Experiment name for tracking with Weights and Biases'
 )
-
+parser.add_argument("--gpt2_checkpoint", default=None, type=str, help='Path to pretrained GPT-2 checkpoint')
+parser.add_argument("--mode", type=str, choices=['train', 'infer'], default='train')
 ### GPT-2 args
 parser.add_argument("--vocab_size", default=-1, type=int, help="Vocabulary size")
 
@@ -214,7 +215,8 @@ ATTR_TO_SPECIAL_TOKEN = {
         '<|system|>',
         "<|belief|>",
         "<|endofbelief|>",
-        "<|action|>" "<|endofaction|>",
+        "<|action|>",
+        "<|endofaction|>",
         "<|response|>",
         "<|endofresponse|>",
     ],
@@ -251,6 +253,10 @@ args.vocab_size = gpt2_tokenizer.vocab_size
 logging.info(f'Vocab size: {args.vocab_size}')
 add_special_tokens_(gpt2_model, gpt2_tokenizer)
 
+if args.gpt2_checkpoint:
+    gpt2_model.restore_from(args.gpt2_checkpoint)
+    logging.info(f'GPT2 was restored from {args.gpt2_checkpoint}')
+
 args.max_seq_length = min(args.max_seq_length, gpt2_tokenizer.max_len)
 schema_config["MAX_SEQ_LENGTH"] = args.max_seq_length
 # Run SGD preprocessor to generate and store schema embeddings
@@ -283,11 +289,11 @@ def create_pipeline(dataset_split):
 
     data = datalayer()
     loss = gpt2_model(input_ids=data.token_ids, token_type_ids=data.token_type_ids, labels=data.labels_lm)
-    return loss, steps_per_epoch
+    return datalayer, loss, steps_per_epoch
 
 
-train_loss, steps_per_epoch = create_pipeline('train')
-eval_loss, eval_steps_per_epoch = create_pipeline('dev')
+_, train_loss, steps_per_epoch = create_pipeline('train')
+eval_datalayer, eval_loss, eval_steps_per_epoch = create_pipeline('dev')
 
 
 logging.info("steps per epoch: %s", steps_per_epoch)
@@ -331,16 +337,35 @@ lr_policy_fn = get_lr_policy(
     args.lr_policy, total_steps=args.num_epochs * steps_per_epoch, warmup_ratio=args.lr_warmup_proportion
 )
 
-nf.train(
-    tensors_to_optimize=[train_loss],
-    callbacks=callbacks,
-    lr_policy=lr_policy_fn,
-    optimizer=args.optimizer_kind,
-    optimization_params={
-        "num_epochs": args.num_epochs,
-        "lr": args.learning_rate,
-        "eps": 1e-6,
-        "weight_decay": args.weight_decay,
-        "grad_norm_clip": args.grad_norm_clip,
-    },
-)
+
+if args.mode == 'train':
+    nf.train(
+        tensors_to_optimize=[train_loss],
+        callbacks=callbacks,
+        lr_policy=lr_policy_fn,
+        optimizer=args.optimizer_kind,
+        optimization_params={
+            "num_epochs": args.num_epochs,
+            "lr": args.learning_rate,
+            "eps": 1e-6,
+            "weight_decay": args.weight_decay,
+            "grad_norm_clip": args.grad_norm_clip,
+        },
+    )
+else:
+    logging.info('Doing inference')
+    dev_size = len(eval_datalayer._dataset)
+
+    action_start_token_id = gpt2_tokenizer.tokens_to_ids("<|action|>")
+    sample_id = 0
+    sample = eval_datalayer._dataset[sample_id]
+    token_ids = sample['token_ids']
+
+    # delete everything passed start action token - so that the model generates both action and response
+    print(token_ids)
+    logging.info(gpt2_tokenizer.tokens_to_text(gpt2_tokenizer.ids_to_tokens(token_ids)))
+
+    token_ids = token_ids[: token_ids.index(action_start_token_id)]
+    logging.info(gpt2_tokenizer.tokens_to_text(gpt2_tokenizer.ids_to_tokens(token_ids)))
+
+    gpt2_model.generate(input_ids=token_ids)

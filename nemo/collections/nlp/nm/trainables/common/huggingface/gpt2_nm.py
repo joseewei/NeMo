@@ -41,7 +41,7 @@ class GPT2LM(TrainableNM):
 
         return {
             "input_ids": NeuralType(('B', 'T'), ChannelType()),
-            "labels": NeuralType(('B', 'T'), LabelsType()),
+            "labels": NeuralType(('B', 'T'), LabelsType(), optional=True),
             "token_type_ids": NeuralType(('B', 'T'), ChannelType(), optional=True),
             "attention_mask": NeuralType(('B', 'T'), ChannelType(), optional=True),
         }
@@ -125,8 +125,8 @@ class GPT2LM(TrainableNM):
     ):
         return self.model(input_ids=input_ids, token_type_ids=token_type_ids, labels=labels)[0]
 
-    def generate(self):
-        pass
+    def generate(self, input_ids, token_type_ids=None):
+        return self.model.generate(input_ids=input_ids, token_type_ids=token_type_ids)
 
 
 class GPT2(TrainableNM):
