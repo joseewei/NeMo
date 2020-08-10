@@ -327,7 +327,7 @@ eval_callback = EvaluatorCallback(
     eval_tensors=[eval_loss],
     user_iter_callback=eval_iter_callback,
     user_epochs_done_callback=eval_epochs_done_callback,
-    eval_step=steps_per_epoch,
+    eval_step=args.eval_step_freq,
     wandb_name=args.wandb_exp_name,
     wandb_project=args.wandb_project,
 )
