@@ -131,8 +131,14 @@ class InputExamplePM(object):
         delex_system_acts = self.delexilize(system_acts, system_frames_next, user_frames)
         self.delex_system_acts = action_start + ' ' + query_db + delex_system_acts + ' ' + action_end
 
-        # add delex system acts to token_ids and token_type_ids
         delex_system_acts_tokens_ids = tokenizer.tokens_to_ids(tokenizer.text_to_tokens(self.delex_system_acts))
+
+        # create labels for lm task
+        self.ignore_index = -100
+        self.labels_lm = [self.ignore_index] * len(self.token_ids)
+        self.labels_lm += [self.ignore_index] + delex_system_acts_tokens_ids[1:]
+
+        # add delex system acts to token_ids and token_type_ids
         self.token_ids += delex_system_acts_tokens_ids
         self.token_type_ids += len(delex_system_acts_tokens_ids) * [tokenizer.tokens_to_ids(action_start)]
 
@@ -144,17 +150,15 @@ class InputExamplePM(object):
         digits_in_response = [int(d) for d in re.findall(r'\d+', self.delex_response)]
         if len(digits_in_response) > 0:
             logging.info('digits remaining in response: %s', self.delex_response)
-            # with open('/home/ebakhturina/Desktop/responses_with_digits', 'a') as f:
-            #     f.write(self.delex_response + '\n')
 
         # add delex system response to token_ids and token_type_ids
-        # create labels for lm task
         delex_response_tokens_ids = tokenizer.tokens_to_ids(
             tokenizer.text_to_tokens(self.delex_response + tokenizer.eos_token)
         )
-        self.ignore_index = -100
-        self.labels_lm = [self.ignore_index] * len(self.token_ids)
-        self.labels_lm += [self.ignore_index] + delex_response_tokens_ids[1:]
+
+        # add system response to labels for lm
+        self.labels_lm += delex_response_tokens_ids
+
         self.token_ids += delex_response_tokens_ids
         self.token_type_ids += len(delex_response_tokens_ids) * [tokenizer.tokens_to_ids(response_start)]
 

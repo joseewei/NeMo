@@ -18,13 +18,7 @@
 
 from typing import List, Optional
 
-from transformers import (
-    GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-    GPT2Config,
-    GPT2DoubleHeadsModel,
-    GPT2LMHeadModel,
-    GPT2Model,
-)
+from transformers import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST, GPT2LMHeadModel, GPT2Model
 
 from nemo.backends.pytorch.nm import TrainableNM
 from nemo.core.neural_modules import PretrainedModelInfo
@@ -126,7 +120,9 @@ class GPT2LM(TrainableNM):
         return self.model(input_ids=input_ids, token_type_ids=token_type_ids, labels=labels)[0]
 
     def generate(self, input_ids, token_type_ids=None):
-        return self.model.generate(input_ids=input_ids, token_type_ids=token_type_ids)
+        return self.model.generate(
+            input_ids=input_ids, token_type_ids=token_type_ids, max_length=600, eos_token_id=50269
+        )
 
 
 class GPT2(TrainableNM):

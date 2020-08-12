@@ -15,6 +15,7 @@
 # limitations under the License.
 # =============================================================================
 
+
 '''
 This file contains code artifacts adapted from the original implementation:
 https://github.com/google-research/google-research/blob/master/schema_guided_dst/baseline/train_and_predict.py
@@ -356,16 +357,30 @@ else:
     logging.info('Doing inference')
     dev_size = len(eval_datalayer._dataset)
 
-    action_start_token_id = gpt2_tokenizer.tokens_to_ids("<|action|>")
     sample_id = 0
     sample = eval_datalayer._dataset[sample_id]
     token_ids = sample['token_ids']
+    labels_lm = sample['labels_lm']
+    import numpy as np
+
+    labels_lm = np.array(labels_lm)
+    labels = labels_lm[labels_lm != -100]
+    labels_text = gpt2_tokenizer.ids_to_text(labels)
+    labels_ids = gpt2_tokenizer.text_to_ids(labels_text)
+    labels_tokens = gpt2_tokenizer.text_to_tokens(labels_text)
 
     # delete everything passed start action token - so that the model generates both action and response
-    print(token_ids)
     logging.info(gpt2_tokenizer.tokens_to_text(gpt2_tokenizer.ids_to_tokens(token_ids)))
+    prompt_ids = np.array(token_ids)[labels_lm == -100]
+    logging.info(gpt2_tokenizer.ids_to_text(prompt_ids))
 
-    token_ids = token_ids[: token_ids.index(action_start_token_id)]
-    logging.info(gpt2_tokenizer.tokens_to_text(gpt2_tokenizer.ids_to_tokens(token_ids)))
+    token_type_ids = sample['token_type_ids'][: prompt_ids.shape[0]]
+    import torch
 
-    gpt2_model.generate(input_ids=token_ids)
+    prompt = torch.tensor(prompt_ids, dtype=torch.long, device=gpt2_model._device).unsqueeze(0)
+    token_type_ids = torch.tensor(token_type_ids, dtype=torch.long, device=gpt2_model._device).unsqueeze(0)
+    generated_text = gpt2_model.generate(input_ids=prompt, token_type_ids=token_type_ids)
+    logging.info(f'Generated ids:', generated_text)
+    print(gpt2_tokenizer.ids_to_text(prompt_ids))
+    print(gpt2_tokenizer.ids_to_text(generated_text[0]))
+    print()
