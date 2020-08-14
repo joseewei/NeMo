@@ -119,9 +119,14 @@ class GPT2LM(TrainableNM):
     ):
         return self.model(input_ids=input_ids, token_type_ids=token_type_ids, labels=labels)[0]
 
-    def generate(self, input_ids, token_type_ids=None):
+    def generate(self, input_ids, token_type_ids=None, decoder_start_token_id=None, attention_mask=None):
         return self.model.generate(
-            input_ids=input_ids, token_type_ids=token_type_ids, max_length=600, eos_token_id=50269
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            decoder_start_token_id=decoder_start_token_id,
+            attention_mask=attention_mask,
+            max_length=600,
+            eos_token_id=50258,
         )
 
 

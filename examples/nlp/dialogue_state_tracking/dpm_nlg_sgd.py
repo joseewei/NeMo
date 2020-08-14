@@ -357,30 +357,90 @@ else:
     logging.info('Doing inference')
     dev_size = len(eval_datalayer._dataset)
 
-    sample_id = 0
-    sample = eval_datalayer._dataset[sample_id]
-    token_ids = sample['token_ids']
-    labels_lm = sample['labels_lm']
-    import numpy as np
-
-    labels_lm = np.array(labels_lm)
-    labels = labels_lm[labels_lm != -100]
-    labels_text = gpt2_tokenizer.ids_to_text(labels)
-    labels_ids = gpt2_tokenizer.text_to_ids(labels_text)
-    labels_tokens = gpt2_tokenizer.text_to_tokens(labels_text)
-
-    # delete everything passed start action token - so that the model generates both action and response
-    logging.info(gpt2_tokenizer.tokens_to_text(gpt2_tokenizer.ids_to_tokens(token_ids)))
-    prompt_ids = np.array(token_ids)[labels_lm == -100]
-    logging.info(gpt2_tokenizer.ids_to_text(prompt_ids))
-
-    token_type_ids = sample['token_type_ids'][: prompt_ids.shape[0]]
     import torch
+    import numpy as np
+    from transformers.tokenization_bert import BasicTokenizer
+    from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 
-    prompt = torch.tensor(prompt_ids, dtype=torch.long, device=gpt2_model._device).unsqueeze(0)
-    token_type_ids = torch.tensor(token_type_ids, dtype=torch.long, device=gpt2_model._device).unsqueeze(0)
-    generated_text = gpt2_model.generate(input_ids=prompt, token_type_ids=token_type_ids)
-    logging.info(f'Generated ids:', generated_text)
-    print(gpt2_tokenizer.ids_to_text(prompt_ids))
-    print(gpt2_tokenizer.ids_to_text(generated_text[0]))
+    def _add_space_before_after_special_tok(special_tokens, text):
+        for special_tok in special_tokens:
+            text = text.replace(special_tok, ' ' + special_tok + ' ')
+        return text
+
+    refs = []
+    hyps = []
+    bt = BasicTokenizer(never_split=SPECIAL_TOKENS)
+
+    batch_size = 60
+    prompt_lens = []
+    prompts = []
+    token_type_ids_pr = []
+
+    k = 0
+    batch_id = 1
+    for idx, sample in enumerate(eval_datalayer._dataset):
+        token_ids = sample['token_ids']
+        labels_lm = sample['labels_lm']
+
+        labels_lm = np.array(labels_lm)
+        labels = labels_lm[labels_lm != -100]
+        labels_text = gpt2_tokenizer.ids_to_text(labels)
+        labels_ids = gpt2_tokenizer.text_to_ids(labels_text)
+        labels_tokens = gpt2_tokenizer.text_to_tokens(labels_text)
+
+        # delete everything passed start action token - so that the model generates both action and response
+        prompt_ids = np.array(token_ids)[labels_lm == -100]
+        logging.debug(f'Prompt:', gpt2_tokenizer.ids_to_text(prompt_ids))
+        token_type_ids = sample['token_type_ids'][: prompt_ids.shape[0]]
+
+        prompt_len = len(prompt_ids)
+        prompt_lens.append(prompt_len)
+        ref = gpt2_tokenizer.ids_to_text(token_ids[prompt_len:])
+        ref = _add_space_before_after_special_tok(SPECIAL_TOKENS, ref)
+        # use basic tokenizer: split by space, split punctuation, don't tokenizer special tokens
+        refs.append([bt.tokenize(ref)])
+
+        prompts.append(prompt_ids)
+        token_type_ids_pr.append(token_type_ids)
+
+        is_last = idx + 1 == len(eval_datalayer)
+        if idx == batch_size * batch_id - 1 or is_last:
+            max_prompt_len = max(prompt_lens)
+
+            decoder_start_token_ids = []
+            attention_masks = []
+            # pad from the left
+            for i, prompt in enumerate(prompts):
+                decoder_start_token_ids.append(prompt[0])
+                padding = np.array([gpt2_tokenizer.pad_id] * (max_prompt_len - len(prompt)))
+                prompts[i] = np.append(padding, prompt)
+                token_type_ids_pr[i] = np.append(padding, token_type_ids_pr[i])
+                attention_mask = prompts[i] == gpt2_tokenizer.pad_id
+                attention_masks.append(attention_mask)
+
+            prompts = torch.tensor(prompts, dtype=torch.long, device=gpt2_model._device)
+            token_type_ids = torch.tensor(token_type_ids_pr, dtype=torch.long, device=gpt2_model._device)
+            attention_masks = torch.tensor(attention_masks, dtype=torch.long, device=gpt2_model._device)
+            generated_text = gpt2_model.generate(
+                input_ids=prompts,
+                token_type_ids=token_type_ids,
+                decoder_start_token_id=decoder_start_token_ids,
+                attention_mask=attention_masks,
+            )
+
+            all_hyp = []
+            for i, gen_text in enumerate(generated_text):
+                text = gpt2_tokenizer.ids_to_text(gen_text[prompt_lens[i] :])
+                text = bt.tokenize(_add_space_before_after_special_tok(SPECIAL_TOKENS, text))
+                all_hyp.append(text)
+            hyps.extend(all_hyp)
+
+            prompts = []
+            token_type_ids_pr = []
+            prompt_len = []
+            batch_id += 1
+
+    assert len(hyps) == len(eval_datalayer)
+    bleu = round(corpus_bleu(refs, hyps) * 100, 2)
+    print(f'BLEU: {bleu}')
     print()
