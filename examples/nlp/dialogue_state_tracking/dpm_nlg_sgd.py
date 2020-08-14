@@ -371,7 +371,7 @@ else:
     hyps = []
     bt = BasicTokenizer(never_split=SPECIAL_TOKENS)
 
-    batch_size = 60
+    batch_size = 1
     prompt_lens = []
     prompts = []
     token_type_ids_pr = []
@@ -415,7 +415,7 @@ else:
                 padding = np.array([gpt2_tokenizer.pad_id] * (max_prompt_len - len(prompt)))
                 prompts[i] = np.append(padding, prompt)
                 token_type_ids_pr[i] = np.append(padding, token_type_ids_pr[i])
-                attention_mask = prompts[i] == gpt2_tokenizer.pad_id
+                attention_mask = prompts[i] != gpt2_tokenizer.pad_id
                 attention_masks.append(attention_mask)
 
             prompts = torch.tensor(prompts, dtype=torch.long, device=gpt2_model._device)
@@ -426,7 +426,19 @@ else:
                 token_type_ids=token_type_ids,
                 decoder_start_token_id=decoder_start_token_ids,
                 attention_mask=attention_masks,
+                pad_token_id=gpt2_tokenizer.pad_id,
             )
+
+            """
+            generated_text = gpt2_model.generate(
+                input_ids=prompts,
+                token_type_ids=token_type_ids,
+                decoder_start_token_id=decoder_start_token_ids,
+                attention_mask=attention_masks,
+                pad_token_id=gpt2_tokenizer.pad_id
+            )
+            BLEU 12.76 with bs=1
+            """
 
             all_hyp = []
             for i, gen_text in enumerate(generated_text):
