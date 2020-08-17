@@ -25,6 +25,12 @@ import argparse
 import math
 import os
 
+import numpy as np
+import torch
+from multiwoz_evaluate import score
+from nltk.translate.bleu_score import corpus_bleu
+from transformers.tokenization_bert import BasicTokenizer
+
 import nemo.collections.nlp as nemo_nlp
 import nemo.collections.nlp.data.datasets.sgd_dataset.data_processor as data_processor
 from nemo.collections.nlp.callbacks.lm_gpt2_callback import eval_epochs_done_callback, eval_iter_callback
@@ -357,24 +363,48 @@ else:
     logging.info('Doing inference')
     dev_size = len(eval_datalayer._dataset)
 
-    import torch
-    import numpy as np
-    from transformers.tokenization_bert import BasicTokenizer
-    from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
-
     def _add_space_before_after_special_tok(special_tokens, text):
         for special_tok in special_tokens:
             text = text.replace(special_tok, ' ' + special_tok + ' ')
         return text
 
-    refs = []
-    hyps = []
+    def extract_action_respose(text):
+        """
+        text: list of str
+        Returns:
+            actions (list of str)
+            response (list of str)
+        """
+        # to make sure phrases like 'restaurant_name' are treated as a single work for BLEU calculation
+        text = ' '.join(text).replace(' _ ', '_').replace('[ ', '[').replace(' ]', ']').split()
+        actions = None
+        try:
+            response_start_idx = text.index('<|response|>')
+            # -1 to remove <|endofaction|> token
+            actions = text[: response_start_idx - 1]
+
+            response_end_idx = text.index('<|endofresponse|>')
+            response = text[response_start_idx + 1 : response_end_idx]
+        except:
+            print(text)
+            if actions is None:
+                actions = text
+            response = text
+        return actions, response
+
+    # def get_err(refs_actions, hyps_responses):
+
     bt = BasicTokenizer(never_split=SPECIAL_TOKENS)
+    refs_responses = []
+    refs_actions = []
+    hyps_responses = []
+    hyps_actions = []
 
     batch_size = 1
-    prompt_lens = []
+
     prompts = []
     token_type_ids_pr = []
+    prompt_lens = []
 
     k = 0
     batch_id = 1
@@ -390,15 +420,19 @@ else:
 
         # delete everything passed start action token - so that the model generates both action and response
         prompt_ids = np.array(token_ids)[labels_lm == -100]
-        logging.debug(f'Prompt:', gpt2_tokenizer.ids_to_text(prompt_ids))
+        logging.debug(f'Prompt: {gpt2_tokenizer.ids_to_text(prompt_ids)}')
         token_type_ids = sample['token_type_ids'][: prompt_ids.shape[0]]
-
         prompt_len = len(prompt_ids)
         prompt_lens.append(prompt_len)
+
         ref = gpt2_tokenizer.ids_to_text(token_ids[prompt_len:])
         ref = _add_space_before_after_special_tok(SPECIAL_TOKENS, ref)
         # use basic tokenizer: split by space, split punctuation, don't tokenizer special tokens
-        refs.append([bt.tokenize(ref)])
+        ref = bt.tokenize(ref)
+
+        ref_actions, ref_response = extract_action_respose(ref)
+        refs_actions.append([ref_actions])
+        refs_responses.append([ref_response])
 
         prompts.append(prompt_ids)
         token_type_ids_pr.append(token_type_ids)
@@ -409,27 +443,36 @@ else:
 
             decoder_start_token_ids = []
             attention_masks = []
-            # pad from the left
-            for i, prompt in enumerate(prompts):
-                decoder_start_token_ids.append(prompt[0])
-                padding = np.array([gpt2_tokenizer.pad_id] * (max_prompt_len - len(prompt)))
-                prompts[i] = np.append(padding, prompt)
-                token_type_ids_pr[i] = np.append(padding, token_type_ids_pr[i])
-                attention_mask = prompts[i] != gpt2_tokenizer.pad_id
-                attention_masks.append(attention_mask)
+
+            # # pad from the left
+            # for i, prompt in enumerate(prompts):
+            #     decoder_start_token_ids.append(prompt[0])
+            #     padding = np.array([gpt2_tokenizer.pad_id] * (max_prompt_len - len(prompt)))
+            #     prompts[i] = np.append(padding, prompt)
+            #     token_type_ids_pr[i] = np.append(padding, token_type_ids_pr[i])
+            #     attention_mask = prompts[i] != gpt2_tokenizer.pad_id
+            #     attention_masks.append(attention_mask)
 
             prompts = torch.tensor(prompts, dtype=torch.long, device=gpt2_model._device)
-            token_type_ids = torch.tensor(token_type_ids_pr, dtype=torch.long, device=gpt2_model._device)
-            attention_masks = torch.tensor(attention_masks, dtype=torch.long, device=gpt2_model._device)
             generated_text = gpt2_model.generate(
                 input_ids=prompts,
-                token_type_ids=token_type_ids,
-                decoder_start_token_id=decoder_start_token_ids,
-                attention_mask=attention_masks,
+                # token_type_ids=token_type_ids,
+                # decoder_start_token_id=decoder_start_token_ids,
+                # attention_mask=attention_masks,
                 pad_token_id=gpt2_tokenizer.pad_id,
             )
 
             """
+            BLEU: 52.95 for bs 1 with 
+            generated_text = gpt2_model.generate(
+                input_ids=prompts)
+            """
+
+            """
+            # doesn't fully supported by HF
+            token_type_ids = torch.tensor(token_type_ids_pr, dtype=torch.long, device=gpt2_model._device)
+            attention_masks = torch.tensor(attention_masks, dtype=torch.long, device=gpt2_model._device)
+            
             generated_text = gpt2_model.generate(
                 input_ids=prompts,
                 token_type_ids=token_type_ids,
@@ -437,22 +480,44 @@ else:
                 attention_mask=attention_masks,
                 pad_token_id=gpt2_tokenizer.pad_id
             )
-            BLEU 12.76 with bs=1
+            BLEU 12.76 with bs=1 with padding left - TODO - padding shouldn't matter for bs=1 but still BLEU is lower
+            than without padding
             """
 
-            all_hyp = []
             for i, gen_text in enumerate(generated_text):
                 text = gpt2_tokenizer.ids_to_text(gen_text[prompt_lens[i] :])
                 text = bt.tokenize(_add_space_before_after_special_tok(SPECIAL_TOKENS, text))
-                all_hyp.append(text)
-            hyps.extend(all_hyp)
+                hyp_actions, hyp_response = extract_action_respose(text)
+                hyps_actions.append(hyp_actions)
+                hyps_responses.append(hyp_response)
 
             prompts = []
             token_type_ids_pr = []
-            prompt_len = []
+            prompt_lens = []
             batch_id += 1
 
-    assert len(hyps) == len(eval_datalayer)
-    bleu = round(corpus_bleu(refs, hyps) * 100, 2)
+    assert len(hyps_responses) == len(eval_datalayer)
+    bleu = round(corpus_bleu(refs_responses, hyps_responses) * 100, 2)
     print(f'BLEU: {bleu}')
     print()
+
+    bleu_multiwoz_eval = round(score(hyps_responses, refs_responses) * 100, 2)
+    print(f'MultiWOZ eval:', bleu_multiwoz_eval)
+
+    refs = [' '.join(r[0]) for r in refs_responses]
+    hyps = [' '.join(h) for h in hyps_responses]
+
+    with open(os.path.join(args.work_dir, 'generated_text.txt'), 'w') as f:
+        f.write('BLEU:' + str(bleu) + '\n')
+        f.write('REF:\n')
+        f.write('\n'.join(refs))
+        f.write('\n')
+        f.write('GENERATED TEXT:\n')
+        f.write('\n'.join(hyps))
+
+    with open(os.path.join(args.work_dir, 'ref_hyp_comparison.txt'), 'w') as f:
+        f.write('BLEU:' + str(bleu) + '\n')
+        assert len(refs) == len(hyps)
+        for i in range(len(refs)):
+            f.write('REF:' + refs[i] + '\n')
+            f.write('GEN:' + hyps[i] + '\n\n')
