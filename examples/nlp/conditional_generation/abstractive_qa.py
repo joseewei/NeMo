@@ -35,19 +35,19 @@ def full_test():
     _ = qa_s2s_model.eval()
 
     # prepare IR index
-    if not os.path.isfile('wiki40b_passages_reps_32_l-8_h-768_b-512-512.dat'):
+    if not os.path.isfile('marvel_passages_reps_32_l-8_h-768_b-512-512.dat'):
         print("*** Generating dense index ***")
         make_qa_dense_index(
             qar_model,
             qar_tokenizer,
             wiki40b_snippets,
             device='cuda:0',
-            index_name='wiki40b_passages_reps_32_l-8_h-768_b-512-512.dat',
+            index_name='marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
         )
 
     faiss_res = faiss.StandardGpuResources()
     wiki40b_passage_reps = np.memmap(
-        'wiki40b_passages_reps_32_l-8_h-768_b-512-512.dat',
+        'marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
         dtype='float32',
         mode='r',
         shape=(wiki40b_snippets.num_rows, 128),
