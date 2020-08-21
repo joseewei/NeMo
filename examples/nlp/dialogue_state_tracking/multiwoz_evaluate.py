@@ -3,6 +3,7 @@ from collections import Counter
 
 from nltk.util import ngrams
 
+__all__ = ['score']
 
 ## BLEU score calculator via GentScorer interface
 ## it calculates the BLEU-4 by taking the entire corpus in

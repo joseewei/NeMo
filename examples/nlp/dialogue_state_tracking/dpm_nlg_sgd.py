@@ -24,6 +24,8 @@ https://github.com/google-research/google-research/blob/master/schema_guided_dst
 import argparse
 import math
 import os
+import re
+import time
 
 import numpy as np
 import torch
@@ -361,6 +363,7 @@ if args.mode == 'train':
     )
 else:
     logging.info('Doing inference')
+    start_time = time.time()
     dev_size = len(eval_datalayer._dataset)
 
     def _add_space_before_after_special_tok(special_tokens, text):
@@ -386,15 +389,41 @@ else:
             response_end_idx = text.index('<|endofresponse|>')
             response = text[response_start_idx + 1 : response_end_idx]
         except:
-            print(text)
+            # TODO check examples that fail on the regular processing: nlg doesn't generate all special tokens
             if actions is None:
                 actions = text
             response = text
         return actions, response
 
-    # def get_err(refs_actions, hyps_responses):
+    class ERRScorer:
+        """
+        ERR = (p + q) / M, where
+            M - total number of slots in the dialog act
+            p - the number of missing slots,
+            q - the number of redundant slots in the given realisation
+        """
+
+        def __init__(self):
+            self.total = 0
+            self.redundant = 0
+            self.missing = 0
+
+        def score_response(self, actions, response):
+            actions = ' '.join(actions)
+            response = ' '.join(response)
+            match = r'\[[a-z]*_[a-z]*_?[a-z]+]'
+            action_slots = re.findall(match, actions)
+            response_slots = re.findall(match, response)
+
+            self.total += len(action_slots)
+            self.missing += len(set(action_slots) - set(response_slots))
+            self.redundant += len(set(response_slots) - set(action_slots))
+
+        def get_err(self):
+            return round((self.missing + self.redundant) / self.total * 100, 2)
 
     bt = BasicTokenizer(never_split=SPECIAL_TOKENS)
+    err_scorer = ERRScorer()
     refs_responses = []
     refs_actions = []
     hyps_responses = []
@@ -445,13 +474,13 @@ else:
             attention_masks = []
 
             # # pad from the left
-            # for i, prompt in enumerate(prompts):
-            #     decoder_start_token_ids.append(prompt[0])
-            #     padding = np.array([gpt2_tokenizer.pad_id] * (max_prompt_len - len(prompt)))
-            #     prompts[i] = np.append(padding, prompt)
-            #     token_type_ids_pr[i] = np.append(padding, token_type_ids_pr[i])
-            #     attention_mask = prompts[i] != gpt2_tokenizer.pad_id
-            #     attention_masks.append(attention_mask)
+            for i, prompt in enumerate(prompts):
+                decoder_start_token_ids.append(prompt[0])
+                padding = np.array([gpt2_tokenizer.pad_id] * (max_prompt_len - len(prompt)))
+                prompts[i] = np.append(padding, prompt)
+                token_type_ids_pr[i] = np.append(padding, token_type_ids_pr[i])
+                attention_mask = prompts[i] != gpt2_tokenizer.pad_id
+                attention_masks.append(attention_mask)
 
             prompts = torch.tensor(prompts, dtype=torch.long, device=gpt2_model._device)
             generated_text = gpt2_model.generate(
@@ -463,9 +492,14 @@ else:
             )
 
             """
-            BLEU: 52.95 for bs 1 with 
-            generated_text = gpt2_model.generate(
-                input_ids=prompts)
+            for bs = 1 for the single domain task
+            BLEU: 16.18
+            MultiWOZ eval: 16.21
+            BLEU: 16.18
+            ERR: 50.48
+            Evaluation complete in 1284.3471043109894
+            
+            Process finished with exit code 0
             """
 
             """
@@ -490,19 +524,23 @@ else:
                 hyp_actions, hyp_response = extract_action_respose(text)
                 hyps_actions.append(hyp_actions)
                 hyps_responses.append(hyp_response)
+                err_scorer.score_response(refs_actions[i][0], hyp_response)
 
             prompts = []
             token_type_ids_pr = []
             prompt_lens = []
+            refs_actions = []
             batch_id += 1
 
     assert len(hyps_responses) == len(eval_datalayer)
     bleu = round(corpus_bleu(refs_responses, hyps_responses) * 100, 2)
     print(f'BLEU: {bleu}')
-    print()
 
     bleu_multiwoz_eval = round(score(hyps_responses, refs_responses) * 100, 2)
     print(f'MultiWOZ eval:', bleu_multiwoz_eval)
+    print(f'BLEU: {bleu}')
+
+    print(f'ERR: {err_scorer.get_err()}')
 
     refs = [' '.join(r[0]) for r in refs_responses]
     hyps = [' '.join(h) for h in hyps_responses]
@@ -521,3 +559,5 @@ else:
         for i in range(len(refs)):
             f.write('REF:' + refs[i] + '\n')
             f.write('GEN:' + hyps[i] + '\n\n')
+
+    print(f'Evaluation complete in {time.time() - start_time}')
