@@ -571,6 +571,27 @@ def make_qa_dense_index(
             print(i, time() - st_time)
 
 
+def make_qa_dense_index_text_chunks(
+    qa_embedder,
+    tokenizer,
+    text_chunks,
+    batch_size=512,
+    max_length=128,
+    index_name="kilt_passages_reps.dat",
+    dtype="float32",
+    device="cuda:0",
+):
+    st_time = time()
+    fp = np.memmap(index_name, dtype=dtype, mode="w+", shape=(len(text_chunks), 128))
+    n_batches = math.ceil(len(text_chunks) / batch_size)
+    for i in range(n_batches):
+        passages = [p for p in text_chunks[i * batch_size : (i + 1) * batch_size]]
+        reps = embed_passages_for_retrieval(passages, tokenizer, qa_embedder, max_length, device)
+        fp[i * batch_size : (i + 1) * batch_size] = reps
+        if i % 50 == 0:
+            print(i, time() - st_time)
+
+
 def evaluate_retriever(qa_list, retriever_func, scoring_func, n_ret=10, verbose=False):
     total_retriever_time = 0.0
     total_retriever_score = 0.0
@@ -594,11 +615,15 @@ def query_qa_dense_index(
     question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10, min_length=20, device="cuda:0"
 ):
     q_rep = embed_questions_for_retrieval([question], tokenizer, qa_embedder, device=device)
-    D, I = wiki_index.search(q_rep, 2 * n_results)
+    # D, I = wiki_index.search(q_rep, 2 * n_results)
+    D, I = wiki_index.search(q_rep, n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
-    support_doc = "<P> " + " <P> ".join([p["passage_text"] for p in res_passages])
-    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
-    res_list = [res for res in res_list if len(res["passage_text"].split()) > min_length][:n_results]
+    # support_doc = "<P> " + " <P> ".join([p["passage_text"] for p in res_passages])
+    support_doc = "<P> " + " <P> ".join([p for p in res_passages])
+    res_list = [dict(text=p) for p in res_passages]
+    # res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
+    # res_list = [res for res in res_list if len(res["passage_text"].split()) > min_length][:n_results]
+    # res_list = [res for res in res_list if len(res['text'].split()) > min_length][:n_results]
     for r, sc in zip(res_list, D[0]):
         r["score"] = float(sc)
     return support_doc, res_list

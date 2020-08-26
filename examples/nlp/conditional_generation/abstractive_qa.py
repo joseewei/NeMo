@@ -12,13 +12,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import glob
+
 import nlp
 from lfqa_utils import *
 
 
+def load_data(directory, max_size):
+    # load all text files from the folder and divide content by chunks of max_size, having full sentences
+    text_chunks = []
+    for file_name in glob.glob(directory + "*.txt"):
+        with open(file_name) as f:
+            word_list = [word for line in f for word in line.split()]
+            print(f'{file_name} - {len(word_list)} words')
+            chunk = ''
+            sentence = ''
+            cnt = 0
+            snt_cnt = 0
+            for word in word_list:
+                sentence += word + ' '
+                cnt += 1
+                snt_cnt += 1
+                if word.endswith('.') or word.endswith('."') or word.endswith('?') or word.endswith('!'):
+                    chunk += sentence
+                    sentence = ''
+                    snt_cnt = 0
+                if cnt >= max_size:
+                    text_chunks.append(chunk.rstrip())
+                    chunk = ''
+                    cnt = snt_cnt
+
+    print(f'Total {len(text_chunks)} chunks')
+    for chunk in text_chunks:
+        print(f'{len(chunk.split())} - {chunk}')
+
+    return text_chunks
+
+
 def full_test():
     # eli5 = nlp.load_dataset('eli5')
-    wiki40b_snippets = nlp.load_dataset('wiki_snippets', name='wiki40b_en_100_0')['train']
+    # wiki40b_snippets = nlp.load_dataset('wiki_snippets', name='wiki40b_en_100_0')['train']
+
+    marvel_snippets = load_data("/home/vgetselevich/data/marvel/wiki/", 100)
 
     # print(eli5['test_eli5'][12345])
     # print(wiki40b_snippets[8991855])
@@ -29,42 +64,49 @@ def full_test():
     qar_model = AutoModel.from_pretrained('yjernite/retribert-base-uncased').to('cuda:0')
     _ = qar_model.eval()
 
+    # prepare IR index
+    if not os.path.isfile('marvel_passages_reps_32_l-8_h-768_b-512-512.dat'):
+        print("*** Generating dense index ***")
+        make_qa_dense_index_text_chunks(
+            qar_model,
+            qar_tokenizer,
+            # wiki40b_snippets,
+            marvel_snippets,
+            device='cuda:0',
+            index_name='marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
+        )
+
+    # load index to memory
+    faiss_res = faiss.StandardGpuResources()
+    marvel_passage_reps = np.memmap(
+        'marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
+        dtype='float32',
+        mode='r',
+        # shape=(wiki40b_snippets.num_rows, 128),
+        shape=(len(marvel_snippets), 128),
+    )
+
+    marvel_index_flat = faiss.IndexFlatIP(128)
+    marvel_gpu_index = faiss.index_cpu_to_gpu(faiss_res, 1, marvel_index_flat)
+    marvel_gpu_index.add(marvel_passage_reps)
+
     # generative model
     qa_s2s_tokenizer = AutoTokenizer.from_pretrained('yjernite/bart_eli5')
     qa_s2s_model = AutoModelForSeq2SeqLM.from_pretrained('yjernite/bart_eli5').to('cuda:0')
     _ = qa_s2s_model.eval()
 
-    # prepare IR index
-    if not os.path.isfile('marvel_passages_reps_32_l-8_h-768_b-512-512.dat'):
-        print("*** Generating dense index ***")
-        make_qa_dense_index(
-            qar_model,
-            qar_tokenizer,
-            wiki40b_snippets,
-            device='cuda:0',
-            index_name='marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
-        )
-
-    faiss_res = faiss.StandardGpuResources()
-    wiki40b_passage_reps = np.memmap(
-        'marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
-        dtype='float32',
-        mode='r',
-        shape=(wiki40b_snippets.num_rows, 128),
-    )
-
-    wiki40b_index_flat = faiss.IndexFlatIP(128)
-    wiki40b_gpu_index = faiss.index_cpu_to_gpu(faiss_res, 1, wiki40b_index_flat)
-    wiki40b_gpu_index.add(wiki40b_passage_reps)
-
     # run examples
-    questions = []
+    questions = [
+        "who is iron man?",
+        "who is Tony stark?",
+        "who directed iron man?",
+    ]
     answers = []
 
     for question in questions:
         # create support document with the dense index
         doc, res_list = query_qa_dense_index(
-            question, qar_model, qar_tokenizer, wiki40b_snippets, wiki40b_gpu_index, device='cuda:0'
+            question, qar_model, qar_tokenizer, marvel_snippets, marvel_gpu_index, n_results=5, device='cuda:0'
         )
         # concatenate question and support document into BART input
         question_doc = "question: {} context: {}".format(question, doc)
@@ -80,11 +122,14 @@ def full_test():
             max_input_length=1024,
             device="cuda:0",
         )[0]
-        questions += [question]
-        answers += [answer]
 
-    df = pd.DataFrame({'Question': questions, 'Answer': answers,})
-    df.style.set_properties(**{'text-align': 'left'})
+        print(question)
+        print(answer)
+        # questions += [question]
+        # answers += [answer]
+
+    # df = pd.DataFrame({'Question': questions, 'Answer': answers,})
+    # df.style.set_properties(**{'text-align': 'left'})
 
 
 def short_test():
@@ -143,5 +188,6 @@ def short_test():
 
 
 if __name__ == '__main__':
-    short_test()
-    # full_test()
+    # load_data("/home/vgetselevich/data/marvel/wiki/", 100)
+    # short_test()
+    full_test()
