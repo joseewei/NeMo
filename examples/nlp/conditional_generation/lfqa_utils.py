@@ -1,4 +1,5 @@
 import functools
+import glob
 import math
 import os  # noqa: F401
 from random import choice, randint
@@ -17,6 +18,37 @@ from tqdm import tqdm
 from transformers import AdamW, AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer, get_linear_schedule_with_warmup
 
 pd.set_option("display.max_colwidth", None)
+
+
+def load_data(directory, max_size):
+    # load all text files from the folder and divide content by chunks of max_size, having full sentences
+    text_chunks = []
+    for file_name in glob.glob(directory + "*.txt"):
+        with open(file_name) as f:
+            word_list = [word for line in f for word in line.split()]
+            print(f'{file_name} - {len(word_list)} words')
+            chunk = ''
+            sentence = ''
+            cnt = 0
+            snt_cnt = 0
+            for word in word_list:
+                sentence += word + ' '
+                cnt += 1
+                snt_cnt += 1
+                if word.endswith('.') or word.endswith('."') or word.endswith('?') or word.endswith('!'):
+                    chunk += sentence
+                    sentence = ''
+                    snt_cnt = 0
+                if cnt >= max_size:
+                    text_chunks.append(chunk.rstrip())
+                    chunk = ''
+                    cnt = snt_cnt
+
+    print(f'Total {len(text_chunks)} chunks')
+    for chunk in text_chunks:
+        print(f'{len(chunk.split())} - {chunk}')
+
+    return text_chunks
 
 
 ###############
@@ -191,12 +223,12 @@ def make_qa_retriever_model(model_name="google/bert_uncased_L-8_H-512_A-8", from
 def make_qa_retriever_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
     q_ls = [q for q, a in qa_list]
     a_ls = [a for q, a in qa_list]
-    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, pad_to_max_length=True)
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, truncation=True, pad_to_max_length=True)
     q_ids, q_mask = (
         torch.LongTensor(q_toks["input_ids"]).to(device),
         torch.LongTensor(q_toks["attention_mask"]).to(device),
     )
-    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=max_len, pad_to_max_length=True)
+    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=max_len, truncation=True, pad_to_max_length=True)
     a_ids, a_mask = (
         torch.LongTensor(a_toks["input_ids"]).to(device),
         torch.LongTensor(a_toks["attention_mask"]).to(device),
@@ -373,12 +405,14 @@ def make_qa_s2s_model(model_name="facebook/bart-large", from_file=None, device="
 def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=360, device="cuda:0"):
     q_ls = [q for q, a in qa_list]
     a_ls = [a for q, a in qa_list]
-    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, pad_to_max_length=True)
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, truncation=True, pad_to_max_length=True)
     q_ids, q_mask = (
         torch.LongTensor(q_toks["input_ids"]).to(device),
         torch.LongTensor(q_toks["attention_mask"]).to(device),
     )
-    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=min(max_len, max_a_len), pad_to_max_length=True)
+    a_toks = tokenizer.batch_encode_plus(
+        a_ls, max_length=min(max_len, max_a_len), truncation=True, pad_to_max_length=True
+    )
     a_ids, a_mask = (
         torch.LongTensor(a_toks["input_ids"]).to(device),
         torch.LongTensor(a_toks["attention_mask"]).to(device),
@@ -529,7 +563,7 @@ def qa_s2s_generate(
 # ELI5-trained retrieval model usage
 ###############
 def embed_passages_for_retrieval(passages, tokenizer, qa_embedder, max_length=128, device="cuda:0"):
-    a_toks = tokenizer.batch_encode_plus(passages, max_length=max_length, pad_to_max_length=True)
+    a_toks = tokenizer.batch_encode_plus(passages, max_length=max_length, truncation=True, pad_to_max_length=True)
     a_ids, a_mask = (
         torch.LongTensor(a_toks["input_ids"]).to(device),
         torch.LongTensor(a_toks["attention_mask"]).to(device),
@@ -540,7 +574,7 @@ def embed_passages_for_retrieval(passages, tokenizer, qa_embedder, max_length=12
 
 
 def embed_questions_for_retrieval(q_ls, tokenizer, qa_embedder, device="cuda:0"):
-    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=128, pad_to_max_length=True)
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=128, truncation=True, pad_to_max_length=True)
     q_ids, q_mask = (
         torch.LongTensor(q_toks["input_ids"]).to(device),
         torch.LongTensor(q_toks["attention_mask"]).to(device),

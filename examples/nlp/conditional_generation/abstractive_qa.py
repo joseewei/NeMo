@@ -12,41 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import glob
-
-import nlp
 from lfqa_utils import *
-
-
-def load_data(directory, max_size):
-    # load all text files from the folder and divide content by chunks of max_size, having full sentences
-    text_chunks = []
-    for file_name in glob.glob(directory + "*.txt"):
-        with open(file_name) as f:
-            word_list = [word for line in f for word in line.split()]
-            print(f'{file_name} - {len(word_list)} words')
-            chunk = ''
-            sentence = ''
-            cnt = 0
-            snt_cnt = 0
-            for word in word_list:
-                sentence += word + ' '
-                cnt += 1
-                snt_cnt += 1
-                if word.endswith('.') or word.endswith('."') or word.endswith('?') or word.endswith('!'):
-                    chunk += sentence
-                    sentence = ''
-                    snt_cnt = 0
-                if cnt >= max_size:
-                    text_chunks.append(chunk.rstrip())
-                    chunk = ''
-                    cnt = snt_cnt
-
-    print(f'Total {len(text_chunks)} chunks')
-    for chunk in text_chunks:
-        print(f'{len(chunk.split())} - {chunk}')
-
-    return text_chunks
 
 
 def full_test():
@@ -98,7 +64,7 @@ def full_test():
     # run examples
     questions = [
         "who is iron man?",
-        "who is Tony stark?",
+        "who is Tony Stark?",
         "who directed iron man?",
     ]
     answers = []
