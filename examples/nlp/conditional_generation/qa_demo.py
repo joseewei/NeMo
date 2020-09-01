@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import faiss
-import nlp
 import numpy as np
 import streamlit as st
 import torch
@@ -68,28 +67,8 @@ def load_indexes(qar_model, qar_tokenizer):
     return (marvel_snippets, wiki40b_gpu_index_flat)
 
 
-@st.cache(allow_output_mutation=True)
-def load_train_data():
-    eli5 = nlp.load_dataset("eli5", name="LFQA_reddit")
-    eli5_train = eli5["train_eli5"]
-    eli5_train_q_reps = np.memmap(
-        "eli5_questions_reps.dat", dtype="float32", mode="r", shape=(eli5_train.num_rows, 128)
-    )
-    eli5_train_q_index = faiss.IndexFlatIP(128)
-    eli5_train_q_index.add(eli5_train_q_reps)
-    return (eli5_train, eli5_train_q_index)
-
-
 qar_tokenizer, qar_model, s2s_tokenizer, s2s_model = load_models()
 passages, gpu_dense_index = load_indexes(qar_model, qar_tokenizer)
-# eli5_train, eli5_train_q_index = load_train_data()
-
-
-def find_nearest_training(question, n_results=10):
-    q_rep = embed_questions_for_retrieval([question], qar_tokenizer, qar_model)
-    D, I = eli5_train_q_index.search(q_rep, n_results)
-    nn_examples = [eli5_train[int(i)] for i in I[0]]
-    return nn_examples
 
 
 def make_support(question, source="wiki40b", method="dense", n_results=10):
@@ -271,6 +250,7 @@ if st.button("Show me!"):
         else:
             question_doc, support_list = make_support(question, source=wiki_source, method=index_type, n_results=10)
     if action in [0, 3]:
+        # Geenerative QA
         answer, support_list = answer_question(
             question_doc,
             s2s_model,
@@ -282,8 +262,16 @@ if st.button("Show me!"):
             top_p=top_p,
             temp=temp,
         )
+
+        # Extractive QA
+        ex_answer_span, ex_answer_sent = extractive_qa(question, question_doc.replace("<P> ", ""))
+
         st.markdown("### The model generated answer is:")
         st.write(answer)
+
+        st.markdown("### The model extractive answer is:")
+        st.write(ex_answer_span + " - " + ex_answer_sent)
+
     if action in [0, 1, 3] and wiki_source != "none":
         st.markdown("--- \n ### The model is drawing information from the following Marvel snippets:")
         for i, res in enumerate(support_list):
@@ -304,15 +292,3 @@ if st.button("Show me!"):
                 st.write(
                     '> <span style="font-family:arial; font-size:10pt;">' + res[-1] + "</span>", unsafe_allow_html=True
                 )
-    if action in [2, 3]:
-        nn_train_list = find_nearest_training(question)
-        train_exple = nn_train_list[0]
-        st.markdown(
-            "--- \n ### The most similar question in the ELI5 training set was: \n\n {}".format(train_exple["title"])
-        )
-        answers_st = [
-            "{}. {}".format(i + 1, "  \n".join([line.strip() for line in ans.split("\n") if line.strip() != ""]))
-            for i, (ans, sc) in enumerate(zip(train_exple["answers"]["text"], train_exple["answers"]["score"]))
-            if i == 0 or sc > 2
-        ]
-        st.markdown("##### Its answers were: \n\n {}".format("\n".join(answers_st)))
