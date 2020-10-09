@@ -198,28 +198,7 @@ if __name__ == '__main__':
         split_text(args.in_text, text_file, vocabulary=vocabulary, language=args.language)
         logging.info(f'Text saved to {text_file}')
 
-    # import scipy.io.wavfile as wave
-    # import numpy as np
-    # def greedy_merge(pred, labels):
-    #     blank_id = len(labels)
-    #     prev_c = -1
-    #     merged = ''
-    #     for c in pred:
-    #         if c != prev_c and c != blank_id:
-    #             merged += labels[c]
-    #         prev_c = c
-    #     return merged
-    # audio_file = '/home/ebakhturina/data/segmentation/librivox/ru/tolstoy/processed/sample_01.wav'
-    # sample_rate, signal = wave.read(audio_file)
-    # preds = asr_model.infer_signal(signal, sample_rate)
-    # pred = [int(np.argmax(p)) for p in preds[0].detach().cpu()]
-    # pred_text = greedy_merge(pred, vocabulary)
-    # print('\n\nPredicted text:')
-    # print(pred_text)
-    #
-    # import pdb; pdb.set_trace()
-
-    if args.audio_dir:
+        if args.audio_dir:
         if not os.path.exists(args.audio_dir):
             raise ValueError(f'Provide a valid path to the audio files, provided: {args.audio_dir}')
         audio_paths = Path(args.audio_dir).glob("*" + args.format)

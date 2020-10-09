@@ -72,12 +72,6 @@ def get_segments(log_probs, path_wav, transcript_file, segment_file, vocabulary,
             utt_begin_indices=utt_begin_indices,
             window_len=window_len,
         )
-        # pickle_dir = '/home/ebakhturina/data/segmentation/librivox/ru/tolstoy/segments/sample/'
-        # base_name = os.path.basename(path_wav)
-        # utt_begin_indices = pickle.load(open(pickle_dir + base_name + "_utt_begin_indices.p", "rb"))
-        # char_probs = pickle.load(open(pickle_dir + base_name + "_char_probs.p", "rb"))
-        # text = pickle.load(open(pickle_dir + base_name + "_text.p", "rb"))
-        # timings = pickle.load(open(pickle_dir + base_name + "_timings.p", "rb"))
 
         total_time = time.time() - start_time
         logging.info(f"Time: {total_time}s ---> ~{round(total_time/60)}min")
