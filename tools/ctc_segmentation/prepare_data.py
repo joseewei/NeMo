@@ -199,29 +199,29 @@ if __name__ == '__main__':
         logging.info(f'Text saved to {text_file}')
 
         if args.audio_dir:
-        if not os.path.exists(args.audio_dir):
-            raise ValueError(f'Provide a valid path to the audio files, provided: {args.audio_dir}')
-        audio_paths = Path(args.audio_dir).glob("*" + args.format)
-        wav_paths = []
-        for path_audio in audio_paths:
-            if args.format == ".mp3":
-                converted_file_name = os.path.join(args.output_dir, path_audio.name.replace(".mp3", ".wav"))
-                wav_paths.append(convert_mp3_to_wav(str(path_audio), converted_file_name, args.sampling_rate))
+            if not os.path.exists(args.audio_dir):
+                raise ValueError(f'Provide a valid path to the audio files, provided: {args.audio_dir}')
+            audio_paths = Path(args.audio_dir).glob("*" + args.format)
+            wav_paths = []
+            for path_audio in audio_paths:
+                if args.format == ".mp3":
+                    converted_file_name = os.path.join(args.output_dir, path_audio.name.replace(".mp3", ".wav"))
+                    wav_paths.append(convert_mp3_to_wav(str(path_audio), converted_file_name, args.sampling_rate))
 
-        if args.combine_audio:
-            if args.base_name is None:
-                args.base_name = 'combined_audio'
-            combined_audio_path = os.path.join(args.output_dir, args.base_name + ".wav")
-            logging.info(f'Combining all audio files and saving at {combined_audio_path}')
+            if args.combine_audio:
+                if args.base_name is None:
+                    args.base_name = 'combined_audio'
+                combined_audio_path = os.path.join(args.output_dir, args.base_name + ".wav")
+                logging.info(f'Combining all audio files and saving at {combined_audio_path}')
 
-            tmp_list = '/tmp/list.txt'
-            with open(tmp_list, 'w') as f:
-                for wav_path in sorted(wav_paths):
-                    f.write('file ' + wav_path + '\n')
-                    logging.info(f'{wav_path}')
-            os.system(f"ffmpeg -f concat -safe 0 -i {tmp_list} -c copy {combined_audio_path} -y")
+                tmp_list = '/tmp/list.txt'
+                with open(tmp_list, 'w') as f:
+                    for wav_path in sorted(wav_paths):
+                        f.write('file ' + wav_path + '\n')
+                        logging.info(f'{wav_path}')
+                os.system(f"ffmpeg -f concat -safe 0 -i {tmp_list} -c copy {combined_audio_path} -y")
 
-            for wav_path in wav_paths:
-                os.remove(wav_path)
+                for wav_path in wav_paths:
+                    os.remove(wav_path)
 
     logging.info('Done.')
