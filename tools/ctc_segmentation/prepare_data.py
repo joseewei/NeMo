@@ -18,7 +18,7 @@ import re
 import string
 from pathlib import Path
 
-from .utils import convert_mp3_to_wav
+from utils import convert_mp3_to_wav
 from nemo.collections import asr as nemo_asr
 from nemo.utils import logging
 
@@ -37,7 +37,7 @@ parser.add_argument(
     'Useful when only 1 transcript is present for'
     'all audio files',
 )
-parser.add_argument('--model', type=str, default=None, help='Path to model checkpoint or ' 'pretrained model name')
+parser.add_argument('--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name')
 
 
 LATIN_TO_RU = {
@@ -76,6 +76,8 @@ MISC_TO_RU = {
     ' к.': ' копеек',
     ' коп.': ' копеек',
     ' копек.': ' копеек',
+    ' т.д. ': ' так далее '
+
 }
 NUMBERS_TO_ENG = {
     '0': 'zero ',
@@ -176,11 +178,8 @@ if __name__ == '__main__':
 
     os.makedirs(args.output_dir, exist_ok=True)
 
+    text_files = []
     if args.in_text:
-        if args.base_name is None:
-            args.base_name = os.path.basename(args.in_text)[:-4]
-        text_file = os.path.join(args.output_dir, args.base_name + '.txt')
-
         vocabulary = None
         if args.model is None:
             logging.info(f'No model provided, model vocabulary wont be used')
@@ -195,8 +194,21 @@ if __name__ == '__main__':
                 f'Provide path to the pretrained checkpoint or choose from {nemo_asr.models.EncDecCTCModel.list_available_models()}'
             )
 
-        split_text(args.in_text, text_file, vocabulary=vocabulary, language=args.language)
-        logging.info(f'Text saved to {text_file}')
+        if os.path.isdir(args.in_text):
+            text_files = Path(args.in_text).glob(("*.txt"))
+        else:
+            text_files.append(Path(args.in_text))
+            base_name = args.base_name
+        for text in text_files:
+            if args.base_name is None:
+                base_name = os.path.basename(text)[:-4]
+            print(base_name)
+            out_text_file = os.path.join(args.output_dir, base_name + '.txt')
+
+
+
+            split_text(text, out_text_file, vocabulary=vocabulary, language=args.language)
+            logging.info(f'Text saved to {out_text_file}')
 
         if args.audio_dir:
             if not os.path.exists(args.audio_dir):

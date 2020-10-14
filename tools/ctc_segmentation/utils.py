@@ -42,6 +42,8 @@ pyximport.install(setup_args={"include_dirs": np.get_include()}, build_dir="buil
 from align_fill_cython import cython_fill_table
 
 from nemo.utils import logging
+from pathlib import PosixPath
+from typing import Union, List
 
 
 __all__ = ['convert_mp3_to_wav']
@@ -50,12 +52,28 @@ MAX_PROB = -10000000000.0
 FRAME_DURATION_IN_MS = 40
 
 
-def get_segments(log_probs, path_wav, transcript_file, segment_file, vocabulary, window_len):
-    with open(str(transcript_file), "r") as f:
+def get_segments(log_probs: np.ndarray,
+                 path_wav: Union[PosixPath, str],
+                 transcript_file: Union[PosixPath, str],
+                 output_file:str,
+                 vocabulary:List[str],
+                 window_len:int)-> None:
+    """
+    Segments the audio into segments and saves segments timings to a file
+    log_probs: Log probabilities for the original audio from an ASR model, shape T * |vocabulary|.
+               values for blank should be at position 0
+    path_wav: path to the audio .wav file
+    transcript_file: path to
+    output_file: path to the file to save timings for segments
+    vocabulary: vocabulary used to train the ASR model, note blank is at position 0
+    window_len: the length of each utterance (in terms of frames of the CTC outputs) fits into that window. The default window is 8000, your audio file is much shorter. You may reduce this value to improve alignment speed.
+    """
+    import pdb; pdb.set_trace()
+    with open(transcript_file, "r") as f:
         text = f.readlines()
         text = [t.strip() for t in text if t.strip()]
 
-    logging.info("Syncing " + str(transcript_file))
+    logging.info(f"Syncing {transcript_file}")
     ground_truth_mat, utt_begin_indices = prepare_text(text, vocabulary)
 
     logging.info(
@@ -76,9 +94,9 @@ def get_segments(log_probs, path_wav, transcript_file, segment_file, vocabulary,
 
         total_time = time.time() - start_time
         logging.info(f"Time: {total_time}s ---> ~{round(total_time/60)}min")
-        logging.info(f"Saving segments to {segment_file}")
+        logging.info(f"Saving segments to {output_file}")
 
-        write_output(segment_file, utt_begin_indices, char_probs, path_wav, timings, text)
+        write_output(output_file, utt_begin_indices, char_probs, path_wav, timings, text)
 
 
 def align(lpz, vocabulary, ground_truth, utt_begin_indices, window_len, skip_prob=MAX_PROB):
@@ -111,8 +129,7 @@ def align(lpz, vocabulary, ground_truth, utt_begin_indices, window_len, skip_pro
         # Backtracking
         timings = np.zeros([len(ground_truth)])
         char_probs = np.zeros([lpz.shape[0]])
-        char_list = [""] * lpz.shape[0]
-        current_prob_sum = 0
+        state_list = [""] * lpz.shape[0]
         try:
             # Do until start is reached
             while t != 0 or c != 0:
@@ -142,8 +159,7 @@ def align(lpz, vocabulary, ground_truth, utt_begin_indices, window_len, skip_pro
                         for s in range(0, min_s + 1):
                             timings[c - s] = (offsets[c] + t) * 10 * 4 / 1000
                         char_probs[offsets[c] + t] = max_lpz_prob
-                        char_list[offsets[c] + t] = vocabulary[ground_truth[c, min_s]]
-                        current_prob_sum = 0
+                        state_list[offsets[c] + t] = vocabulary[ground_truth[c, min_s]]
 
                     c -= 1 + min_s
                     t -= 1 - offset
@@ -151,7 +167,7 @@ def align(lpz, vocabulary, ground_truth, utt_begin_indices, window_len, skip_pro
                 else:
                     # Apply reverse stay transition
                     char_probs[offsets[c] + t] = stay_prob
-                    char_list[offsets[c] + t] = "ε"
+                    state_list[offsets[c] + t] = "ε"
                     t -= 1
         except IndexError:
             # If the backtracking was not successful this usually means the window was too small
@@ -164,14 +180,16 @@ def align(lpz, vocabulary, ground_truth, utt_begin_indices, window_len, skip_pro
 
         break
 
-    return timings, char_probs, char_list
+    return timings, char_probs, state_list
 
 
 def prepare_text(text, char_list):
+    """
     # Prepares the given text for alignment
     # Therefore we create a matrix of possible character symbols to represent the given text
 
     # Create list of char indices depending on the models char list
+    """
     ground_truth = "#"
     utt_begin_indices = []
     for utt in text:
@@ -252,9 +270,9 @@ def write_output(out_path, utt_begin_indices, char_probs, path_wav, timings, tex
             # Compute start and end time of utterance.
             middle = (timings[index] + timings[index - 1]) / 2
             if type == "begin":
-                return max(timings[index + 1] - 0.5, middle) / adj
+                return max(timings[index + 1] - 0.5, middle)
             elif type == "end":
-                return min(timings[index - 1] + 0.5, middle) / adj
+                return min(timings[index - 1] + 0.5, middle)
 
         for i in range(len(text)):
             start = compute_time(utt_begin_indices[i], "begin")
@@ -273,12 +291,17 @@ def write_output(out_path, utt_begin_indices, char_probs, path_wav, timings, tex
             else:
                 min_avg = 0
                 for t in range(start_t, end_t - n):
-                    if len(char_probs[t : t + n]) == 0:
-                        import pdb
-
-                        pdb.set_trace()
-                        print()
                     min_avg = min(min_avg, char_probs[t : t + n].mean())
+
+
+            # from nemo.collections import asr as nemo_asr
+            # import torch
+            # asr_model = nemo_asr.models.EncDecCTCModel.from_pretrained('QuartzNet15x5Base-En')
+            # import pdb; pdb.set_trace()
+            # preds = torch.tensor(char_probs[start_t:end_t]).unsqueeze(0)
+            # tr = asr_model._wer.ctc_decoder_predictions_tensor(preds)
+            # print (tr)
+            # import pdb; pdb.set_trace()
 
             outfile.write(str(start) + " " + str(end) + " " + str(min_avg) + " | " + text[i] + "\n")
 

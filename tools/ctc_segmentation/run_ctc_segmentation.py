@@ -109,7 +109,7 @@ if __name__ == '__main__':
         logging.info(f'Original audio length: {original_duration}')
 
         log_probs = asr_model.transcribe(paths2audio_files=[str(path_audio)], batch_size=1, logprobs=True)[0].cpu()
-
+        print(log_probs.shape)
         # move blank values to the first column
         log_probs = np.squeeze(log_probs, axis=0)
         blank_col = log_probs[:, -1].reshape((log_probs.shape[0], 1))
@@ -131,8 +131,7 @@ if __name__ == '__main__':
                 all_transcript_file[i],
                 all_segment_file[i],
                 vocabulary,
-                args.window_len,
-                args.split_text,
+                args.window_len
             )
     else:
         Pool().starmap(
