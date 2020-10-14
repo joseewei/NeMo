@@ -90,7 +90,7 @@ with open(manifest_path, 'w') as f:
             segment = signal[int(st * sampling_rate): int(end * sampling_rate)]
             duration = len(segment) / sampling_rate
             if duration > 0:
-                text = str(round(score, 2)) + '~ ' + ref_text[i]
+                text = ref_text[i]
                 if score > args.threshold:
                     total_dur += duration
                     audio_filepath = os.path.join(fragments_dir, f'{base_name}_{i:04}.wav')
@@ -101,11 +101,14 @@ with open(manifest_path, 'w') as f:
                     file_to_write = low_score_f
 
                 wavfile.write(audio_filepath, sampling_rate, segment)
-                transcript = '' #asr_model.transcribe(paths2audio_files=[audio_filepath], batch_size=1)[0]
+
+                transcript = asr_model.transcribe(paths2audio_files=[audio_filepath], batch_size=1)[0]
                 info = {
                     'audio_filepath': audio_filepath,
                     'duration': duration,
-                    'text': text + ' ~ASR: ' + transcript.strip(),
+                    'text': text,
+                    'score': round(score, 2),
+                    'transcript': transcript.strip(),
                 }
                 json.dump(info, file_to_write)
                 file_to_write.write('\n')
