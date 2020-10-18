@@ -47,7 +47,7 @@ import detectron2
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
 from detectron2.modeling.postprocessing import detector_postprocess
-from detectron2.modeling.roi_heads.fast_rcnn import FastRCNNOutputLayers,
+from detectron2.modeling.roi_heads.fast_rcnn import FastRCNNOutputLayers, FastRCNNOutputs
 from detectron2.structures import Boxes, Instances, ImageList
 
 from hydra.core.config_store import ConfigStore
