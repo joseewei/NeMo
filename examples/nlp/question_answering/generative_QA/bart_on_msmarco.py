@@ -50,21 +50,23 @@ class MSMarcoNLGenDatasetS2S(Dataset):
         example = self.data[idx]
         question = example["query"]
 
-        x = ast.literal_eval(file_train_data["train"][0]["wellFormedAnswers"])
+        x = ast.literal_eval(example["wellFormedAnswers"])
         x = [n.strip() for n in x]
 
-        answer = x[0]
+        wellFormedAnswer = x[0]
 
-        document = ""
-        passage_list = example["passages"].replace("\'", "\"").split("[")[
-            2][1:-1].split("\", \"")
-        for passage_obj in passage_list:
-            document += "<P>"+passage_obj
+        x = ast.literal_eval(example["answers"])
+        x = [n.strip() for n in x]
+        ans_span = x[0]
+
+        context = "\<P>"+ans_span
 
         in_st = "question: {} context: {}".format(
-            question.lower().replace(" --t--", "").strip(), document.lower().strip(),
+            question.lower().replace(" --t--", "").strip(), context.lower().strip(),
         )
-        out_st = answer
+
+        out_st = wellFormedAnswer
+
         return (in_st, out_st)
 
     def __getitem__(self, idx):
@@ -258,7 +260,7 @@ def qa_s2s_generate(
     return [qa_s2s_tokenizer.decode(ans_ids, skip_special_tokens=True).strip() for ans_ids in generated_ids]
 
 
-compileDataset = True
+compileDataset = False
 
 if compileDataset:
     print("Working on Dataset preparation: ")
@@ -307,6 +309,7 @@ file_test_data = nlp.load_dataset("csv", data_files="test_dataset.csv")
 # # pp.pprint(file_train_data["train"][1])
 # # pp.pprint(file_train_data["train"][2])
 # # pp.pprint(file_train_data["train"][3])
+# pp.pprint(file_train_data["train"][0])
 #
 #
 # print(type(file_train_data["train"][0]["wellFormedAnswers"]))
@@ -318,6 +321,27 @@ file_test_data = nlp.load_dataset("csv", data_files="test_dataset.csv")
 #
 # print(type(file_train_data["train"][0]["query"]))
 # print(file_train_data["train"][0]["query"])
+#
+#
+# print("answer spans:::::::::::")
+#
+# print(type(file_train_data["train"][0]["answers"]))
+# print(file_train_data["train"][0]["answers"][0])
+#
+#
+# x = ast.literal_eval(file_train_data["train"][0]["answers"])
+# x = [n.strip() for n in x]
+# print(x)
+# print(x[0])
+
+
+
+
+
+
+###############
+# MSMarcoNLGen seq2seq model training
+###############
 
 
 print("Starting training...")
@@ -332,7 +356,7 @@ class ArgumentsS2S():
         self.backward_freq = 16
         self.max_length = maxLength
         self.print_freq = 100
-        self.model_save_name = "seq2seq_models/msmacro_bart_model"
+        self.model_save_name = "msmarco_bart_wellformedans"
         self.learning_rate = 2e-4
         self.num_epochs = 3
         self.truncation = True
