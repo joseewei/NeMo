@@ -26,7 +26,9 @@ def make_qa_s2s_model(model_name, from_file=None, device="cuda:0"):
     if from_file is not None:
         # has model weights, optimizer, and scheduler states
         param_dict = torch.load(from_file)
-        model.load_state_dict(param_dict["model"])
+        state_dict_model = param_dict["model"]
+        state_dict = {k.partition('module.')[2]: state_dict_model[k] for k in state_dict_model.keys()}
+        model.load_state_dict(state_dict)
     return tokenizer, model
 
 
@@ -93,43 +95,20 @@ def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=360, device="cud
     }
     return model_inputs
 
-
-qa_s2s_tokenizer = AutoTokenizer.from_pretrained('yjernite/bart_eli5')
-qa_s2s_model = AutoModelForSeq2SeqLM.from_pretrained('yjernite/bart_eli5').to('cuda:1')
-_ = qa_s2s_model.eval()
-
-
-# qa_s2s_tokenizer, pre_model = make_qa_s2s_model(
-#     model_name="yjernite/bart_eli5",
-#     from_file="msmarco_bart_wellformedans_0.pth",
-#     device="cuda:1"
-# )
-# qa_s2s_model = torch.nn.DataParallel(pre_model)
-# _ = qa_s2s_model.eval()
-# question = "Who is Iron Man?"
-# doc = "Iron man is a Marvel comic book character who is one of the most popular superheroes."
-#
-
-#
-# question = "What is a cloud?"
-#
-# # concatenate question and support document into BART input
-# question_doc = "question: {} context: {}".format(question, doc)
-
-# question_doc = "question: Who is iron man? context: \<P> Tony Stark"
-
-question_doc = "question: Why does water heated to room temperature feel colder than the air around it? context: \<P> when the skin is completely wet. The body continuously loses ... this heat comes from the liquid itself and the surrounding gas and surfaces. \<P> protected by a glass panel. Consequently, these types of collectors... Since heat loss due to convection cannot cross a vacuum, it forms an efficient isolation mechanism to keep heat inside the collector pipes. Since two flat \<P> ... \<P> changes. Conduction On... Fluids—especially gases—are less conductive. Thermal contact conductance is the study of heat conduction between solid bodies in contact. The process of heat transfer"
-
-
+qa_s2s_tokenizer, qa_s2s_model = make_qa_s2s_model(
+    model_name="facebook/bart-large",
+    from_file="msmarco_bart_wellformedans_0.pth",
+    device="cuda:0"
+)
+question_doc = "question: Can you pass the Turing test? context: \<P> No."
 # generate an answer with beam search
 answer = qa_s2s_generate(
         question_doc, qa_s2s_model, qa_s2s_tokenizer,
         num_answers=1,
         num_beams=8,
-        min_len=64,
+        min_len=1,
         max_len=256,
         max_input_length=1024,
-        device="cuda:1"
+        device="cuda:0"
     )[0]
-
 print(answer)
