@@ -33,24 +33,18 @@
 import numpy as np
 cimport numpy as np
 
-def cython_fill_table(
-    np.ndarray[np.float32_t, ndim=2] table,
-    np.ndarray[np.float32_t, ndim=2] log_probs,
-    np.ndarray[np.int_t, ndim=2] ground_truth,
-    np.ndarray[np.int_t, ndim=1] offsets,
-    np.ndarray[np.int_t, ndim=1] utt_begin_indices,
-    int blank,
-    float argskip_prob):
+def cython_fill_table(np.ndarray[np.float32_t, ndim=2] table,
+                      np.ndarray[np.float32_t, ndim=2] lpz,
+                      np.ndarray[np.int_t, ndim=2] ground_truth,
+                      np.ndarray[np.int_t, ndim=1] offsets,
+                      int blank):
+    """Fill the table of transition probabilities.
 
-    """
-    Fills
-    :param table:
-    :param log_probs:
-    :param ground_truth:
-    :param offsets:
-    :param utt_begin_indices:
-    :param blank:
-    :param argskip_prob:
+    :param table: table filled with maximum joint probabilities k_{t,j}
+    :param lpz: character probabilities of each time frame
+    :param ground_truth: label sequence
+    :param offsets: window offsets per character (given as array of zeros)
+    :param blank: label ID of the blank symbol, usually 0
     :return:
     """
     cdef int t
@@ -69,7 +63,7 @@ def cython_fill_table(
     cdef int s
     
     # Compute the mean offset between two window positions
-    mean_offset = (log_probs.shape[0] - table.shape[0]) / float(table.shape[1])
+    mean_offset = (lpz.shape[0] - table.shape[0]) / float(table.shape[1])
     lower_offset = int(mean_offset)
     higher_offset = lower_offset + 1
 
@@ -77,7 +71,7 @@ def cython_fill_table(
     for c in range(table.shape[1]):
         if c > 0:
             # Compute next window offset
-            offset = min(max(0, lastArgMax - table.shape[0] // 2), min(higher_offset, (log_probs.shape[0] - table.shape[0]) - offset_sum))
+            offset = min(max(0, lastArgMax - table.shape[0] // 2), min(higher_offset, (lpz.shape[0] - table.shape[0]) - offset_sum))
 
             # Compute relative offset to previous columns
             for s in range(ground_truth.shape[1] - 1):
@@ -106,10 +100,10 @@ def cython_fill_table(
                         table_col = c - (s + 1)
                         table_value = table[table_row, table_col]
 
-                        log_prob_value = log_probs[t + offset_sum, ground_truth[c, s]]
+                        log_prob_value = lpz[t + offset_sum, ground_truth[c, s]]
                         p = table_value + log_prob_value
                     switch_prob = max(switch_prob, p)
-                    max_log_prob = max(max_log_prob, log_probs[t + offset_sum, ground_truth[c, s]])
+                    max_log_prob = max(max_log_prob, lpz[t + offset_sum, ground_truth[c, s]])
 
             # Compute stay probability
             if t - 1 < 0:
@@ -117,7 +111,7 @@ def cython_fill_table(
             elif c == 0:
                 stay_prob = 0
             else:
-                stay_prob = table[t - 1, c] + max(log_probs[t + offset_sum, blank], max_log_prob)
+                stay_prob = table[t - 1, c] + max(lpz[t + offset_sum, blank], max_log_prob)
 
             # Use max of stay and switch prob
             table[t, c] = max(switch_prob, stay_prob)

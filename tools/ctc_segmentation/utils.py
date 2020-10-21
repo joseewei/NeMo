@@ -68,7 +68,7 @@ def get_segments(log_probs: np.ndarray,
     vocabulary: vocabulary used to train the ASR model, note blank is at position 0
     window_len: the length of each utterance (in terms of frames of the CTC outputs) fits into that window. The default window is 8000, your audio file is much shorter. You may reduce this value to improve alignment speed.
     """
-    import pdb; pdb.set_trace()
+
     with open(transcript_file, "r") as f:
         text = f.readlines()
         text = [t.strip() for t in text if t.strip()]
@@ -118,9 +118,7 @@ def align(lpz, vocabulary, ground_truth, utt_begin_indices, window_len, skip_pro
             lpz.astype(np.float32),
             np.array(ground_truth),
             offsets,
-            np.array(utt_begin_indices),
             blank,
-            skip_prob,
         )
         cython_fill_time = time.time() - start_time
         logging.info(f"Cython fill time: {cython_fill_time}s ---> ~{round(cython_fill_time/60)}min")
