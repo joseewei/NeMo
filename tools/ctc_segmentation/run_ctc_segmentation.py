@@ -55,7 +55,7 @@ if __name__ == '__main__':
     if os.path.exists(args.model):
         asr_model = nemo_asr.models.EncDecCTCModel.restore_from(args.model)
     elif args.model in nemo_asr.models.EncDecCTCModel.get_available_model_names():
-        asr_model = nemo_asr.models.EncDecCTCModel.from_pretrained(args.model)
+        asr_model = nemo_asr.models.EncDecCTCModel.from_pretrained(args.model, strict=False)
     else:
         raise ValueError(
             f'Provide path to the pretrained checkpoint or choose from {nemo_asr.models.EncDecCTCModel.list_available_models()}'

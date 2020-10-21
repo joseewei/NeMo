@@ -29,18 +29,13 @@
 # This file contains code artifacts adapted from the original implementation:
 # https://github.com/cornerfarmer/ctc_segmentation
 
-# isort:skip_file
-
 import os
 import pickle
 import time
 
 import numpy as np
-import pyximport
 
-pyximport.install(setup_args={"include_dirs": np.get_include()}, build_dir="build", build_in_temp=False)
-from align_fill_cython import cython_fill_table
-
+from ctc_segmentation import cython_fill_table
 from nemo.utils import logging
 from pathlib import PosixPath
 from typing import Union, List
