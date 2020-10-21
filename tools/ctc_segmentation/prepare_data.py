@@ -19,6 +19,7 @@ import string
 from pathlib import Path
 
 from utils import convert_mp3_to_wav
+
 from nemo.collections import asr as nemo_asr
 from nemo.utils import logging
 
@@ -37,7 +38,9 @@ parser.add_argument(
     'Useful when only 1 transcript is present for'
     'all audio files',
 )
-parser.add_argument('--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name')
+parser.add_argument(
+    '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name'
+)
 
 
 LATIN_TO_RU = {
@@ -76,8 +79,7 @@ MISC_TO_RU = {
     ' к.': ' копеек',
     ' коп.': ' копеек',
     ' копек.': ' копеек',
-    ' т.д. ': ' так далее '
-
+    ' т.д. ': ' так далее ',
 }
 NUMBERS_TO_ENG = {
     '0': 'zero ',
@@ -204,8 +206,6 @@ if __name__ == '__main__':
                 base_name = os.path.basename(text)[:-4]
             print(base_name)
             out_text_file = os.path.join(args.output_dir, base_name + '.txt')
-
-
 
             split_text(text, out_text_file, vocabulary=vocabulary, language=args.language)
             logging.info(f'Text saved to {out_text_file}')

@@ -18,6 +18,7 @@ import os
 
 from scipy.io import wavfile
 
+from nemo.collections import asr as nemo_asr
 from nemo.utils import logging
 
 parser = argparse.ArgumentParser(description="Cut audio on the segments based on segments")
@@ -37,6 +38,7 @@ args = parser.parse_args()
 # create directories to store high score .wav audio fragments, low scored once, and deleted
 base_name = os.path.basename(args.alignment)[:-4]
 
+args.output_dir = os.path.abspath(args.output_dir)
 os.makedirs(args.output_dir, exist_ok=True)
 fragments_dir = os.path.join(args.output_dir, "high_score_clips")
 del_fragments = os.path.join(args.output_dir, 'deleted_clips')
@@ -53,12 +55,11 @@ del_manifest = os.path.join(args.output_dir, f'{base_name}_del_manifest.json')
 segments = []
 ref_text = []
 
-from nemo.collections import asr as nemo_asr
 
 if os.path.exists(args.model):
-    asr_model = nemo_asr.models.EncDecCTCModel.restore_from(args.model)
+    asr_model = nemo_asr.models.EncDecCTCModel.restore_from(args.model, strict=False)
 elif args.model in nemo_asr.models.EncDecCTCModel.get_available_model_names():
-    asr_model = nemo_asr.models.EncDecCTCModel.from_pretrained(args.model)
+    asr_model = nemo_asr.models.EncDecCTCModel.from_pretrained(args.model, strict=False)
 else:
     raise ValueError(
         f'Provide path to the pretrained checkpoint or choose from {nemo_asr.models.EncDecCTCModel.list_available_models()}'
@@ -73,7 +74,7 @@ with open(args.alignment, 'r') as f:
             continue
         text = line[1]
         line = line[0].split()
-        segments.append((float(line[0])/2, float(line[1])/2, float(line[2])))
+        segments.append((float(line[0]) / 2, float(line[1]) / 2, float(line[2])))
         ref_text.append(text.strip())
 
 sampling_rate, signal = wavfile.read(audio_file)
@@ -87,7 +88,7 @@ start = 0
 with open(manifest_path, 'w') as f:
     with open(low_score_segments_manifest, 'w') as low_score_f:
         for i, (st, end, score) in enumerate(segments):
-            segment = signal[int(st * sampling_rate): int(end * sampling_rate)]
+            segment = signal[int(st * sampling_rate) : int(end * sampling_rate)]
             duration = len(segment) / sampling_rate
             if duration > 0:
                 text = ref_text[i]
@@ -125,13 +126,13 @@ begin = 0
 with open(del_manifest, 'w') as f:
     for i, (st, end, _) in enumerate(segments):
         if st - begin > 0.01:
-            segment = signal[int(begin * sampling_rate): int(st * sampling_rate)]
+            segment = signal[int(begin * sampling_rate) : int(st * sampling_rate)]
             audio_filepath = os.path.join(del_fragments, f'del_{base_name}_{i:03}.wav')
             wavfile.write(audio_filepath, sampling_rate, segment)
             duration = len(segment) / sampling_rate
             del_duration += duration
             deleted.append((begin, st))
-            transcript = 'n/a' # asr_model.transcribe(paths2audio_files=[audio_filepath], batch_size=1)[0]
+            transcript = 'n/a'  # asr_model.transcribe(paths2audio_files=[audio_filepath], batch_size=1)[0]
             info = {'audio_filepath': audio_filepath, 'duration': duration, 'text': transcript}
             json.dump(info, f)
             f.write('\n')

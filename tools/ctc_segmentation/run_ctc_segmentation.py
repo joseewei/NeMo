@@ -131,7 +131,7 @@ if __name__ == '__main__':
                 all_transcript_file[i],
                 all_segment_file[i],
                 vocabulary,
-                args.window_len
+                args.window_len,
             )
     else:
         Pool().starmap(

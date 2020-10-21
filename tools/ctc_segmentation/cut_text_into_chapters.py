@@ -39,7 +39,7 @@ for i, audio in enumerate(sorted(audio_paths)):
         text_segment = text[:3]
         text_segment_id = 3
     else:
-        text_segment = text[text_segment_id: text_segment_id + 2]
+        text_segment = text[text_segment_id : text_segment_id + 2]
         text_segment_id = text_segment_id + 2
     text_files.append(file_name)
     with open(os.path.join(output_dir, file_name), 'w') as f:
@@ -49,7 +49,9 @@ for i, audio in enumerate(sorted(audio_paths)):
 # print (len(cut))
 
 if len(list(audio_paths)) != len(text_files):
-    print (len(list(audio_paths)))
-    print (len(text_files))
-    import pdb; pdb.set_trace()
+    print(len(list(audio_paths)))
+    print(len(text_files))
+    import pdb
+
+    pdb.set_trace()
     raise ValueError(f'Not correct split')

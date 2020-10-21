@@ -24,10 +24,7 @@ from nemo.utils import logging
 parser = argparse.ArgumentParser(description="Cut audio on the segments based on segments")
 parser.add_argument("--output_dir", default='output', type=str, help='Path to output directory')
 parser.add_argument(
-    "--alignment",
-    type=str,
-    required=True,
-    help='Path to book.aligned file',
+    "--alignment", type=str, required=True, help='Path to book.aligned file',
 )
 args = parser.parse_args()
 
@@ -40,7 +37,7 @@ orig_durations = []
 for wav_path in wav_paths:
     sr, signal = wavfile.read(wav_path)
     orig_signals.append(signal)
-    orig_durations.append(len(signal)/sr)
+    orig_durations.append(len(signal) / sr)
     orig_srs.append(sr)
 
 with open(args.alignment, 'r') as f:
@@ -68,10 +65,12 @@ with open(manifest_path, 'w') as f:
         start = int(line['start'] * sr / 1000)
         end = int(line['end'] * sr / 1000)
 
-        segment = signal[start: end]
+        segment = signal[start:end]
         duration = len(segment) / sr
         if duration > 0:
-            text = 'cer: ' + str(round(line['cer'], 1)) + ' Raw: ' + line['aligned-raw'] + ' ~Tr: ' + line['transcript']
+            text = (
+                'cer: ' + str(round(line['cer'], 1)) + ' Raw: ' + line['aligned-raw'] + ' ~Tr: ' + line['transcript']
+            )
             total_durations[section_id] += duration
             audio_filepath = os.path.join(wav_dir, f'{section_id}_{i:04}.wav')
             wavfile.write(audio_filepath, sr, segment)
@@ -80,6 +79,9 @@ with open(manifest_path, 'w') as f:
             f.write('\n')
 
 for i in range(len(total_durations)):
-    logging.info(f'{i} Original duration   : {round(orig_durations[i])}s or ~{round(orig_durations[i] / 60)}min at {wav_dir}')
-    logging.info(f'{i} Saved files duration: {round(total_durations[i])}s or ~{round(total_durations[i]/60)}min at {wav_dir}')
-
+    logging.info(
+        f'{i} Original duration   : {round(orig_durations[i])}s or ~{round(orig_durations[i] / 60)}min at {wav_dir}'
+    )
+    logging.info(
+        f'{i} Saved files duration: {round(total_durations[i])}s or ~{round(total_durations[i]/60)}min at {wav_dir}'
+    )
