@@ -36,8 +36,6 @@ parser.add_argument(
 args = parser.parse_args()
 
 # create directories to store high score .wav audio fragments, low scored once, and deleted
-base_name = os.path.basename(args.alignment)[:-4]
-
 args.output_dir = os.path.abspath(args.output_dir)
 os.makedirs(args.output_dir, exist_ok=True)
 fragments_dir = os.path.join(args.output_dir, "high_score_clips")
@@ -48,9 +46,10 @@ os.makedirs(fragments_dir, exist_ok=True)
 os.makedirs(low_score_segments_dir, exist_ok=True)
 os.makedirs(del_fragments, exist_ok=True)
 
-manifest_path = os.path.join(args.output_dir, f'{base_name}_manifest.json')
-low_score_segments_manifest = os.path.join(args.output_dir, f'{base_name}_low_score_manifest.json')
-del_manifest = os.path.join(args.output_dir, f'{base_name}_del_manifest.json')
+base_name = os.path.basename(args.alignment)
+manifest_path = os.path.join(args.output_dir, base_name.replace('segments.txt', 'manifest.json'))
+low_score_segments_manifest = os.path.join(args.output_dir, base_name.replace('segments.txt', 'low_score_manifest.json'))
+del_manifest = os.path.join(args.output_dir, base_name.replace('segments.txt', 'del_manifest.json'))
 
 segments = []
 ref_text = []
@@ -74,7 +73,7 @@ with open(args.alignment, 'r') as f:
             continue
         text = line[1]
         line = line[0].split()
-        segments.append((float(line[0]) / 2, float(line[1]) / 2, float(line[2])))
+        segments.append((float(line[0]), float(line[1]), float(line[2])))
         ref_text.append(text.strip())
 
 sampling_rate, signal = wavfile.read(audio_file)

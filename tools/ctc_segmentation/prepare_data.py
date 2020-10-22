@@ -29,7 +29,7 @@ parser.add_argument("--in_text", type=str, default=None, help='Path to input tex
 parser.add_argument("--output_dir", type=str, required=True, help='Path to output directory')
 parser.add_argument("--audio_dir", type=str, help='Path to folder with audio files')
 parser.add_argument('--sampling_rate', type=int, default=16000, help='Sampling rate used for the model')
-parser.add_argument('--format', type=str, default='.wav', choices=['.wav', '.mp3'])
+parser.add_argument('--format', type=str, default='.mp3', choices=['.wav', '.mp3'])
 parser.add_argument('--language', type=str, default='eng', choices=['eng', 'ru'])
 parser.add_argument(
     '--combine_audio',
@@ -200,11 +200,8 @@ if __name__ == '__main__':
             text_files = Path(args.in_text).glob(("*.txt"))
         else:
             text_files.append(Path(args.in_text))
-            base_name = args.base_name
         for text in text_files:
-            if args.base_name is None:
-                base_name = os.path.basename(text)[:-4]
-            print(base_name)
+            base_name = os.path.basename(text)[:-4]
             out_text_file = os.path.join(args.output_dir, base_name + '.txt')
 
             split_text(text, out_text_file, vocabulary=vocabulary, language=args.language)
@@ -219,21 +216,5 @@ if __name__ == '__main__':
                 if args.format == ".mp3":
                     converted_file_name = os.path.join(args.output_dir, path_audio.name.replace(".mp3", ".wav"))
                     wav_paths.append(convert_mp3_to_wav(str(path_audio), converted_file_name, args.sampling_rate))
-
-            if args.combine_audio:
-                if args.base_name is None:
-                    args.base_name = 'combined_audio'
-                combined_audio_path = os.path.join(args.output_dir, args.base_name + ".wav")
-                logging.info(f'Combining all audio files and saving at {combined_audio_path}')
-
-                tmp_list = '/tmp/list.txt'
-                with open(tmp_list, 'w') as f:
-                    for wav_path in sorted(wav_paths):
-                        f.write('file ' + wav_path + '\n')
-                        logging.info(f'{wav_path}')
-                os.system(f"ffmpeg -f concat -safe 0 -i {tmp_list} -c copy {combined_audio_path} -y")
-
-                for wav_path in wav_paths:
-                    os.remove(wav_path)
 
     logging.info('Done.')

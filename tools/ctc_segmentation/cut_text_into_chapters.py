@@ -45,13 +45,5 @@ for i, audio in enumerate(sorted(audio_paths)):
     with open(os.path.join(output_dir, file_name), 'w') as f:
         f.write(''.join(text_segment))
 
-# cut = re.split(r"(\nГлава)", text)
-# print (len(cut))
-
 if len(list(audio_paths)) != len(text_files):
-    print(len(list(audio_paths)))
-    print(len(text_files))
-    import pdb
-
-    pdb.set_trace()
     raise ValueError(f'Not correct split')

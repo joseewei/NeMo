@@ -24,10 +24,6 @@ from nemo.utils import logging
 
 __all__ = ['convert_mp3_to_wav']
 
-MAX_PROB = -10000000000.0
-FRAME_DURATION_IN_MS = 40
-
-
 def get_segments(
     log_probs: np.ndarray,
     path_wav: Union[PosixPath, str],
@@ -81,7 +77,7 @@ def get_segments(
         write_output(output_file, path_wav, segments, text)
 
 
-def write_output(out_path, path_wav, segments, text, stride: int = 1):
+def write_output(out_path, path_wav, segments, text, stride: int = 2):
     """
 
     :param out_path:
