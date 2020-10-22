@@ -32,7 +32,7 @@ def main(cfg):
     # Point to the new validation data for fine-tuning
     asr_model.setup_validation_data(val_data_config=cfg.model.validation_ds)
     trainer.fit(asr_model)
-    asr_model.save_to(save_path="QuartzNet15x5")
+    asr_model.save_to(save_path="QuartzNet15x5.nemo")
 
 
 if __name__ == '__main__':
