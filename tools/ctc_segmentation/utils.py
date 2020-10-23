@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+import logging.handlers
+import multiprocessing
 import os
 import time
 from pathlib import PosixPath
@@ -20,9 +23,8 @@ from typing import List, Union
 import ctc_segmentation as cs
 import numpy as np
 
-from nemo.utils import logging
+__all__ = ['get_segments']
 
-__all__ = ['convert_mp3_to_wav']
 
 def get_segments(
     log_probs: np.ndarray,
@@ -95,19 +97,49 @@ def write_output(out_path, path_wav, segments, text, stride: int = 2):
             outfile.write(f'{start/stride} {end/stride} {score} | {text[i]}\n')
 
 
-def convert_mp3_to_wav(mp3_file: str, wav_file: str = None, sampling_rate: int = 16000) -> str:
-    """
-    Converts .mp3 to .wav and changes sampling rate if needed
+#####################
+# logging utils
+#####################
 
-    mp3_file: Path to .mp3 file
-    sampling_rate: Desired sampling rate
 
-    Returns:
-        path to .wav file
-    """
-    logging.info(f"Converting {mp3_file} to .wav format with sampling rate {sampling_rate}")
+def listener_configurer(log_file, level):
+    root = logging.getLogger()
+    print('----->', 'WWWWW')
+    h = logging.handlers.RotatingFileHandler(log_file, 'w')
+    f = logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s')
+    h.setFormatter(f)
+    root.addHandler(h)
+    root.setLevel(level)
 
-    if wav_file is None:
-        wav_file = mp3_file.replace(".mp3", ".wav")
-    os.system(f'ffmpeg -i {mp3_file} -ac 1 -af aresample=resampler=soxr -ar {sampling_rate} {wav_file} -y')
-    return wav_file
+
+def listener_process(queue, configurer, log_file, level):
+    configurer(log_file, level)
+    while True:
+        try:
+            record = queue.get()
+            if record is None:  # We send this as a sentinel to tell the listener to quit.
+                break
+            logger = logging.getLogger(record.name)
+            logger.setLevel(logging.INFO)
+            logger.handle(record)  # No level or filter logic applied - just do it!
+        except Exception:
+            import sys, traceback
+
+            print('Problem:', file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+
+
+def worker_configurer(queue, level):
+    h = logging.handlers.QueueHandler(queue)  # Just the one handler needed
+    root = logging.getLogger()
+    root.addHandler(h)
+    root.setLevel(level)
+
+
+def worker_process(
+    queue, configurer, level, log_probs, path_wav, transcript_file, output_file, vocabulary, window_len
+):
+    configurer(queue, level)
+    name = multiprocessing.current_process().name
+    logging.info(f'{name} is processing {path_wav}')
+    get_segments(log_probs, path_wav, transcript_file, output_file, vocabulary, window_len)

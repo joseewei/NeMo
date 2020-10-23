@@ -18,8 +18,6 @@ import re
 import string
 from pathlib import Path
 
-from utils import convert_mp3_to_wav
-
 from nemo.collections import asr as nemo_asr
 from nemo.utils import logging
 
@@ -108,6 +106,24 @@ NUMBERS_TO_RU = {
 }
 
 
+def convert_mp3_to_wav(mp3_file: str, wav_file: str = None, sampling_rate: int = 16000) -> str:
+    """
+    Converts .mp3 to .wav and changes sampling rate if needed
+
+    mp3_file: Path to .mp3 file
+    sampling_rate: Desired sampling rate
+
+    Returns:
+        path to .wav file
+    """
+    logging.info(f"Converting {mp3_file} to .wav format with sampling rate {sampling_rate}")
+
+    if wav_file is None:
+        wav_file = mp3_file.replace(".mp3", ".wav")
+    os.system(f'ffmpeg -i {mp3_file} -ac 1 -af aresample=resampler=soxr -ar {sampling_rate} {wav_file} -y')
+    return wav_file
+
+
 def split_text(
     in_file: str, out_file: str, vocabulary=None, language='eng', remove_square_brackets=True, do_lower_case=True
 ):
@@ -131,7 +147,7 @@ def split_text(
         logging.info(f'Removed text in [square] breakets')
 
     # Read and split transcript by utterance (roughly, sentences)
-    split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?)\s"
+    split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!)\s"
     sentences = re.split(split_pattern, transcript)
 
     # save split text with original punctuation and case

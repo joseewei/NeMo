@@ -13,20 +13,20 @@
 # limitations under the License.
 
 import argparse
+import logging
+import multiprocessing
 import os
 import time
-from itertools import repeat
-from multiprocessing import Pool
 from pathlib import Path
 
 import librosa
 import numpy as np
 import scipy.io.wavfile as wav
 import torch
-from utils import convert_mp3_to_wav, get_segments
+from prepare_data import convert_mp3_to_wav
+from utils import get_segments, listener_configurer, listener_process, worker_configurer, worker_process
 
 import nemo.collections.asr as nemo_asr
-from nemo.utils import logging
 
 parser = argparse.ArgumentParser(description="CTC Segmentation")
 parser.add_argument("--output_dir", default='output', type=str, help='Path to output directory')
@@ -38,7 +38,6 @@ parser.add_argument(
     'different or path to wav file (transcript should have the same base name and be located in the same folder'
     'as the wav file.',
 )
-parser.add_argument('--split_text', type=str, default='none', choices=['none', 'sentences'])
 parser.add_argument('--window_len', type=int, default=8000)
 parser.add_argument('--format', type=str, default='.wav', choices=['.wav', '.mp3'])
 parser.add_argument('--no_parallel', action='store_true')
@@ -46,12 +45,24 @@ parser.add_argument('--sampling_rate', type=int, default=16000)
 parser.add_argument(
     '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name'
 )
+parser.add_argument('--debug', action='store_true', help='Set to True for debugging')
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    logging.info(args)
 
+    # setup logger
     os.makedirs(args.output_dir, exist_ok=True)
+    log_file = os.path.join(args.output_dir, 'ctc_segmentation.log')
+    level = 'DEBUG' if args.debug else 'INFO'
+    logger = logging.getLogger('CTC')
+    logging.basicConfig(filename=log_file, level=level)
+    if not args.no_parallel:
+        queue = multiprocessing.Queue(-1)
+
+        listener = multiprocessing.Process(target=listener_process, args=(queue, listener_configurer, log_file, level))
+        worker_configurer(queue, level)
+        listener.start()
+
     if os.path.exists(args.model):
         asr_model = nemo_asr.models.EncDecCTCModel.restore_from(args.model)
     elif args.model in nemo_asr.models.EncDecCTCModel.get_available_model_names():
@@ -61,16 +72,13 @@ if __name__ == '__main__':
             f'Provide path to the pretrained checkpoint or choose from {nemo_asr.models.EncDecCTCModel.list_available_models()}'
         )
 
-    # alignment
+    # extract ASR vocabulary and add blank symbol
     vocabulary = asr_model.cfg.decoder['params']['vocabulary']
     odim = len(asr_model._cfg.decoder.params['vocabulary']) + 1
-    logging.debug(vocabulary)
-    logging.debug(asr_model.cfg.preprocessor['params'])
+    logging.debug(f'ASR Model vocabulary: {vocabulary}')
 
     # add blank to vocab
     vocabulary = ["ε"] + list(vocabulary)
-    # space_id = labels.index(' ')
-
     data = Path(args.data)
     output_dir = Path(args.output_dir)
 
@@ -95,6 +103,7 @@ if __name__ == '__main__':
 
         try:
             sampling_rate, signal = wav.read(path_audio)
+            logging.info('----> all good')
             if sampling_rate != args.sampling_rate:
                 logging.info(f'Converting {path_audio} from {sampling_rate} to {args.sampling_rate}')
                 start_time = time.time()
@@ -134,19 +143,29 @@ if __name__ == '__main__':
                 args.window_len,
             )
     else:
-        Pool().starmap(
-            get_segments,
-            [
-                x
-                for x in zip(
-                    all_log_probs,
-                    all_wav_paths,
-                    all_transcript_file,
-                    all_segment_file,
-                    repeat(vocabulary),
-                    repeat(args.window_len),
-                )
-            ],
-        )
+        workers = []
+        for i in range(len(all_log_probs)):
+            worker = multiprocessing.Process(
+                target=worker_process,
+                args=(
+                    queue,
+                    worker_configurer,
+                    level,
+                    all_log_probs[i],
+                    all_wav_paths[i],
+                    all_transcript_file[i],
+                    all_segment_file[i],
+                    vocabulary,
+                    args.window_len,
+                ),
+            )
+            workers.append(worker)
+            worker.start()
+        for w in workers:
+            w.join()
+        queue.put_nowait(None)
+        listener.join()
+
     total_time = time.time() - start_time
     logging.info(f'Total execution time: {total_time}s or ~{round(total_time/60)}min')
+    logging.info(f'Saving logs to {log_file}')

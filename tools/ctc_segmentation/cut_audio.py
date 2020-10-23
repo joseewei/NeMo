@@ -33,6 +33,11 @@ parser.add_argument("--threshold", type=float, default=-5, help='Minimum score v
 parser.add_argument(
     '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name'
 )
+parser.add_argument(
+    "--drop_oov",
+    action="store_true",
+    help='Set to True to drop examples that contain OOV symbols (except punctuation)',
+)
 args = parser.parse_args()
 
 # create directories to store high score .wav audio fragments, low scored once, and deleted
@@ -46,10 +51,10 @@ os.makedirs(fragments_dir, exist_ok=True)
 os.makedirs(low_score_segments_dir, exist_ok=True)
 os.makedirs(del_fragments, exist_ok=True)
 
-base_name = os.path.basename(args.alignment)
-manifest_path = os.path.join(args.output_dir, base_name.replace('segments.txt', 'manifest.json'))
-low_score_segments_manifest = os.path.join(args.output_dir, base_name.replace('segments.txt', 'low_score_manifest.json'))
-del_manifest = os.path.join(args.output_dir, base_name.replace('segments.txt', 'del_manifest.json'))
+base_name = os.path.basename(args.alignment).replace('_segments.txt', '')
+manifest_path = os.path.join(args.output_dir, f'{base_name}_manifest.json')
+low_score_segments_manifest = os.path.join(args.output_dir, f'{base_name}_low_score_manifest.json')
+del_manifest = os.path.join(args.output_dir, f'{base_name}_del_manifest.json')
 
 segments = []
 ref_text = []
@@ -126,7 +131,7 @@ with open(del_manifest, 'w') as f:
     for i, (st, end, _) in enumerate(segments):
         if st - begin > 0.01:
             segment = signal[int(begin * sampling_rate) : int(st * sampling_rate)]
-            audio_filepath = os.path.join(del_fragments, f'del_{base_name}_{i:03}.wav')
+            audio_filepath = os.path.join(del_fragments, f'del_{base_name}_{i:04}.wav')
             wavfile.write(audio_filepath, sampling_rate, segment)
             duration = len(segment) / sampling_rate
             del_duration += duration
@@ -138,7 +143,7 @@ with open(del_manifest, 'w') as f:
         begin = end
 
     segment = signal[int(begin * sampling_rate) :]
-    audio_filepath = os.path.join(del_fragments, f'del_{i+1:03}.wav')
+    audio_filepath = os.path.join(del_fragments, f'del_{base_name}_{i+1:04}.wav')
     wavfile.write(audio_filepath, sampling_rate, segment)
     duration = len(segment) / sampling_rate
     del_duration += duration

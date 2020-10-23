@@ -29,12 +29,22 @@ with open(in_text, 'r') as f:
     text = f.read()
 
 pattern = "\n\n[A-Z]+\n\n"
-chapter_romans = re.findall(pattern,text)
+chapter_romans = re.findall(pattern, text)
 
 assert len(chapter_romans) == len(audio_paths), 'Incorrect split'
 
 ru_zero = ['первая', 'вторая', 'третья', 'четвертая', 'пятая', 'шестая', 'седьмая', 'восьмая', 'девятая', 'десятая']
-ru_first = ['одиннадцатая', 'двенадцатая', 'тринадцатая', 'четырнадцатая', 'пятнадцатая', 'шестнадцатая', 'семнадцатая', 'восемнадцатая', 'девятнадцатая']
+ru_first = [
+    'одиннадцатая',
+    'двенадцатая',
+    'тринадцатая',
+    'четырнадцатая',
+    'пятнадцатая',
+    'шестнадцатая',
+    'семнадцатая',
+    'восемнадцатая',
+    'девятнадцатая',
+]
 ru_second = ['двадцатая'] + ['двадцать ' + n for n in ru_zero[:-1]]
 ru_third = ['тридцатая'] + ['тридцать ' + n for n in ru_zero[:-1]]
 ru_fourth = ['сороковая'] + ['сорок ' + n for n in ru_zero[:-1]]
