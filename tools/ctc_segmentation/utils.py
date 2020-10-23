@@ -59,24 +59,20 @@ def get_segments(
         text = f.readlines()
         text = [t.strip() for t in text if t.strip()]
 
-    logging.info(f"Syncing {transcript_file}")
+    logging.debug(f"Syncing {transcript_file}")
     ground_truth_mat, utt_begin_indices = cs.prepare_text(config, text)
 
-    logging.info(
+    logging.debug(
         f"Audio length {os.path.basename(path_wav)}: {log_probs.shape[0]}. Text length {os.path.basename(transcript_file)}: {len(ground_truth_mat)}"
     )
 
-    if len(ground_truth_mat) > log_probs.shape[0]:
-        logging.warning(f"Skipping: Audio {path_wav} is shorter than text {transcript_file}")
-    else:
-        start_time = time.time()
-        timings, char_probs, char_list = cs.ctc_segmentation(config, log_probs, ground_truth_mat)
-        total_time = time.time() - start_time
-        logging.info(f"Time: {total_time}s ---> ~{round(total_time/60)}min")
-        logging.info(f"Saving segments to {output_file}")
+    start_time = time.time()
+    timings, char_probs, char_list = cs.ctc_segmentation(config, log_probs, ground_truth_mat)
+    total_time = time.time() - start_time
+    logging.info(f"Time: ~{round(total_time/60)}min. Saving segments to {output_file}")
 
-        segments = cs.determine_utterance_segments(config, utt_begin_indices, char_probs, timings, text)
-        write_output(output_file, path_wav, segments, text)
+    segments = cs.determine_utterance_segments(config, utt_begin_indices, char_probs, timings, text)
+    write_output(output_file, path_wav, segments, text)
 
 
 def write_output(out_path, path_wav, segments, text, stride: int = 2):
@@ -104,13 +100,11 @@ def write_output(out_path, path_wav, segments, text, stride: int = 2):
 
 def listener_configurer(log_file, level):
     root = logging.getLogger()
-    print('----->', 'WWWWW')
-    h = logging.handlers.RotatingFileHandler(log_file, 'w')
+    h = logging.handlers.RotatingFileHandler(log_file, 'a')
     f = logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s')
     h.setFormatter(f)
     root.addHandler(h)
     root.setLevel(level)
-
 
 def listener_process(queue, configurer, log_file, level):
     configurer(log_file, level)

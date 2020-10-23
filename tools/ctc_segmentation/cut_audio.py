@@ -92,7 +92,7 @@ start = 0
 with open(manifest_path, 'w') as f:
     with open(low_score_segments_manifest, 'w') as low_score_f:
         for i, (st, end, score) in enumerate(segments):
-            segment = signal[int(st * sampling_rate) : int(end * sampling_rate)]
+            segment = signal[round(st * sampling_rate): round(end * sampling_rate)]
             duration = len(segment) / sampling_rate
             if duration > 0:
                 text = ref_text[i]

@@ -16,6 +16,7 @@ import argparse
 import logging
 import multiprocessing
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -54,9 +55,13 @@ if __name__ == '__main__':
     os.makedirs(args.output_dir, exist_ok=True)
     log_file = os.path.join(args.output_dir, 'ctc_segmentation.log')
     level = 'DEBUG' if args.debug else 'INFO'
-    logger = logging.getLogger('CTC')
-    logging.basicConfig(filename=log_file, level=level)
-    if not args.no_parallel:
+    if args.no_parallel:
+        logger = logging.getLogger('CTC')
+        file_handler = logging.FileHandler(filename=log_file)
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        handlers = [file_handler, stdout_handler]
+        logging.basicConfig(handlers=handlers, level=level)
+    else:
         queue = multiprocessing.Queue(-1)
 
         listener = multiprocessing.Process(target=listener_process, args=(queue, listener_configurer, log_file, level))
@@ -103,7 +108,6 @@ if __name__ == '__main__':
 
         try:
             sampling_rate, signal = wav.read(path_audio)
-            logging.info('----> all good')
             if sampling_rate != args.sampling_rate:
                 logging.info(f'Converting {path_audio} from {sampling_rate} to {args.sampling_rate}')
                 start_time = time.time()
@@ -115,7 +119,7 @@ if __name__ == '__main__':
             raise
 
         original_duration = len(signal) / sampling_rate
-        logging.info(f'Original audio length: {original_duration}')
+        logging.debug(f'Duration: {original_duration}s, file_name: {path_audio}')
 
         log_probs = asr_model.transcribe(paths2audio_files=[str(path_audio)], batch_size=1, logprobs=True)[0].cpu()
 
@@ -167,5 +171,5 @@ if __name__ == '__main__':
         listener.join()
 
     total_time = time.time() - start_time
-    logging.info(f'Total execution time: {total_time}s or ~{round(total_time/60)}min')
+    logging.info(f'Total execution time: ~{round(total_time/60)}min')
     logging.info(f'Saving logs to {log_file}')
