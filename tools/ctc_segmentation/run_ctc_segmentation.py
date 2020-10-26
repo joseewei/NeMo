@@ -61,12 +61,7 @@ if __name__ == '__main__':
         stdout_handler = logging.StreamHandler(sys.stdout)
         handlers = [file_handler, stdout_handler]
         logging.basicConfig(handlers=handlers, level=level)
-    else:
-        queue = multiprocessing.Queue(-1)
 
-        listener = multiprocessing.Process(target=listener_process, args=(queue, listener_configurer, log_file, level))
-        worker_configurer(queue, level)
-        listener.start()
 
     if os.path.exists(args.model):
         asr_model = nemo_asr.models.EncDecCTCModel.restore_from(args.model)
@@ -147,6 +142,11 @@ if __name__ == '__main__':
                 args.window_len,
             )
     else:
+        queue = multiprocessing.Queue(-1)
+
+        listener = multiprocessing.Process(target=listener_process, args=(queue, listener_configurer, log_file, level))
+        worker_configurer(queue, level)
+        listener.start()
         workers = []
         for i in range(len(all_log_probs)):
             worker = multiprocessing.Process(
