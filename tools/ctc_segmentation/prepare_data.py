@@ -13,28 +13,28 @@
 # limitations under the License.
 
 import argparse
+import multiprocessing
 import os
 import re
 import string
 from pathlib import Path
 
+import scipy.io.wavfile as wavfile
+
 from nemo.collections import asr as nemo_asr
 from nemo.utils import logging
 
 parser = argparse.ArgumentParser(description="Prepare transcript for segmentation")
-parser.add_argument("--base_name", type=str, default=None, help="Base name for the combined audio files and text file")
 parser.add_argument("--in_text", type=str, default=None, help='Path to input text file')
 parser.add_argument("--output_dir", type=str, required=True, help='Path to output directory')
-parser.add_argument("--audio_dir", type=str, help='Path to folder with audio files')
-parser.add_argument('--sampling_rate', type=int, default=16000, help='Sampling rate used for the model')
-parser.add_argument('--format', type=str, default='.mp3', choices=['.wav', '.mp3'])
+parser.add_argument("--audio_dir", type=str, help='Path to folder with .mp3 audio files')
+parser.add_argument('--sample_rate', type=int, default=16000, help='Sampling rate used for the model')
 parser.add_argument('--language', type=str, default='eng', choices=['eng', 'ru'])
 parser.add_argument(
-    '--combine_audio',
-    action='store_true',
-    help='Set to True to combine multiple audiofiles into 1'
-    'Useful when only 1 transcript is present for'
-    'all audio files',
+    '--cut_prefix',
+    type=int,
+    default=0,
+    help='Number of secs to from the beginning of the audio files. Librivox audio files contains long intro.',
 )
 parser.add_argument(
     '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name'
@@ -106,22 +106,31 @@ NUMBERS_TO_RU = {
 }
 
 
-def convert_mp3_to_wav(mp3_file: str, wav_file: str = None, sampling_rate: int = 16000) -> str:
+def convert_mp3_to_wav(mp3_file: str, wav_file: str = None, sample_rate: int = 16000) -> str:
     """
-    Converts .mp3 to .wav and changes sampling rate if needed
+    Converts .mp3 to .wav and changes sample rate if needed
 
     mp3_file: Path to .mp3 file
-    sampling_rate: Desired sampling rate
+    sample_rate: Desired sample rate
 
     Returns:
         path to .wav file
     """
-    logging.info(f"Converting {mp3_file} to .wav format with sampling rate {sampling_rate}")
+    logging.info(f"Converting {mp3_file} to .wav format with sample rate {sample_rate}")
 
     if wav_file is None:
         wav_file = mp3_file.replace(".mp3", ".wav")
-    os.system(f'ffmpeg -i {mp3_file} -ac 1 -af aresample=resampler=soxr -ar {sampling_rate} {wav_file} -y')
+    os.system(f'ffmpeg -i {mp3_file} -ac 1 -af aresample=resampler=soxr -ar {sample_rate} {wav_file} -y')
     return wav_file
+
+
+def process_audio(mp3_file: str, wav_file: str = None, cut_prefix: int = 0, sample_rate: int = 16000):
+    """Processes audio file: .mp3 to .wav conversion and cut a few seconds from the begging of the audio"""
+    wav_audio = convert_mp3_to_wav(str(mp3_file), wav_file, sample_rate)
+
+    # cut a few seconds of audio from the beginning
+    sample_rate, signal = wavfile.read(wav_audio)
+    wavfile.write(wav_audio, data=signal[cut_prefix * sample_rate :], rate=sample_rate)
 
 
 def split_text(
@@ -144,7 +153,7 @@ def split_text(
 
     if remove_square_brackets:
         transcript = re.sub(r'(\[.*?\])', ' ', transcript)
-        logging.info(f'Removed text in [square] breakets')
+        logging.info(f'Removed text in [square] brackets')
 
     # Read and split transcript by utterance (roughly, sentences)
     split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!)\s"
@@ -226,11 +235,17 @@ if __name__ == '__main__':
         if args.audio_dir:
             if not os.path.exists(args.audio_dir):
                 raise ValueError(f'Provide a valid path to the audio files, provided: {args.audio_dir}')
-            audio_paths = Path(args.audio_dir).glob("*" + args.format)
-            wav_paths = []
-            for path_audio in audio_paths:
-                if args.format == ".mp3":
-                    converted_file_name = os.path.join(args.output_dir, path_audio.name.replace(".mp3", ".wav"))
-                    wav_paths.append(convert_mp3_to_wav(str(path_audio), converted_file_name, args.sampling_rate))
+            audio_paths = list(Path(args.audio_dir).glob("*.mp3"))
+
+            workers = []
+            for i in range(len(audio_paths)):
+                wav_file = os.path.join(args.output_dir, audio_paths[i].name.replace(".mp3", ".wav"))
+                worker = multiprocessing.Process(
+                    target=process_audio, args=(audio_paths[i], wav_file, args.cut_prefix, args.sample_rate),
+                )
+                workers.append(worker)
+                worker.start()
+            for w in workers:
+                w.join()
 
     logging.info('Done.')

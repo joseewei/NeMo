@@ -59,12 +59,12 @@ def get_segments(
         text = f.readlines()
         text = [t.strip() for t in text if t.strip()]
 
-    logging.debug(f"Syncing {transcript_file}")
+    # logging.debug(f"Syncing {transcript_file}")
     ground_truth_mat, utt_begin_indices = cs.prepare_text(config, text)
 
-    logging.debug(
-        f"Audio length {os.path.basename(path_wav)}: {log_probs.shape[0]}. Text length {os.path.basename(transcript_file)}: {len(ground_truth_mat)}"
-    )
+    # logging.debug(
+    #     f"Audio length {os.path.basename(path_wav)}: {log_probs.shape[0]}. Text length {os.path.basename(transcript_file)}: {len(ground_truth_mat)}"
+    # )
 
     start_time = time.time()
     timings, char_probs, char_list = cs.ctc_segmentation(config, log_probs, ground_truth_mat)
@@ -106,6 +106,7 @@ def listener_configurer(log_file, level):
     root.addHandler(h)
     root.setLevel(level)
 
+
 def listener_process(queue, configurer, log_file, level):
     configurer(log_file, level)
     while True:
@@ -135,5 +136,9 @@ def worker_process(
 ):
     configurer(queue, level)
     name = multiprocessing.current_process().name
-    logging.info(f'{name} is processing {path_wav}')
+    import random
+
+    innerlogger = logging.getLogger('worker')
+
+    innerlogger.info(f'{name} is processing {path_wav} - {random.randint(0, 100)}')
     get_segments(log_probs, path_wav, transcript_file, output_file, vocabulary, window_len)

@@ -24,7 +24,6 @@ import librosa
 import numpy as np
 import scipy.io.wavfile as wav
 import torch
-from prepare_data import convert_mp3_to_wav
 from utils import get_segments, listener_configurer, listener_process, worker_configurer, worker_process
 
 import nemo.collections.asr as nemo_asr
@@ -40,28 +39,29 @@ parser.add_argument(
     'as the wav file.',
 )
 parser.add_argument('--window_len', type=int, default=8000)
-parser.add_argument('--format', type=str, default='.wav', choices=['.wav', '.mp3'])
 parser.add_argument('--no_parallel', action='store_true')
-parser.add_argument('--sampling_rate', type=int, default=16000)
+parser.add_argument('--sample_rate', type=int, default=16000)
 parser.add_argument(
     '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name'
 )
 parser.add_argument('--debug', action='store_true', help='Set to True for debugging')
 
+logger = logging.getLogger('ctc_segmentation')  # use module name
+
 if __name__ == '__main__':
+
     args = parser.parse_args()
 
     # setup logger
     os.makedirs(args.output_dir, exist_ok=True)
     log_file = os.path.join(args.output_dir, 'ctc_segmentation.log')
     level = 'DEBUG' if args.debug else 'INFO'
-    if args.no_parallel:
-        logger = logging.getLogger('CTC')
-        file_handler = logging.FileHandler(filename=log_file)
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        handlers = [file_handler, stdout_handler]
-        logging.basicConfig(handlers=handlers, level=level)
-
+    # if args.no_parallel:
+    #     logger = logging.getLogger('CTC')
+    #     file_handler = logging.FileHandler(filename=log_file)
+    #     stdout_handler = logging.StreamHandler(sys.stdout)
+    #     handlers = [file_handler, stdout_handler]
+    #     logging.basicConfig(handlers=handlers, level=level)
 
     if os.path.exists(args.model):
         asr_model = nemo_asr.models.EncDecCTCModel.restore_from(args.model)
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     # extract ASR vocabulary and add blank symbol
     vocabulary = asr_model.cfg.decoder['params']['vocabulary']
     odim = len(asr_model._cfg.decoder.params['vocabulary']) + 1
-    logging.debug(f'ASR Model vocabulary: {vocabulary}')
+    # logging.debug(f'ASR Model vocabulary: {vocabulary}')
 
     # add blank to vocab
     vocabulary = ["ε"] + list(vocabulary)
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     output_dir = Path(args.output_dir)
 
     if os.path.isdir(data):
-        audio_paths = data.glob("*" + args.format)
+        audio_paths = data.glob("*.wav")
         data_dir = data
     else:
         audio_paths = [Path(data)]
@@ -93,28 +93,27 @@ if __name__ == '__main__':
     all_transcript_file = []
     all_segment_file = []
     all_wav_paths = []
-
     for path_audio in audio_paths:
-        if args.format == ".mp3":
-            path_audio = Path(convert_mp3_to_wav(str(path_audio), args.sampling_rate))
+        # if args.format == ".mp3":
+        #     path_audio = Path(convert_mp3_to_wav(str(path_audio), args.sample_rate))
 
         transcript_file = data_dir / path_audio.name.replace(".wav", ".txt")
         segment_file = output_dir / path_audio.name.replace(".wav", "_segments.txt")
 
         try:
-            sampling_rate, signal = wav.read(path_audio)
-            if sampling_rate != args.sampling_rate:
-                logging.info(f'Converting {path_audio} from {sampling_rate} to {args.sampling_rate}')
+            sample_rate, signal = wav.read(path_audio)
+            if sample_rate != args.sample_rate:
+                # logging.info(f'Converting {path_audio} from {sample_rate} to {args.sample_rate}')
                 start_time = time.time()
-                signal, sampling_rate = librosa.load(path_audio, sr=args.sampling_rate)
-                logging.info(f'Time to convert {time.time() - start_time}')
+                signal, sample_rate = librosa.load(path_audio, sr=args.sample_rate)
+                # logging.info(f'Time to convert {time.time() - start_time}')
 
         except ValueError:
             logging.error(f"Check that '--format .mp3' arg is used for .mp3 audio files")
             raise
 
-        original_duration = len(signal) / sampling_rate
-        logging.debug(f'Duration: {original_duration}s, file_name: {path_audio}')
+        original_duration = len(signal) / sample_rate
+        # logging.debug(f'Duration: {original_duration}s, file_name: {path_audio}')
 
         log_probs = asr_model.transcribe(paths2audio_files=[str(path_audio)], batch_size=1, logprobs=True)[0].cpu()
 
@@ -145,7 +144,7 @@ if __name__ == '__main__':
         queue = multiprocessing.Queue(-1)
 
         listener = multiprocessing.Process(target=listener_process, args=(queue, listener_configurer, log_file, level))
-        worker_configurer(queue, level)
+        # worker_configurer(queue, level)
         listener.start()
         workers = []
         for i in range(len(all_log_probs)):
@@ -171,5 +170,5 @@ if __name__ == '__main__':
         listener.join()
 
     total_time = time.time() - start_time
-    logging.info(f'Total execution time: ~{round(total_time/60)}min')
-    logging.info(f'Saving logs to {log_file}')
+    # logging.info(f'Total execution time: ~{round(total_time/60)}min')
+    # logging.info(f'Saving logs to {log_file}')
