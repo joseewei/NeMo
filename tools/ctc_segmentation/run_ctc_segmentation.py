@@ -144,7 +144,6 @@ if __name__ == '__main__':
         queue = multiprocessing.Queue(-1)
 
         listener = multiprocessing.Process(target=listener_process, args=(queue, listener_configurer, log_file, level))
-        # worker_configurer(queue, level)
         listener.start()
         workers = []
         for i in range(len(all_log_probs)):

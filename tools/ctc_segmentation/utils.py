@@ -103,8 +103,10 @@ def listener_configurer(log_file, level):
     h = logging.handlers.RotatingFileHandler(log_file, 'a')
     f = logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s')
     h.setFormatter(f)
+    ch = logging.StreamHandler()
     root.addHandler(h)
     root.setLevel(level)
+    root.addHandler(ch)
 
 
 def listener_process(queue, configurer, log_file, level):
@@ -117,6 +119,7 @@ def listener_process(queue, configurer, log_file, level):
             logger = logging.getLogger(record.name)
             logger.setLevel(logging.INFO)
             logger.handle(record)  # No level or filter logic applied - just do it!
+
         except Exception:
             import sys, traceback
 
