@@ -62,7 +62,7 @@ replaced = 0
 for i, t in enumerate(text):
     if t.strip() in roman_numerals:
         idx = roman_numerals.index(t.strip())
-        text[i] = t.replace(roman_numerals[idx], 'Глава ' + ru_text[idx])
+        text[i] = t.replace(roman_numerals[idx], 'Глава ' + ru_text[idx] + '. ')
         replaced += 1
 
 text_files = []

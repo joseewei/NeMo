@@ -77,7 +77,6 @@ class AudioPreprocessor(NeuralModule, ABC):
     @torch.no_grad()
     def forward(self, input_signal, length):
         processed_signal, processed_length = self.get_features(input_signal, length)
-
         return processed_signal, processed_length
 
     @abstractmethod

@@ -15,7 +15,6 @@
 import logging
 import logging.handlers
 import multiprocessing
-import os
 import time
 from pathlib import PosixPath
 from typing import List, Union

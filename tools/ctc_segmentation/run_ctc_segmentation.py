@@ -16,7 +16,6 @@ import argparse
 import logging
 import multiprocessing
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -169,5 +168,5 @@ if __name__ == '__main__':
         listener.join()
 
     total_time = time.time() - start_time
-    # logging.info(f'Total execution time: ~{round(total_time/60)}min')
-    # logging.info(f'Saving logs to {log_file}')
+    logging.info(f'Total execution time: ~{round(total_time/60)}min')
+    logging.info(f'Saving logs to {log_file}')
