@@ -33,7 +33,10 @@ parser.add_argument(
 )
 parser.add_argument("--threshold", type=float, default=-5, help='Minimum score value accepted')
 parser.add_argument(
-    '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name'
+    '--model',
+    type=str,
+    default='/home/ebakhturina/nemo_ckpts/quartznet/QuartzNet15x5-Ru-e512-wer14.45.nemo',
+    help='Path to model checkpoint or pretrained model name',
 )
 # TO DO:
 # check the debug in logging

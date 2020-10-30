@@ -41,7 +41,10 @@ parser.add_argument('--window_len', type=int, default=8000)
 parser.add_argument('--no_parallel', action='store_true')
 parser.add_argument('--sample_rate', type=int, default=16000)
 parser.add_argument(
-    '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or ' 'pretrained model name'
+    '--model',
+    type=str,
+    default='/home/ebakhturina/nemo_ckpts/quartznet/QuartzNet15x5-Ru-e512-wer14.45.nemo',
+    help='Path to model checkpoint or pretrained model name',
 )
 parser.add_argument('--debug', action='store_true', help='Set to True for debugging')
 

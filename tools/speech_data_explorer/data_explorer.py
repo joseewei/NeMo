@@ -38,8 +38,9 @@ def parse_args():
         'manifest', help='path to JSON manifest file',
     )
     parser.add_argument('--debug', '-d', action='store_true', help='enable debug mode')
+    parser.add_argument('--port', '-p', default=8050, type=int, help='port number')
     args = parser.parse_args()
-    return args.manifest, args.debug
+    return args.manifest, args.debug, args.port
 
 
 def load_data(data_filename):
@@ -89,7 +90,7 @@ def plot_histogram(data, key, label):
     return fig
 
 
-manifest_file, debug = parse_args()
+manifest_file, debug, port = parse_args()
 data, num_hours, vocabulary, alphabet = load_data(manifest_file)
 
 figure_duration = plot_histogram(data, 'duration', 'Duration (sec)')
@@ -311,4 +312,4 @@ def update_player(idx):
 
 
 if __name__ == '__main__':
-    app.run_server(host='0.0.0.0', debug=debug)
+    app.run_server(host='0.0.0.0', debug=debug, port=port)
