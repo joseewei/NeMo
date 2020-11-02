@@ -18,6 +18,7 @@ import multiprocessing
 import time
 from pathlib import PosixPath
 from typing import List, Union
+import os
 
 import ctc_segmentation as cs
 import numpy as np
@@ -58,23 +59,29 @@ def get_segments(
         text = f.readlines()
         text = [t.strip() for t in text if t.strip()]
 
-    # logging.debug(f"Syncing {transcript_file}")
+    # add corresonding original text with no preprocessing
+    transcript_file_no_preprocessing = transcript_file.replace('.txt', '_with_punct.txt')
+    if not os.path.exists(transcript_file_no_preprocessing):
+        raise ValueError(f'{transcript_file_no_preprocessing} not found.')
+
+    with open(transcript_file_no_preprocessing, "r") as f:
+        text_no_preprocessing = f.readlines()
+        text_no_preprocessing = [t.strip() for t in text_no_preprocessing if t.strip()]
+
+
     ground_truth_mat, utt_begin_indices = cs.prepare_text(config, text)
+    logging.debug(f"Syncing {transcript_file}")
+    logging.debug(
+        f"Audio length {os.path.basename(path_wav)}: {log_probs.shape[0]}. "
+        f"Text length {os.path.basename(transcript_file)}: {len(ground_truth_mat)}"
+    )
 
-    # logging.debug(
-    #     f"Audio length {os.path.basename(path_wav)}: {log_probs.shape[0]}. Text length {os.path.basename(transcript_file)}: {len(ground_truth_mat)}"
-    # )
-
-    start_time = time.time()
     timings, char_probs, char_list = cs.ctc_segmentation(config, log_probs, ground_truth_mat)
-    total_time = time.time() - start_time
-    logging.info(f"Time: ~{round(total_time/60)}min. Saving segments to {output_file}")
-
     segments = cs.determine_utterance_segments(config, utt_begin_indices, char_probs, timings, text)
-    write_output(output_file, path_wav, segments, text)
+    write_output(output_file, path_wav, segments, text, text_no_preprocessing)
 
 
-def write_output(out_path, path_wav, segments, text, stride: int = 2, offset: float = 0.18):
+def write_output(out_path, path_wav, segments, text, text_no_preprocessing, stride: int = 2, offset: float = 0):
     """
 
     :param out_path:
@@ -89,7 +96,7 @@ def write_output(out_path, path_wav, segments, text, stride: int = 2, offset: fl
         outfile.write(str(path_wav) + "\n")
 
         for i, (start, end, score) in enumerate(segments):
-            outfile.write(f'{start/stride} {end/stride + offset} {score} | {text[i]}\n')
+            outfile.write(f'{start/stride} {end/stride + offset} {score} | {text[i]} | {text_no_preprocessing[i]}\n')
 
 
 #####################
@@ -138,9 +145,7 @@ def worker_process(
 ):
     configurer(queue, level)
     name = multiprocessing.current_process().name
-    import random
-
     innerlogger = logging.getLogger('worker')
 
-    innerlogger.info(f'{name} is processing {path_wav} - {random.randint(0, 100)}')
+    innerlogger.info(f'{name} is processing {path_wav}')
     get_segments(log_probs, path_wav, transcript_file, output_file, vocabulary, window_len)

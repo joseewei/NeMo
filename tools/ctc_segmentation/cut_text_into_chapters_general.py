@@ -19,7 +19,7 @@ from pathlib import Path
 format = '.mp3'
 audio_data_dir = '/home/ebakhturina/data/segmentation/librivox/ru/01_goncharov_obryv/audio'
 in_text = '/home/ebakhturina/data/segmentation/librivox/ru/01_goncharov_obryv/sublime_goncharov.txt'
-output_dir = '/home/ebakhturina/data/segmentation/librivox/ru/01_goncharov_obryv/processed'
+output_dir = '/home/ebakhturina/data/segmentation/librivox/ru/01_goncharov_obryv/chapters'
 os.makedirs(output_dir, exist_ok=True)
 
 
@@ -62,7 +62,9 @@ replaced = 0
 for i, t in enumerate(text):
     if t.strip() in roman_numerals:
         idx = roman_numerals.index(t.strip())
-        text[i] = t.replace(roman_numerals[idx], 'Глава ' + ru_text[idx] + '. ')
+        # removing chapter name since some audio parts have chapter name name followed by intro
+        # that could break alignment
+        text[i] = t.replace(roman_numerals[idx], '') #'Глава ' + ru_text[idx] + '. ')
         replaced += 1
 
 text_files = []

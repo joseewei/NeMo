@@ -33,7 +33,7 @@ parser.add_argument('--language', type=str, default='eng', choices=['eng', 'ru']
 parser.add_argument(
     '--cut_prefix',
     type=int,
-    default=0,
+    default=3,
     help='Number of secs to from the beginning of the audio files. Librivox audio files contains long intro.',
 )
 parser.add_argument(
@@ -77,12 +77,12 @@ MISC_TO_RU = {
     ' к.': ' копеек',
     ' коп.': ' копеек',
     ' копек.': ' копеек',
-    ' т.д. ': ' так далее ',
-    ' т. д. ': ' так далее ',
-    ' т.п. ': ' тому подобное ',
-    ' т. п. ': ' тому подобное ',
-    ' т.e. ': ' то есть ',
-    ' т. e. ': ' то есть ',
+    ' т.д.': ' так далее',
+    ' т. д.': ' так далее',
+    ' т.п.': ' тому подобное',
+    ' т. п.': ' тому подобное',
+    ' т.e.': ' то есть',
+    ' т. e.': ' то есть',
 }
 NUMBERS_TO_ENG = {
     '0': 'zero ',
@@ -154,7 +154,9 @@ def split_text(
     with open(in_file, "r") as f:
         transcript = f.read()
 
-    transcript = transcript.replace("\n", " ")
+    transcript = transcript.replace("\n", " ").replace("…", "...").replace("»", "").replace("«", "")
+    # remove extra space
+    transcript = re.sub(r' +', ' ', transcript)
 
     if remove_square_brackets:
         transcript = re.sub(r'(\[.*?\])', ' ', transcript)
@@ -162,45 +164,48 @@ def split_text(
 
     # Read and split transcript by utterance (roughly, sentences)
     split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!)\s"
+
     sentences = re.split(split_pattern, transcript)
+
+    # combine short sentences to the previous sentence
+    for i in range(len(sentences)):
+        if i > 0 and len(sentences[i].strip()) < 10:
+            sentences[i - 1] = sentences[i - 1] + ' ' + sentences[i]
+            sentences[i] = ''
+
+    sentences = "\n".join([s for s in sentences if s])
 
     # save split text with original punctuation and case
     out_dir, out_file_name = os.path.split(out_file)
     with open(os.path.join(out_dir, out_file_name[:-4] + '_with_punct.txt'), "w") as f:
-        sentences_with_punct = "\n".join([s for s in sentences if s])
-        # remove extra space
-        sentences_with_punct = re.sub(r' +', ' ', sentences_with_punct)
-        f.write(sentences_with_punct)
-
-    # make sure to leave punctuation present in vocabulary
-    all_punct_marks = string.punctuation
-    if vocabulary:
-        for v in vocabulary:
-            all_punct_marks = all_punct_marks.replace(v, '')
-    sentences = [re.sub("[" + all_punct_marks + "]", "", t).strip() for t in sentences]
-    sentences = "\n".join([s for s in sentences if s])
+        f.write(sentences)
 
     if do_lower_case:
         sentences = sentences.lower()
 
     if language == 'eng':
-        # remove text in square brackets - translation
         for k, v in NUMBERS_TO_ENG.items():
             sentences = sentences.replace(k, v)
         # remove non acsii characters
         sentences = ''.join(i for i in sentences if ord(i) < 128)
     elif language == 'ru':
         if vocabulary and '-' not in vocabulary:
-            sentences.replace('-', ' ')
-        # remove text in square brackets - translation
+            sentences = sentences.replace('-', ' ')
         for k, v in NUMBERS_TO_RU.items():
             sentences = sentences.replace(k, v)
-        # repalce latin charaters with russian
+        # replace Latin characters with Russian
         for k, v in LATIN_TO_RU.items():
             sentences = sentences.replace(k, v)
+        for k, v in MISC_TO_RU.items():
+            sentences = sentences.replace(k, v)
 
-    # remove extra space
-    sentences = re.sub(r' +', ' ', sentences)
+    # make sure to leave punctuation present in vocabulary
+    all_punct_marks = string.punctuation
+    if vocabulary:
+        for v in vocabulary:
+            all_punct_marks = all_punct_marks.replace(v, '')
+    sentences = re.sub("[" + all_punct_marks + "]", "", sentences).strip()
+
     with open(out_file, "w") as f:
         f.write(sentences)
 

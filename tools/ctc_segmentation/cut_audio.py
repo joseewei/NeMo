@@ -96,12 +96,20 @@ def get_transcript(manifest_path, asr_model, batch_size):
 
 
 def process_alignment(alignment_file, args):
+    """ Cut original audio file into audio segments based on alignment_file
+
+    Args:
+        alignment_file: path to the file with segmented text and corresponding time stamps.
+            The first line of the file contains the path to the original audio file
+        args: main script args
+    """
     if not os.path.exists(alignment_file):
         raise ValueError(f'{alignment_file} not found')
 
     # read the segments, note the first line contins the path to the original audio
     segments = []
-    ref_text = []
+    ref_text_processed = []
+    ref_text_no_preprocessing = []
     with open(alignment_file, 'r') as f:
         for line in f:
             line = line.split('|')
@@ -109,10 +117,10 @@ def process_alignment(alignment_file, args):
             if len(line) == 1:
                 audio_file = line[0].strip()
                 continue
-            text = line[1]
+            ref_text_processed.append(line[1].strip())
+            ref_text_no_preprocessing.append(line[2].strip())
             line = line[0].split()
             segments.append((float(line[0]), float(line[1]), float(line[2])))
-            ref_text.append(text.strip())
 
     # cut the audio into segments
     # create manifest in /tmp directory first, then update transcript values with batch inference results
@@ -137,24 +145,26 @@ def process_alignment(alignment_file, args):
     high_score_manifest = f'{base_name}_high_score_manifest.json'
     low_score_manifest = f'{base_name}_low_score_manifest.json'
     del_manifest = f'{base_name}_del_manifest.json'
+    manifests_dir = os.path.join(args.output_dir, 'manifests')
+    os.makedirs(manifests_dir, exist_ok=True)
     tmp_dir = '/tmp'
 
-    low_score_segments_duration = 0
-    total_dur = 0
-    start = 0
+    low_score_dur = 0
+    high_score_dur = 0
     with open(os.path.join(tmp_dir, high_score_manifest), 'w', encoding='utf8') as f:
         with open(os.path.join(tmp_dir, low_score_manifest), 'w', encoding='utf8') as low_score_f:
             for i, (st, end, score) in enumerate(segments):
                 segment = signal[round(st * sampling_rate) : round(end * sampling_rate)]
                 duration = len(segment) / sampling_rate
                 if duration > 0:
-                    text = ref_text[i]
+                    text_processed = ref_text_processed[i]
+                    text_no_preprocessing = ref_text_no_preprocessing[i]
                     if score > args.threshold:
-                        total_dur += duration
+                        high_score_dur += duration
                         audio_filepath = os.path.join(fragments_dir, f'{base_name}_{i:04}.wav')
                         file_to_write = f
                     else:
-                        low_score_segments_duration += duration
+                        low_score_dur += duration
                         audio_filepath = os.path.join(low_score_segments_dir, f'{base_name}_{i:04}.wav')
                         file_to_write = low_score_f
 
@@ -164,7 +174,8 @@ def process_alignment(alignment_file, args):
                     info = {
                         'audio_filepath': audio_filepath,
                         'duration': duration,
-                        'text': text,
+                        'text': text_processed,
+                        'text_no_preprocessing': text_no_preprocessing,
                         'score': round(score, 2),
                         'transcript': transcript.strip(),
                     }
@@ -173,26 +184,28 @@ def process_alignment(alignment_file, args):
 
     add_transcript_to_manifest(
         os.path.join(tmp_dir, high_score_manifest),
-        os.path.join(args.output_dir, high_score_manifest),
+        os.path.join(manifests_dir, high_score_manifest),
         asr_model,
         args.batch_size,
     )
     add_transcript_to_manifest(
         os.path.join(tmp_dir, low_score_manifest),
-        os.path.join(args.output_dir, low_score_manifest),
+        os.path.join(manifests_dir, low_score_manifest),
         asr_model,
         args.batch_size,
     )
-    logging.info(f'Saved files duration: {round(total_dur)}s or ~{round(total_dur/60)}min at {args.output_dir}')
     logging.info(
-        f'Low score segments duration: {round(low_score_segments_duration)}s or ~{round(low_score_segments_duration/60)}min saved at {low_score_segments_dir}'
+        f'Saved files duration: {round(high_score_dur)}s or ~{round(high_score_dur/60)}min at {args.output_dir}'
+    )
+    logging.info(
+        f'Low score segments duration: {round(low_score_dur)}s or ~{round(low_score_dur/60)}min saved at {low_score_segments_dir}'
     )
 
     # save deleted segments along with manifest
     deleted = []
     del_duration = 0
     begin = 0
-    with open(os.path.join(args.output_dir, del_manifest), 'w', encoding='utf8') as f:
+    with open(os.path.join(manifests_dir, del_manifest), 'w', encoding='utf8') as f:
         for i, (st, end, _) in enumerate(segments):
             if st - begin > 0.01:
                 segment = signal[int(begin * sampling_rate) : int(st * sampling_rate)]
@@ -223,9 +236,12 @@ def process_alignment(alignment_file, args):
     logging.info(
         f'Saved DEL files duration: {round(del_duration)}s or ~ {round(del_duration/60)}min at {del_fragments}'
     )
-    missing_audio = original_duration - total_dur - del_duration - low_score_segments_duration
+    missing_audio = original_duration - high_score_dur - del_duration - low_score_dur
     if missing_audio > 15:
         raise ValueError(f'{round(missing_audio)}s or ~ {round(missing_audio/60)}min is missing. Check the args')
+
+    stats = f'{args.output_dir}\t{base_name}\t{round(original_duration)}\t{round(high_score_dur)}\t{round(low_score_dur)}\t{round(del_duration)}\n'
+    return stats
 
 
 if __name__ == '__main__':
@@ -247,10 +263,13 @@ if __name__ == '__main__':
     else:
         alignment_files = [Path(alignment_files)]
 
-    for alignment_file in alignment_files:
-        print(alignment_file)
-        process_alignment(alignment_file, args)
+    with open(os.path.join(args.output_dir, 'stats.tsv'), 'w') as f:
+        f.write('Folder\tSegment\tOriginal dur (s)\tHigh quality dur (s)\tLow quality dur (s)\tDeleted dur (s)\n')
 
-    total_time = time.time() - start_time
-    logging.info(f'Total execution time: ~{round(total_time / 60)}min')
-    print(f'Total execution time: ~{round(total_time / 60)}min')
+        for alignment_file in alignment_files:
+            stats = process_alignment(alignment_file, args)
+            f.write(stats)
+
+        total_time = time.time() - start_time
+        logging.info(f'Total execution time: ~{round(total_time / 60)}min')
+        print(f'Total execution time: ~{round(total_time / 60)}min')
