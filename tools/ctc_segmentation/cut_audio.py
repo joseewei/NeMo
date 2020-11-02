@@ -192,7 +192,7 @@ def process_alignment(alignment_file, args):
     deleted = []
     del_duration = 0
     begin = 0
-    with open(os.path.join(tmp_dir, del_manifest), 'w', encoding='utf8') as f:
+    with open(os.path.join(args.output_dir, del_manifest), 'w', encoding='utf8') as f:
         for i, (st, end, _) in enumerate(segments):
             if st - begin > 0.01:
                 segment = signal[int(begin * sampling_rate) : int(st * sampling_rate)]

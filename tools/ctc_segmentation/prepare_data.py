@@ -237,20 +237,20 @@ if __name__ == '__main__':
             split_text(text, out_text_file, vocabulary=vocabulary, language=args.language)
             logging.info(f'Text saved to {out_text_file}')
 
-        if args.audio_dir:
-            if not os.path.exists(args.audio_dir):
-                raise ValueError(f'Provide a valid path to the audio files, provided: {args.audio_dir}')
-            audio_paths = list(Path(args.audio_dir).glob("*.mp3"))
+    if args.audio_dir:
+        if not os.path.exists(args.audio_dir):
+            raise ValueError(f'Provide a valid path to the audio files, provided: {args.audio_dir}')
+        audio_paths = list(Path(args.audio_dir).glob("*.mp3"))
 
-            workers = []
-            for i in range(len(audio_paths)):
-                wav_file = os.path.join(args.output_dir, audio_paths[i].name.replace(".mp3", ".wav"))
-                worker = multiprocessing.Process(
-                    target=process_audio, args=(audio_paths[i], wav_file, args.cut_prefix, args.sample_rate),
-                )
-                workers.append(worker)
-                worker.start()
-            for w in workers:
-                w.join()
+        workers = []
+        for i in range(len(audio_paths)):
+            wav_file = os.path.join(args.output_dir, audio_paths[i].name.replace(".mp3", ".wav"))
+            worker = multiprocessing.Process(
+                target=process_audio, args=(audio_paths[i], wav_file, args.cut_prefix, args.sample_rate),
+            )
+            workers.append(worker)
+            worker.start()
+        for w in workers:
+            w.join()
 
     logging.info('Done.')
