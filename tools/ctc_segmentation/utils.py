@@ -15,10 +15,9 @@
 import logging
 import logging.handlers
 import multiprocessing
-import time
+import os
 from pathlib import PosixPath
 from typing import List, Union
-import os
 
 import ctc_segmentation as cs
 import numpy as np
@@ -45,7 +44,7 @@ def get_segments(
         transcript_file: path to
         output_file: path to the file to save timings for segments
         vocabulary: vocabulary used to train the ASR model, note blank is at position 0
-        window_size: the length of each utterance (in terms of frames of the CTC outputs) fits into that window. The default window is 8000, your audio file is much shorter. You may reduce this value to improve alignment speed.
+        window_size: the length of each utterance (in terms of frames of the CTC outputs) fits into that window.
         frame_duration_ms: frame duration in ms
     """
     config = cs.CtcSegmentationParameters()
@@ -59,7 +58,7 @@ def get_segments(
         text = f.readlines()
         text = [t.strip() for t in text if t.strip()]
 
-    # add corresonding original text with no preprocessing
+    # add corresponding original text without pre-processing
     transcript_file_no_preprocessing = transcript_file.replace('.txt', '_with_punct.txt')
     if not os.path.exists(transcript_file_no_preprocessing):
         raise ValueError(f'{transcript_file_no_preprocessing} not found.')
@@ -67,7 +66,6 @@ def get_segments(
     with open(transcript_file_no_preprocessing, "r") as f:
         text_no_preprocessing = f.readlines()
         text_no_preprocessing = [t.strip() for t in text_no_preprocessing if t.strip()]
-
 
     ground_truth_mat, utt_begin_indices = cs.prepare_text(config, text)
     logging.debug(f"Syncing {transcript_file}")
@@ -102,11 +100,9 @@ def write_output(out_path, path_wav, segments, text, text_no_preprocessing, stri
 #####################
 # logging utils
 #####################
-
-
 def listener_configurer(log_file, level):
     root = logging.getLogger()
-    h = logging.handlers.RotatingFileHandler(log_file, 'a')
+    h = logging.handlers.RotatingFileHandler(log_file, 'w')
     f = logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s')
     h.setFormatter(f)
     ch = logging.StreamHandler()
@@ -146,6 +142,6 @@ def worker_process(
     configurer(queue, level)
     name = multiprocessing.current_process().name
     innerlogger = logging.getLogger('worker')
-
-    innerlogger.info(f'{name} is processing {path_wav}')
+    innerlogger.info(f'{name} is processing {path_wav}, window_len={window_len}')
     get_segments(log_probs, path_wav, transcript_file, output_file, vocabulary, window_len)
+    innerlogger.info(f'{name} completed segmentation of {path_wav}, segments saved to {output_file}')

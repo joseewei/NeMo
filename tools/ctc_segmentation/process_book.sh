@@ -1,7 +1,7 @@
 #!/bin/bash
 
 BASE_DIR='/home/ebakhturina/data/segmentation/librivox/ru/01_goncharov_obryv'
-OUTPUT_DIR=$BASE_DIR/v2_0_offset
+OUTPUT_DIR=$BASE_DIR/v3
 MODEL='/home/ebakhturina/nemo_ckpts/quartznet/QuartzNet15x5-Ru-e512-wer14.45.nemo'
 
 python cut_text_into_chapters_general.py

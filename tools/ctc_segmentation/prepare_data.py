@@ -165,6 +165,12 @@ def split_text(
     # Read and split transcript by utterance (roughly, sentences)
     split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!)\s"
 
+    if language == 'ru':
+        # remove space in the middle of the lower case abbreviation to avoid spliting into separate sentences
+        matches = re.findall(r'[a-z\u0430-\u04FF]\.\s[a-z\u0430-\u04FF]\.', transcript)
+        for match in matches:
+            transcript = transcript.replace(match, match.replace('. ', '.'))
+
     sentences = re.split(split_pattern, transcript)
 
     # combine short sentences to the previous sentence

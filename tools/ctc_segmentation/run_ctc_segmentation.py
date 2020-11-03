@@ -16,6 +16,7 @@ import argparse
 import logging
 import multiprocessing
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -55,15 +56,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # setup logger
-    os.makedirs(args.output_dir, exist_ok=True)
-    log_file = os.path.join(args.output_dir, 'ctc_segmentation.log')
+    log_dir = os.path.join(args.output_dir, 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f'ctc_segmentation_{args.window_len}.log')
     level = 'DEBUG' if args.debug else 'INFO'
-    # if args.no_parallel:
-    #     logger = logging.getLogger('CTC')
-    #     file_handler = logging.FileHandler(filename=log_file)
-    #     stdout_handler = logging.StreamHandler(sys.stdout)
-    #     handlers = [file_handler, stdout_handler]
-    #     logging.basicConfig(handlers=handlers, level=level)
+    if True:  # args.no_parallel:
+        logger = logging.getLogger('CTC')
+        file_handler = logging.FileHandler(filename=log_file)
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        handlers = [file_handler, stdout_handler]
+        logging.basicConfig(handlers=handlers, level=level)
 
     if os.path.exists(args.model):
         asr_model = nemo_asr.models.EncDecCTCModel.restore_from(args.model)
@@ -77,7 +79,7 @@ if __name__ == '__main__':
     # extract ASR vocabulary and add blank symbol
     vocabulary = asr_model.cfg.decoder['params']['vocabulary']
     odim = len(asr_model._cfg.decoder.params['vocabulary']) + 1
-    # logging.debug(f'ASR Model vocabulary: {vocabulary}')
+    logging.debug(f'ASR Model vocabulary: {vocabulary}')
 
     # add blank to vocab
     vocabulary = ["ε"] + list(vocabulary)
@@ -95,28 +97,27 @@ if __name__ == '__main__':
     all_transcript_file = []
     all_segment_file = []
     all_wav_paths = []
+    segments_dir = os.path.join(args.output_dir, 'segments')
+    os.makedirs(segments_dir, exist_ok=True)
     for path_audio in audio_paths:
-        # if args.format == ".mp3":
-        #     path_audio = Path(convert_mp3_to_wav(str(path_audio), args.sample_rate))
-
-        transcript_file = data_dir / path_audio.name.replace(".wav", ".txt")
-        segment_file = output_dir / path_audio.name.replace(".wav", "_segments.txt")
-
+        transcript_file = os.path.join(data_dir, path_audio.name.replace(".wav", ".txt"))
+        segment_file = os.path.join(
+            segments_dir, f"{args.window_len}_" + path_audio.name.replace(".wav", "_segments.txt")
+        )
         try:
             sample_rate, signal = wav.read(path_audio)
             if sample_rate != args.sample_rate:
-                # logging.info(f'Converting {path_audio} from {sample_rate} to {args.sample_rate}')
+                logging.info(f'Converting {path_audio} from {sample_rate} to {args.sample_rate}')
                 start_time = time.time()
                 signal, sample_rate = librosa.load(path_audio, sr=args.sample_rate)
-                # logging.info(f'Time to convert {time.time() - start_time}')
+                logging.info(f'Time to convert {time.time() - start_time}')
 
         except ValueError:
-            logging.error(f"Check that '--format .mp3' arg is used for .mp3 audio files")
+            logging.error(f"Audio files should be .wav files with sampling rate used to train ASR model")
             raise
 
         original_duration = len(signal) / sample_rate
-        # logging.debug(f'Duration: {original_duration}s, file_name: {path_audio}')
-
+        logging.debug(f'Duration: {original_duration}s, file_name: {path_audio}')
         log_probs = asr_model.transcribe(paths2audio_files=[str(path_audio)], batch_size=1, logprobs=True)[0].cpu()
 
         # move blank values to the first column
@@ -171,5 +172,9 @@ if __name__ == '__main__':
         listener.join()
 
     total_time = time.time() - start_time
-    logging.info(f'Total execution time: ~{round(total_time/60)}min')
-    logging.info(f'Saving logs to {log_file}')
+    logger.info(f'Total execution time: ~{round(total_time/60)}min')
+    logger.info(f'Saving logs to {log_file}')
+
+    if os.path.exists(log_file):
+        with open(log_file, 'r') as f:
+            lines = f.readlines()

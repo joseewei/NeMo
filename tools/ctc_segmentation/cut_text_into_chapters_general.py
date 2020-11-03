@@ -64,7 +64,7 @@ for i, t in enumerate(text):
         idx = roman_numerals.index(t.strip())
         # removing chapter name since some audio parts have chapter name name followed by intro
         # that could break alignment
-        text[i] = t.replace(roman_numerals[idx], '') #'Глава ' + ru_text[idx] + '. ')
+        text[i] = t.replace(roman_numerals[idx], 'Глава ' + ru_text[idx])
         replaced += 1
 
 text_files = []
