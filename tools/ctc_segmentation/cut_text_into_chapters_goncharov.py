@@ -59,12 +59,13 @@ roman_numerals = roman_zero + roman_first + roman_second + roman_third + roman_f
 
 text = re.split("(" + pattern + ")", text)
 replaced = 0
+del_pattern = '##DELETE##'
 for i, t in enumerate(text):
     if t.strip() in roman_numerals:
         idx = roman_numerals.index(t.strip())
         # removing chapter name since some audio parts have chapter name name followed by intro
         # that could break alignment
-        text[i] = t.replace(roman_numerals[idx], 'Глава ' + ru_text[idx])
+        text[i] = t.replace(roman_numerals[idx], 'Глава ' + ru_text[idx] + del_pattern)
         replaced += 1
 
 text_files = []
@@ -80,7 +81,11 @@ for i, audio in enumerate(sorted(audio_paths)):
         text_segment_id = text_segment_id + 2
     text_files.append(file_name)
     with open(os.path.join(output_dir, file_name), 'w') as f:
-        f.write(''.join(text_segment))
+        text_segment = ''.join(text_segment)
+        # remove the name of the chapter
+        del_idx = text_segment.index(del_pattern)
+        text_segment = text_segment[del_idx + len(del_pattern) :]
+        f.write(text_segment)
 
 if len(list(audio_paths)) != len(text_files):
     raise ValueError(f'Incorrect split')

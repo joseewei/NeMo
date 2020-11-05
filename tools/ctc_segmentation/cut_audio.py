@@ -18,9 +18,11 @@ import os
 import time
 from pathlib import Path
 
+import torch
 from scipy.io import wavfile
 
 from nemo.collections import asr as nemo_asr
+from nemo.collections.asr.metrics.wer import WER
 from nemo.utils import logging
 
 parser = argparse.ArgumentParser(description="Cut audio on the segments based on segments")
@@ -57,9 +59,6 @@ def add_transcript_to_manifest(manifest_original, manifest_updated, asr_model, b
 
 def get_transcript(manifest_path, asr_model, batch_size):
     # batch inference
-    import torch
-    from nemo.collections.asr.metrics.wer import WER
-
     try:
         from torch.cuda.amp import autocast
     except ImportError:
@@ -195,10 +194,10 @@ def process_alignment(alignment_file, args):
         args.batch_size,
     )
     logging.info(
-        f'Saved files duration: {round(high_score_dur)}s or ~{round(high_score_dur/60)}min at {args.output_dir}'
+        f'High score files duration: {round(high_score_dur)}s or ~{round(high_score_dur/60)}min at {manifests_dir}'
     )
     logging.info(
-        f'Low score segments duration: {round(low_score_dur)}s or ~{round(low_score_dur/60)}min saved at {low_score_segments_dir}'
+        f'Low score files duration: {round(low_score_dur)}s or ~{round(low_score_dur/60)}min saved at {manifests_dir}'
     )
 
     # save deleted segments along with manifest

@@ -67,6 +67,11 @@ def get_segments(
         text_no_preprocessing = f.readlines()
         text_no_preprocessing = [t.strip() for t in text_no_preprocessing if t.strip()]
 
+    if len(text_no_preprocessing) != len(text):
+        import pdb
+
+        pdb.set_trace()
+
     ground_truth_mat, utt_begin_indices = cs.prepare_text(config, text)
     logging.debug(f"Syncing {transcript_file}")
     logging.debug(
