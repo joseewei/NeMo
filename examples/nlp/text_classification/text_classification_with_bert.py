@@ -75,12 +75,28 @@ you may update all the params in the config file from the command line. You may 
         trainer.max_epochs=50
         trainer.gpus=2
 
-"""
-import os
+***Load a saved model***
+This script would save the model after training into '.nemo' checkpoint file specified by nemo_path of the model config.
+You may restore the saved model like this:
+    model = TextClassificationModel.restore_from(restore_path=NEMO_FILE_PATH)
 
+***Evaluation a saved model on another dataset***
+# If you wanted to evaluate the saved model on another dataset, you may restore the model and create a new data loader:
+    eval_model = TextClassificationModel.restore_from(restore_path=checkpoint_path)
+
+# Then, you may create a dataloader config for evaluation:
+    eval_config = OmegaConf.create(
+        {'file_path': cfg.model.test_ds.file_path, 'batch_size': 64, 'shuffle': False, 'num_workers': 3}
+    )
+    eval_model.setup_test_data(test_data_config=eval_config)
+
+# You need to create a new trainer:
+    eval_trainer = pl.Trainer(gpus=1)
+    eval_model.set_trainer(eval_trainer)
+    eval_trainer.test(model=eval_model, verbose=False)
+"""
 import pytorch_lightning as pl
-import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from nemo.collections.nlp.models.text_classification import TextClassificationModel
 from nemo.core.config import hydra_runner
@@ -105,92 +121,32 @@ def main(cfg: DictConfig) -> None:
     logging.info("===========================================================================================")
 
     if cfg.model.nemo_path:
-        # ,nemo file contains the last checkpoint and the params to initialize the model
+        # '.nemo' file contains the last checkpoint and the params to initialize the model
         model.save_to(cfg.model.nemo_path)
         logging.info(f'Model is saved into `.nemo` file: {cfg.model.nemo_path}')
-        checkpoint_path = cfg.model.nemo_path
-    else:
-        checkpoint_path = None
 
     # We evaluate the trained model on the test set if test_ds is set in the config file
     if cfg.model.test_ds.file_path:
         logging.info("===========================================================================================")
         logging.info("Starting the testing of the trained model on test set...")
-        # The latest checkpoint would be used, set ckpt_path to 'best' to use the best one
         trainer.test(model=model, ckpt_path=None, verbose=False)
         logging.info("Testing finished!")
         logging.info("===========================================================================================")
 
-    """
-    After training is done, if you have saved the model in a `.nemo` file, you can create the model from
-    the checkpoint again and evaluate it on a data file. You need to create a trainer and pass a test dataloader.
-    """
-    if checkpoint_path and os.path.exists(checkpoint_path) and cfg.model.test_ds.file_path:
-        logging.info("===========================================================================================")
-        logging.info("Starting the evaluating the the last checkpoint on an evaluation file (test set by default)...")
-
-        # Create an evaluation model and load the .nemo file
-        eval_model = TextClassificationModel.restore_from(restore_path=checkpoint_path)
-
-        # create a dataloader config for evaluation, the same data file provided in validation_ds is used here
-        # file_path can get updated with any file
-        eval_config = OmegaConf.create(
-            {'file_path': cfg.model.test_ds.file_path, 'batch_size': 64, 'shuffle': False, 'num_workers': 3}
-        )
-        eval_model.setup_test_data(test_data_config=eval_config)
-
-        # a new trainer is created to show how to evaluate a checkpoint from an already trained model
-        # create a copy of the trainer config and update it to be used for final evaluation
-        eval_trainer_cfg = cfg.trainer.copy()
-
-        # it is safer to perform evaluation on single GPU as we are creating another trainer in
-        # the same script, and it may cause problem with multi-GPU training.
-        eval_trainer_cfg.gpus = 1 if torch.cuda.is_available() else 0
-        eval_trainer_cfg.accelerator = None
-        eval_trainer = pl.Trainer(**eval_trainer_cfg)
-
-        eval_trainer.test(model=eval_model, verbose=False)
-
-        logging.info("Evaluation the last checkpoint finished!")
-        logging.info("===========================================================================================")
-    else:
-        logging.info(
-            "No file_path was set for test_ds or no `.nemo` checkpoint was found, so final evaluation is skipped!"
-        )
-
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        # You may create a model from a saved chechpoint and use the model.infer() method to
-        # perform inference on a list of queries. There is no need of any trainer for inference.
+    # perform inference on a list of queries.
+    if "infer_samples" in cfg.model and cfg.model.infer_samples:
         logging.info("===========================================================================================")
         logging.info("Starting the inference on some sample queries...")
-        queries = [
-            'by the end of no such thing the audience , like beatrice , has a watchful affection for the monster .',
-            'director rob marshall went out gunning to make a great one .',
-            'uneasy mishmash of styles and genres .',
-        ]
-
-        # use the path of the last checkpoint from the training, you may update it to any other checkpoints
-        infer_model = TextClassificationModel.restore_from(restore_path=checkpoint_path)
-
-        # move the model to the desired device for inference
-        # we move the model to "cuda" if available otherwise "cpu" would be used
-        if torch.cuda.is_available():
-            infer_model.to("cuda")
-        else:
-            infer_model.to("cpu")
 
         # max_seq_length=512 is the maximum length BERT supports.
-        results = infer_model.classifytext(queries=queries, batch_size=16, max_seq_length=512)
-
+        results = model.classifytext(queries=cfg.model.infer_samples, batch_size=16, max_seq_length=512)
         logging.info('The prediction results of some sample queries with the trained model:')
-        for query, result in zip(queries, results):
+        for query, result in zip(cfg.model.infer_samples, results):
             logging.info(f'Query : {query}')
             logging.info(f'Predicted label: {result}')
 
         logging.info("Inference finished!")
         logging.info("===========================================================================================")
-    else:
-        logging.info("Inference is skipped as no checkpoint was found from the training!")
 
 
 if __name__ == '__main__':
