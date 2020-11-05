@@ -26,18 +26,32 @@ import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import LightningModule, Trainer
+from pytorch_lightning.utilities import rank_zero_only
 
 from nemo.core import optim
 from nemo.core.classes.common import Model
 from nemo.core.optim import prepare_lr_scheduler
 from nemo.utils import logging, model_utils
 from nemo.utils.app_state import AppState
+from nemo.utils.get_rank import is_global_rank_zero
+
+# Need to set them before EFF import as it is using them.
+_MODEL_CONFIG_YAML = "model_config.yaml"
+_MODEL_WEIGHTS = "model_weights.ckpt"
+
+try:
+    # Try to import strategies for .nemo archive.
+    from eff.archives import NeMoArchive
+
+    _EFF_PRESENT_ = True
+except ImportError:
+    _EFF_PRESENT_ = False
+
 
 __all__ = ['ModelPT']
 
-_MODEL_CONFIG_YAML = "model_config.yaml"
-_MODEL_WEIGHTS = "model_weights.ckpt"
 _MODEL_IS_RESTORED = False
+_MODEL_EFF_SAVE = True
 
 
 class ModelPT(LightningModule, Model):
@@ -88,11 +102,11 @@ class ModelPT(LightningModule, Model):
         self._trainer = trainer
 
         # Set device_id in AppState
-        if torch.cuda.current_device() is not None:
+        if torch.cuda.is_available() and torch.cuda.current_device() is not None:
             app_state = AppState()
             app_state.device_id = torch.cuda.current_device()
 
-        if self._cfg is not None and not self.__is_model_being_restored():
+        if self._cfg is not None and not self._is_model_being_restored():
             if 'train_ds' in self._cfg and self._cfg.train_ds is not None:
                 self.setup_training_data(self._cfg.train_ds)
 
@@ -123,6 +137,9 @@ class ModelPT(LightningModule, Model):
                     f"and provide a valid configuration file to setup the test data loader(s).\n"
                     f"Test config : \n{OmegaConf.to_yaml(self._cfg.test_ds)}"
                 )
+
+        # ModelPT wrappers over subclass implementations
+        self.training_step = model_utils.wrap_training_step(self.training_step)
 
     def register_artifact(self, config_path: str, src: str):
         """
@@ -157,10 +174,10 @@ class ModelPT(LightningModule, Model):
         else:
             return src
 
-    def save_to(self, save_path: str):
+    def _default_save_to(self, save_path: str):
         """
-        Saves model instance (weights and configuration) into .nemo file. You can use "restore_from" method to fully
-        restore instance from .nemo file.
+        Saves model instance (weights and configuration) into .nemo file. 
+        You can use "restore_from" method to fully restore instance from .nemo file.
 
         .nemo file is an archive (tar.gz) with the following:
             model_config.yaml - model configuration in .yaml format. You can deserialize this into cfg argument for model's constructor
@@ -184,8 +201,51 @@ class ModelPT(LightningModule, Model):
             torch.save(self.state_dict(), model_weights)
             self.__make_nemo_file_from_folder(filename=save_path, source_dir=tmpdir)
 
+    def _eff_save_to(self, save_path: str):
+        """
+        Saves model instance (weights and configuration) into an EFF archive.
+
+        .. note::
+            For NVIDIA NeMo the EFF archives will also use .nemo postfix.
+
+        Method creates an EFF-based file that is an archive (tar.gz) with the following:
+            manifest.yaml - yaml file describing the content of the archive.
+            model_config.yaml - model configuration in .yaml format. 
+                You can deserialize this into cfg argument for model's constructor
+            model_wights.chpt - model checkpoint
+
+        Args:
+            save_path: Path to archive file where model instance should be saved.
+        """
+        NeMoArchive.save_to(self, save_path)
+
+    @rank_zero_only
+    def save_to(self, save_path: str):
+        """
+        Saves model instance (weights and configuration) into EFF archive or .
+         You can use "restore_from" method to fully restore instance from .nemo file.
+
+        .nemo file is an archive (tar.gz) with the following:
+            model_config.yaml - model configuration in .yaml format. You can deserialize this into cfg argument for model's constructor
+            model_wights.chpt - model checkpoint
+
+        Args:
+            save_path: Path to .nemo file where model instance should be saved
+        """
+
+        # Add nemo rank check as well
+        if not is_global_rank_zero():
+            return
+
+        if _EFF_PRESENT_ and self.use_eff_save():
+            # Save EFF archive.
+            self._eff_save_to(save_path)
+        else:
+            # Save .nemo tar archive.
+            self._default_save_to(save_path)
+
     @classmethod
-    def restore_from(
+    def _default_restore_from(
         cls,
         restore_path: str,
         override_config_path: Optional[str] = None,
@@ -211,9 +271,8 @@ class ModelPT(LightningModule, Model):
         Returns:
             An instance of type cls
         """
-        if not path.exists(restore_path):
-            raise FileExistsError(f"Can't find {restore_path}")
-
+        # Get path where the command is executed - the artifacts will be "retrieved" there
+        # (original .nemo behavior)
         cwd = os.getcwd()
 
         if map_location is None:
@@ -224,7 +283,7 @@ class ModelPT(LightningModule, Model):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
-                cls.__set_model_restore_state(is_being_restored=True)
+                cls._set_model_restore_state(is_being_restored=True)
                 cls.__unpack_nemo_file(path2file=restore_path, out_folder=tmpdir)
                 os.chdir(tmpdir)
                 if override_config_path is None:
@@ -247,10 +306,80 @@ class ModelPT(LightningModule, Model):
 
                 logging.info(f'Model {cls.__name__} was successfully restored from {restore_path}.')
             finally:
-                cls.__set_model_restore_state(is_being_restored=False)
+                cls._set_model_restore_state(is_being_restored=False)
                 os.chdir(cwd)
 
         return instance
+
+    @classmethod
+    def _eff_restore_from(
+        cls,
+        restore_path: str,
+        override_config_path: Optional[str] = None,
+        map_location: Optional[torch.device] = None,
+        strict: bool = False,
+    ):
+        """
+        Restores model instance (weights and configuration) from EFF Archive.
+
+        Args:
+            restore_path: path to  file from which model should be instantiated
+            override_config_path: path to a yaml config that will override the internal
+                config file
+            map_location: Optional torch.device() to map the instantiated model to a device.
+                By default (None), it will select a GPU if available, falling back to CPU otherwise.
+            strict: Passed to load_state_dict.
+
+        Returns:
+            An instance of type cls
+        """
+        return NeMoArchive.restore_from(cls, restore_path, override_config_path, map_location, strict)
+
+    @classmethod
+    def restore_from(
+        cls,
+        restore_path: str,
+        override_config_path: Optional[str] = None,
+        map_location: Optional[torch.device] = None,
+        strict: bool = False,
+    ):
+        """
+        Restores model instance (weights and configuration) from file.
+
+        The methods tries to load it as EFF archive.
+        If EFF library is not present in the system, or the indicated file is not EFF archive,
+        the function defaults to the original .nemo restore method.
+
+        Args:
+            restore_path: path to .nemo file from which model should be instantiated
+            override_config_path: path to a yaml config that will override the internal
+                config file
+            map_location: Optional torch.device() to map the instantiated model to a device.
+                By default (None), it will select a GPU if available, falling back to CPU otherwise.
+            strict: Passed to load_state_dict.
+
+            Example:
+                ```
+                model = nemo.collections.asr.models.EncDecCTCModel.restore_from('asr.nemo')
+                assert isinstance(model, nemo.collections.asr.models.EncDecCTCModel)
+                ```
+
+        Returns:
+            An instance of type cls
+        """
+        if not path.exists(restore_path):
+            raise FileNotFoundError(f"Can't find {restore_path}")
+
+        if _EFF_PRESENT_:
+            # Try to load the EFF archive.
+            try:
+                return cls._eff_restore_from(restore_path, override_config_path, map_location, strict)
+            except (FileNotFoundError, TypeError):
+                # Default to the old .nemo tar archive restore method.
+                return cls._default_restore_from(restore_path, override_config_path, map_location, strict)
+        else:
+            # Load .nemo tar archive using the old restore method.
+            return cls._default_restore_from(restore_path, override_config_path, map_location, strict)
 
     @classmethod
     def extract_state_dict_from(cls, restore_path: str, save_dir: str, split_by_module: bool = False):
@@ -345,7 +474,7 @@ class ModelPT(LightningModule, Model):
         """
         checkpoint = None
         try:
-            cls.__set_model_restore_state(is_being_restored=True)
+            cls._set_model_restore_state(is_being_restored=True)
 
             checkpoint = super().load_from_checkpoint(
                 checkpoint_path=checkpoint_path,
@@ -357,7 +486,7 @@ class ModelPT(LightningModule, Model):
             )
 
         finally:
-            cls.__set_model_restore_state(is_being_restored=False)
+            cls._set_model_restore_state(is_being_restored=False)
 
         return checkpoint
 
@@ -404,7 +533,7 @@ class ModelPT(LightningModule, Model):
             val_data_layer_config: validation data layer parameters.
         """
         # Set some placeholder overriden by helper method
-        self._validation_loss_idx = 0
+        self._val_dl_idx = 0
         self._validation_names = None
         self._validation_dl = None  # type: torch.utils.data.DataLoader
 
@@ -429,7 +558,7 @@ class ModelPT(LightningModule, Model):
             test_data_layer_config: test data layer parameters.
         """
         # Set some placeholder overriden by helper method
-        self._test_loss_idx = 0
+        self._test_dl_idx = 0
         self._test_names = None
         self._test_dl = None  # type: torch.utils.data.DataLoader
 
@@ -488,16 +617,21 @@ class ModelPT(LightningModule, Model):
             if not isinstance(self._trainer.accumulate_grad_batches, int):
                 raise ValueError("We do not currently support gradient acculumation that is not an integer.")
             if self._trainer.max_steps is None:
-                if self._trainer.num_gpus == 0:
-                    # training on CPU
-                    iters_per_batch = self._trainer.max_epochs / float(
-                        self._trainer.num_nodes * self._trainer.accumulate_grad_batches
-                    )
+                # Store information needed to calculate max_steps
+                optim_config['sched']['t_max_epochs'] = self._trainer.max_epochs
+                optim_config['sched']['t_accumulate_grad_batches'] = self._trainer.accumulate_grad_batches
+                if self._trainer.distributed_backend is None:
+                    optim_config['sched']['t_num_workers'] = self._trainer.num_gpus or 1
+                elif self._trainer.distributed_backend is "ddp_cpu":
+                    optim_config['sched']['t_num_workers'] = self._trainer.num_processes * self._trainer.num_nodes
+                elif self._trainer.distributed_backend is "ddp":
+                    optim_config['sched']['t_num_workers'] = self._trainer.num_gpus * self._trainer.num_nodes
                 else:
-                    iters_per_batch = self._trainer.max_epochs / float(
-                        self._trainer.num_gpus * self._trainer.num_nodes * self._trainer.accumulate_grad_batches
+                    logging.warning(
+                        f"The lightning trainer received accelerator: {self._trainer.distributed_backend }. We "
+                        "recommend to use 'ddp' instead."
                     )
-                optim_config['sched']['iters_per_batch'] = iters_per_batch
+                    optim_config['sched']['t_num_workers'] = self._trainer.num_gpus * self._trainer.num_nodes
             else:
                 optim_config['sched']['max_steps'] = self._trainer.max_steps
 
@@ -632,10 +766,10 @@ class ModelPT(LightningModule, Model):
         If multi dataset support is not required, override this method entirely in base class.
         In such a case, there is no need to implement `multi_validation_epoch_end` either.
 
-        Note:
+        .. note::
             If more than one data loader exists, and they all provide `val_loss`,
             only the `val_loss` of the first data loader will be used by default.
-            This default can be changed by passing the special key `val_loss_idx: int`
+            This default can be changed by passing the special key `val_dl_idx: int`
             inside the `validation_ds` config.
 
         Args:
@@ -651,7 +785,12 @@ class ModelPT(LightningModule, Model):
 
         # Case where we provide exactly 1 data loader
         if type(outputs[0]) == dict:
-            return self.multi_validation_epoch_end(outputs, dataloader_idx=0)
+            output_dict = self.multi_validation_epoch_end(outputs, dataloader_idx=0)
+
+            if output_dict is not None and 'log' in output_dict:
+                self.log_dict(output_dict.pop('log'), on_epoch=True)
+
+            return output_dict
 
         else:  # Case where we provide more than 1 data loader
             output_dict = {'log': {}}
@@ -667,7 +806,7 @@ class ModelPT(LightningModule, Model):
 
                 # Perform `val_loss` resolution first (if provided outside logs)
                 if 'val_loss' in dataloader_logs:
-                    if 'val_loss' not in output_dict and dataloader_idx == self._validation_loss_idx:
+                    if 'val_loss' not in output_dict and dataloader_idx == self._val_dl_idx:
                         output_dict['val_loss'] = dataloader_logs['val_loss']
 
                 # For every item in the result dictionary
@@ -678,23 +817,14 @@ class ModelPT(LightningModule, Model):
                         log_dict = {}
 
                         for k_log, v_log in v.items():
-                            # If we are logging the loss, but dont provide it at result level,
+                            # If we are logging the metric, but dont provide it at result level,
                             # store it twice - once in log and once in result level.
                             # Also mark log with prefix name to avoid log level clash with other data loaders
-                            if (
-                                k_log == 'val_loss'
-                                and 'val_loss' not in output_dict['log']
-                                and dataloader_idx == self._validation_loss_idx
-                            ):
-                                new_k_log = 'val_loss'
+                            if k_log not in output_dict['log'] and dataloader_idx == self._val_dl_idx:
+                                new_k_log = k_log
 
                                 # Also insert duplicate key with prefix for ease of comparison / avoid name clash
                                 log_dict[dataloader_prefix + k_log] = v_log
-
-                            elif k_log == 'val_loss' and dataloader_idx != self._validation_loss_idx:
-                                # replace all other "val_loss" with <prefix> + loss
-                                # this avoid duplication of the word <prefix> + "val_loss" which causes confusion
-                                new_k_log = dataloader_prefix + 'loss'
 
                             else:
                                 # Simply prepend prefix to key and save
@@ -715,6 +845,10 @@ class ModelPT(LightningModule, Model):
                         new_k = dataloader_prefix + k
                         output_dict[new_k] = v
 
+            if 'log' in output_dict:
+                self.log_dict(output_dict.pop('log'), on_epoch=True)
+
+            # return everything else
             return output_dict
 
     def test_epoch_end(
@@ -727,10 +861,10 @@ class ModelPT(LightningModule, Model):
         If multi dataset support is not required, override this method entirely in base class.
         In such a case, there is no need to implement `multi_test_epoch_end` either.
 
-        Note:
+        .. note::
             If more than one data loader exists, and they all provide `test_loss`,
             only the `test_loss` of the first data loader will be used by default.
-            This default can be changed by passing the special key `test_loss_idx: int`
+            This default can be changed by passing the special key `test_dl_idx: int`
             inside the `test_ds` config.
 
         Args:
@@ -746,7 +880,12 @@ class ModelPT(LightningModule, Model):
 
         # Case where we provide exactly 1 data loader
         if type(outputs[0]) == dict:
-            return self.multi_test_epoch_end(outputs, dataloader_idx=0)
+            output_dict = self.multi_test_epoch_end(outputs, dataloader_idx=0)
+
+            if output_dict is not None and 'log' in output_dict:
+                self.log_dict(output_dict.pop('log'), on_epoch=True)
+
+            return output_dict
 
         else:  # Case where we provide more than 1 data loader
             output_dict = {'log': {}}
@@ -762,7 +901,7 @@ class ModelPT(LightningModule, Model):
 
                 # Perform `test_loss` resolution first (if provided outside logs)
                 if 'test_loss' in dataloader_logs:
-                    if 'test_loss' not in output_dict and dataloader_idx == self._test_loss_idx:
+                    if 'test_loss' not in output_dict and dataloader_idx == self._test_dl_idx:
                         output_dict['test_loss'] = dataloader_logs['test_loss']
 
                 # For every item in the result dictionary
@@ -775,20 +914,11 @@ class ModelPT(LightningModule, Model):
                             # If we are logging the loss, but dont provide it at result level,
                             # store it twice - once in log and once in result level.
                             # Also mark log with prefix name to avoid log level clash with other data loaders
-                            if (
-                                k_log == 'test_loss'
-                                and 'test_loss' not in output_dict['log']
-                                and dataloader_idx == self._test_loss_idx
-                            ):
-                                new_k_log = 'test_loss'
+                            if k_log not in output_dict['log'] and dataloader_idx == self._test_dl_idx:
+                                new_k_log = k_log
 
-                                # Also insert duplicate key with prefix for ease of comparison
+                                # Also insert duplicate key with prefix for ease of comparison / avoid name clash
                                 log_dict[dataloader_prefix + k_log] = v_log
-
-                            elif k_log == 'test_loss' and dataloader_idx != self._test_loss_idx:
-                                # replace all other "test_loss" with <prefix> + loss
-                                # this avoid duplication of the word <prefix> + "test_loss" which causes confusion
-                                new_k_log = dataloader_prefix + 'loss'
 
                             else:
                                 # Simply prepend prefix to key and save
@@ -808,6 +938,10 @@ class ModelPT(LightningModule, Model):
                         new_k = dataloader_prefix + k
                         output_dict[new_k] = v
 
+            if 'log' in output_dict:
+                self.log_dict(output_dict.pop('log'), on_epoch=True)
+
+            # return everything else
             return output_dict
 
     def multi_validation_epoch_end(
@@ -997,11 +1131,21 @@ class ModelPT(LightningModule, Model):
         return out_folder
 
     @staticmethod
-    def __is_model_being_restored() -> bool:
+    def _is_model_being_restored() -> bool:
         global _MODEL_IS_RESTORED
         return _MODEL_IS_RESTORED
 
     @staticmethod
-    def __set_model_restore_state(is_being_restored: bool):
+    def _set_model_restore_state(is_being_restored: bool):
         global _MODEL_IS_RESTORED
         _MODEL_IS_RESTORED = is_being_restored
+
+    @staticmethod
+    def set_eff_save(use_eff_save: bool):
+        global _MODEL_EFF_SAVE
+        _MODEL_EFF_SAVE = use_eff_save
+
+    @staticmethod
+    def use_eff_save() -> bool:
+        global _MODEL_EFF_SAVE
+        return _MODEL_EFF_SAVE
