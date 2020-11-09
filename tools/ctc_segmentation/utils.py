@@ -84,7 +84,7 @@ def get_segments(
     write_output(output_file, path_wav, segments, text, text_no_preprocessing)
 
 
-def write_output(out_path, path_wav, segments, text, text_no_preprocessing, stride: int = 2, offset: float = 0):
+def write_output(out_path, path_wav, segments, text, text_no_preprocessing, stride: int = 2):
     """
 
     :param out_path:
@@ -99,7 +99,7 @@ def write_output(out_path, path_wav, segments, text, text_no_preprocessing, stri
         outfile.write(str(path_wav) + "\n")
 
         for i, (start, end, score) in enumerate(segments):
-            outfile.write(f'{start/stride} {end/stride + offset} {score} | {text[i]} | {text_no_preprocessing[i]}\n')
+            outfile.write(f'{start/stride} {end/stride} {score} | {text[i]} | {text_no_preprocessing[i]}\n')
 
 
 #####################

@@ -80,8 +80,9 @@ RU_ABBREVIATIONS = {
     ' т. д.': ' так далее',
     ' т.п.': ' тому подобное',
     ' т. п.': ' тому подобное',
-    ' т.e.': ' то есть',
-    ' т. e.': ' то есть',
+    ' т.е.': ' то есть',
+    ' т. е.': ' то есть',
+    ' стр. ': ' страница ',
 }
 NUMBERS_TO_ENG = {
     '0': 'zero ',
@@ -153,7 +154,17 @@ def split_text(
     with open(in_file, "r") as f:
         transcript = f.read()
 
-    transcript = transcript.replace("\n", " ").replace("\t", " ").replace("…", "...").replace("»", "").replace("«", "")
+    # remove some symbols for better split into sentences
+    transcript = (
+        transcript.replace("\n", " ")
+        .replace("\t", " ")
+        .replace("…", "...")
+        .replace("»", "")
+        .replace("«", "")
+        .replace("\\", "")
+        .replace("”", "")
+        .replace("„", "")
+    )
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
 

@@ -1,2 +1,2 @@
-nemo
+pandas
 ctc-segmentation

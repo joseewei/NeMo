@@ -7,7 +7,7 @@ Features:
 - cut the original audio into segments and create manifest to train/finetune an ASR model
 
 # Requirements:
-- Cython
+- ctc-segmentation
 - NeMo ASR
 
 Please make sure that requirements are installed.
