@@ -3,13 +3,13 @@
 MODEL_NAME_OR_PATH=$1
 DATA_DIR=$2
 OUTPUT_DIR=$3
-OFFSET=0
-CUT_PREFIX=3
+SCRIPTS_DIR=${4:-scripts}
 
-SCRIPTS_DIR='scripts'
+CUT_PREFIX=3
+OFFSET=0
 
 if [[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]]; then
-  echo "Usage: $(basename "$0") [model_name_or_path] [data_dir] [output_dir]"
+  echo "Usage: $(basename "$0") [model_name_or_path] [data_dir] [output_dir] [scripts_dir_path (Optional)]"
   exit 1
 fi
 
@@ -25,9 +25,9 @@ python $SCRIPTS_DIR/prepare_data.py \
 
 # STEP #2
 # Run CTC-segmenatation
-# example on how to perform alignemnt with various window sizes
+# one might wants to perform alignemnt with various window sizes
 # note if the alignment with the initial window size won't be found, the window size will be double to re-attempt
-for WINDOW in 8000 10000 12000
+for WINDOW in 8000 12000
 do
   python $SCRIPTS_DIR/run_ctc_segmentation.py \
   --output_dir=$OUTPUT_DIR \
