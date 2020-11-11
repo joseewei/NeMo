@@ -17,7 +17,7 @@ import logging.handlers
 import multiprocessing
 import os
 from pathlib import PosixPath
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import ctc_segmentation as cs
 import numpy as np
@@ -85,7 +85,7 @@ def get_segments(
 
 
 def write_output(
-    out_path: str, path_wav: str, segments: List[tuple[float]], text: str, text_no_preprocessing: str, stride: int = 2
+    out_path: str, path_wav: str, segments: List[Tuple[float]], text: str, text_no_preprocessing: str, stride: int = 2
 ):
     """
     Write the segmentation output to a file
