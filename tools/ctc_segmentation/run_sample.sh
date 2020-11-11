@@ -7,6 +7,12 @@ OFFSET=0
 CUT_PREFIX=3
 
 SCRIPTS_DIR='scripts'
+
+if [[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]]; then
+  echo "Usage: $(basename "$0") [model_name_or_path] [data_dir] [output_dir]"
+  exit 1
+fi
+
 # STEP #1
 # Prepare text and audio data for segmentation
 python $SCRIPTS_DIR/prepare_data.py \

@@ -69,7 +69,8 @@ if __name__ == '__main__':
         asr_model = nemo_asr.models.EncDecCTCModel.from_pretrained(args.model, strict=False)
     else:
         raise ValueError(
-            f'Provide path to the pretrained checkpoint or choose from {nemo_asr.models.EncDecCTCModel.list_available_models()}'
+            f'{args.model} not a valid model name or path. Provide path to the pre-trained checkpoint '
+            f'or choose from {nemo_asr.models.EncDecCTCModel.list_available_models()}'
         )
 
     # extract ASR vocabulary and add blank symbol
@@ -116,7 +117,8 @@ if __name__ == '__main__':
         original_duration = len(signal) / sample_rate
         logging.debug(f'Duration: {original_duration}s, file_name: {path_audio}')
         log_probs = asr_model.transcribe(paths2audio_files=[str(path_audio)], batch_size=1, logprobs=True)[0].cpu()
-
+        # print(f'-----> {torch.norm(log_probs)} {torch.norm(log_probs) == 8550.060546875}')
+        # import pdb; pdb.set_trace()
         # move blank values to the first column
         log_probs = np.squeeze(log_probs, axis=0)
         blank_col = log_probs[:, -1].reshape((log_probs.shape[0], 1))
