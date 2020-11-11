@@ -20,7 +20,7 @@ import string
 from pathlib import Path
 from typing import List
 
-import scipy.io.wavfile as wavfile
+import scipy.io.wavfile as wav
 from normalization_helpers import LATIN_TO_RU, NUMBERS_TO_ENG, NUMBERS_TO_RU, RU_ABBREVIATIONS
 
 from nemo.collections import asr as nemo_asr
@@ -58,8 +58,9 @@ def convert_mp3_to_wav(mp3_file: str, wav_file: str = None, sample_rate: int = 1
     resampler = 'swr'  #'soxr'
     os.system(f'ffmpeg -i {mp3_file} -ac 1 -af aresample=resampler={resampler} -ar {sample_rate} {wav_file} -y')
 
-    # remove
-    sr, signal = wavfile.read(wavfile)
+    print(wav_file)
+    sample_rate, signal = wav.read(wav_file)
+    print(len(signal) / sample_rate)
     print(f'------> {signal[:10]}')
     return wav_file
 
@@ -78,8 +79,8 @@ def process_audio(mp3_file: str, wav_file: str = None, cut_prefix: int = 0, samp
 
     if cut_prefix > 0:
         # cut a few seconds of audio from the beginning
-        sample_rate, signal = wavfile.read(wav_audio)
-        wavfile.write(wav_audio, data=signal[cut_prefix * sample_rate :], rate=sample_rate)
+        sample_rate, signal = wav.read(wav_audio)
+        wav.write(wav_audio, data=signal[cut_prefix * sample_rate :], rate=sample_rate)
 
 
 def split_text(

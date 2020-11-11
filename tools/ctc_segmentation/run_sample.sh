@@ -5,7 +5,7 @@ DATA_DIR=$2
 OUTPUT_DIR=$3
 SCRIPTS_DIR=${4:-scripts}
 
-CUT_PREFIX=3
+CUT_PREFIX=0 #3
 OFFSET=0
 
 if [[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]]; then
