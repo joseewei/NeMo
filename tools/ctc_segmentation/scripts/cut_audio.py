@@ -73,9 +73,9 @@ def get_transcript(manifest_path: str, asr_model: nemo_asr.models.EncDecCTCModel
     Args:
         manifest_path: path to the manifest for inference
         asr_model: CTC-based ASR model, for example, QuartzNet15x5Base-En
-        batch_size:
+        batch_size: batch size
 
-    Returns:
+    Returns: hypotheses: transcripts for the audio segments
     """
     # batch inference
     try:
@@ -113,7 +113,7 @@ def get_transcript(manifest_path: str, asr_model: nemo_asr.models.EncDecCTCModel
     return hypotheses
 
 
-def process_alignment(alignment_file, args):
+def process_alignment(alignment_file: str, args):
     """ Cut original audio file into audio segments based on alignment_file
 
     Args:
@@ -124,7 +124,7 @@ def process_alignment(alignment_file, args):
     if not os.path.exists(alignment_file):
         raise ValueError(f'{alignment_file} not found')
 
-    # read the segments, note the first line contins the path to the original audio
+    # read the segments, note the first line contains the path to the original audio
     segments = []
     ref_text_processed = []
     ref_text_no_preprocessing = []
@@ -141,8 +141,8 @@ def process_alignment(alignment_file, args):
             segments.append((float(line[0]) + args.offset / 1000, float(line[1]) + args.offset / 1000, float(line[2])))
 
     # cut the audio into segments
-    # create manifest in /tmp directory first, then update transcript values with batch inference results
-    # save the final minifests at output_dir
+    # create manifest in /tmp directory first, then populate transcript values with the batch inference results
+    # and save the final manifests at output_dir
     sampling_rate, signal = wavfile.read(audio_file)
     original_duration = len(signal) / sampling_rate
     print(f'Cutting {audio_file} based on {alignment_file}')

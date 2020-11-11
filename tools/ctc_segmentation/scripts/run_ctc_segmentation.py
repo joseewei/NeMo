@@ -20,7 +20,6 @@ import sys
 import time
 from pathlib import Path
 
-import librosa
 import numpy as np
 import scipy.io.wavfile as wav
 import torch
@@ -32,22 +31,19 @@ parser = argparse.ArgumentParser(description="CTC Segmentation")
 parser.add_argument("--output_dir", default='output', type=str, help='Path to output directory')
 parser.add_argument(
     "--data",
-    default='/home/ebakhturina/data/segmentation/sample/nv_test.wav',
     type=str,
+    required=True,
     help='Path to directory with audio files and associated transcripts (same respective names only formats are '
     'different or path to wav file (transcript should have the same base name and be located in the same folder'
     'as the wav file.',
 )
-parser.add_argument('--window_len', type=int, default=8000)
-parser.add_argument('--no_parallel', action='store_true')
-parser.add_argument('--sample_rate', type=int, default=16000)
+parser.add_argument('--window_len', type=int, default=8000, help='Window size for ctc segmentation algorithm')
+parser.add_argument('--no_parallel', action='store_true', help='Flag to disable parallel segmentation')
+parser.add_argument('--sample_rate', type=int, default=16000, help='Sampling rate')
 parser.add_argument(
-    '--model',
-    type=str,
-    default='/home/ebakhturina/nemo_ckpts/quartznet/QuartzNet15x5-Ru-e512-wer14.45.nemo',
-    help='Path to model checkpoint or pretrained model name',
+    '--model', type=str, default='QuartzNet15x5Base-En', help='Path to model checkpoint or pre-trained model name',
 )
-parser.add_argument('--debug', action='store_true', help='Set to True for debugging')
+parser.add_argument('--debug', action='store_true', help='Flag to enable debugging messages')
 
 logger = logging.getLogger('ctc_segmentation')  # use module name
 
@@ -107,13 +103,14 @@ if __name__ == '__main__':
         try:
             sample_rate, signal = wav.read(path_audio)
             if sample_rate != args.sample_rate:
-                logging.info(f'Converting {path_audio} from {sample_rate} to {args.sample_rate}')
-                start_time = time.time()
-                signal, sample_rate = librosa.load(path_audio, sr=args.sample_rate)
-                logging.info(f'Time to convert {time.time() - start_time}')
-
+                raise ValueError(
+                    f'Sampling rate of the audio file {path_audio} doesn\'t match ' f'--sample_rate={args.sample_rate}'
+                )
         except ValueError:
-            logging.error(f"Audio files should be .wav files with sampling rate used to train ASR model")
+            logging.error(
+                f"{path_audio} should be a .wav mono file with the sampling rate used for the ASR model training"
+                f"specified with {args.sample_rate}."
+            )
             raise
 
         original_duration = len(signal) / sample_rate

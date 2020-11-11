@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pandas as pd
 
-parser = argparse.ArgumentParser(description="Part alignment and log files")
+parser = argparse.ArgumentParser(description="Compare alignment segments generated with different window sizes")
 parser.add_argument(
     "--base_dir",
     default='output',
     type=str,
     required=True,
-    help='Path to difectory with "logs" and "segmentes" folders',
+    help='Path to directory with "logs" and "segments" folders generated during the segmentation step',
 )
 
 

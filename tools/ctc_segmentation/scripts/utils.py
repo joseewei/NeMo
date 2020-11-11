@@ -84,15 +84,18 @@ def get_segments(
     write_output(output_file, path_wav, segments, text, text_no_preprocessing)
 
 
-def write_output(out_path, path_wav, segments, text, text_no_preprocessing, stride: int = 2):
+def write_output(
+    out_path: str, path_wav: str, segments: List[tuple[float]], text: str, text_no_preprocessing: str, stride: int = 2
+):
     """
+    Write the segmentation output to a file
 
-    :param out_path:
-    :param path_wav:
-    :param segments:
-    :param text:
-    :param stride: Stride applied to an ASR input, for example, for QN 10 ms after stride is applied 20 ms
-    :return:
+    out_path: Path to output file
+    path_wav: Path to the original audio file
+    segments: Segments include start, end and alignment score
+    text: Text used for alignment
+    text_no_preprocessing: Reference txt without any pre-processing
+    stride: Stride applied to an ASR input
     """
     # Uses char-wise alignments to get utterance-wise alignments and writes them into the given file
     with open(str(out_path), "w") as outfile:

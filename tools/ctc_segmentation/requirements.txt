@@ -1,2 +1,2 @@
 pandas
-ctc-segmentation
+ctc_segmentation

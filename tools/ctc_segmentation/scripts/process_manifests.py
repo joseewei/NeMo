@@ -3,8 +3,9 @@ import json
 import os
 from pathlib import Path
 from random import randint
+from typing import List
 
-parser = argparse.ArgumentParser(description="Process manifests")
+parser = argparse.ArgumentParser(description="Combine manifests and extract samples")
 parser.add_argument(
     "--manifests_dir",
     default='_high_score_manifest.json',
@@ -23,7 +24,17 @@ parser.add_argument(
 )
 
 
-def get_samples(manifest, num_samples):
+def get_samples(manifest: str, num_samples: int) -> List[str]:
+    """
+    Samples num_samples from the beginning, end and randomly from the middle of the manifest
+
+    Args:
+        manifest: path to manifest
+        num_samples: number of samples to extract from the beginning, end and randomly from the middle of the manifest
+
+    Returns:
+        num_samples: manifest lines
+    """
     samples = []
     with open(manifest, 'r', encoding='utf8') as f:
         lines = f.readlines()
