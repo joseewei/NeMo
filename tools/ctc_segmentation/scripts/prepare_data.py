@@ -57,6 +57,10 @@ def convert_mp3_to_wav(mp3_file: str, wav_file: str = None, sample_rate: int = 1
         wav_file = mp3_file.replace(".mp3", ".wav")
     resampler = 'swr'  #'soxr'
     os.system(f'ffmpeg -i {mp3_file} -ac 1 -af aresample=resampler={resampler} -ar {sample_rate} {wav_file} -y')
+
+    # remove
+    sr, signal = wavfile.read(wavfile)
+    print(f'------> {signal[:10]}')
     return wav_file
 
 
@@ -72,9 +76,10 @@ def process_audio(mp3_file: str, wav_file: str = None, cut_prefix: int = 0, samp
     """
     wav_audio = convert_mp3_to_wav(str(mp3_file), wav_file, sample_rate)
 
-    # cut a few seconds of audio from the beginning
-    sample_rate, signal = wavfile.read(wav_audio)
-    wavfile.write(wav_audio, data=signal[cut_prefix * sample_rate :], rate=sample_rate)
+    if cut_prefix > 0:
+        # cut a few seconds of audio from the beginning
+        sample_rate, signal = wavfile.read(wav_audio)
+        wavfile.write(wav_audio, data=signal[cut_prefix * sample_rate :], rate=sample_rate)
 
 
 def split_text(
