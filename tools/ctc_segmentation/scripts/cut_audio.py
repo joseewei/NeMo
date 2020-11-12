@@ -221,6 +221,7 @@ def process_alignment(alignment_file: str, args):
     deleted = []
     del_duration = 0
     begin = 0
+    i = 0
     with open(os.path.join(manifests_dir, del_manifest), 'w', encoding='utf8') as f:
         for i, (st, end, _) in enumerate(segments):
             if st - begin > 0.01:

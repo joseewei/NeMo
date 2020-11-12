@@ -5,7 +5,7 @@ DATA_DIR=$2
 OUTPUT_DIR=$3
 SCRIPTS_DIR=${4:-scripts}
 
-CUT_PREFIX=0 #3
+CUT_PREFIX=3 #3
 OFFSET=0
 
 if [[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]]; then
@@ -27,7 +27,7 @@ python $SCRIPTS_DIR/prepare_data.py \
 # Run CTC-segmenatation
 # one might wants to perform alignemnt with various window sizes
 # note if the alignment with the initial window size won't be found, the window size will be double to re-attempt
-for WINDOW in 8000 12000
+for WINDOW in 8000 #12000
 do
   python $SCRIPTS_DIR/run_ctc_segmentation.py \
   --output_dir=$OUTPUT_DIR \

@@ -55,7 +55,7 @@ def convert_mp3_to_wav(mp3_file: str, wav_file: str = None, sample_rate: int = 1
         raise ValueError(f'.mp3 file expected but {mp3_file} passed')
     if wav_file is None:
         wav_file = mp3_file.replace(".mp3", ".wav")
-    resampler = 'swr'  #'soxr'
+    resampler = 'soxr'
     os.system(f'ffmpeg -i {mp3_file} -ac 1 -af aresample=resampler={resampler} -ar {sample_rate} {wav_file} -y')
 
     print(wav_file)
