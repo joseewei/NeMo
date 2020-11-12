@@ -3,13 +3,13 @@
 MODEL_NAME_OR_PATH=$1
 DATA_DIR=$2
 OUTPUT_DIR=$3
-SCRIPTS_DIR=${4:-scripts}
+CUT_PREFIX=${4:-0}
+SCRIPTS_DIR=${5:-scripts}
 
-CUT_PREFIX=3 #3
 OFFSET=0
 
 if [[ -z $1 ]] || [[ -z $2 ]] || [[ -z $3 ]]; then
-  echo "Usage: $(basename "$0") [model_name_or_path] [data_dir] [output_dir] [scripts_dir_path (Optional)]"
+  echo "Usage: $(basename "$0") [model_name_or_path] [data_dir] [output_dir] [cut prefix, sec] [scripts_dir_path (Optional)]"
   exit 1
 fi
 
