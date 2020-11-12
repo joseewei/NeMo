@@ -1,29 +1,21 @@
-ASR dataset creation tool
--------------------------
+Dataset creation tool based on CTC-Segmentation
+-----------------------------------------------
 
-Features:
-- preprocess text and audio data
-- run CTC-Segmentation
-- cut the original audio into segments and create manifest to train/finetune an ASR model
+This tool provides functionality to align a long audio files and the corresponding transcripts into shorter fragments 
+that are suitable for an Automatic Speech Recognition (ASR) model training.
 
-# Requirements:
-- ctc-segmentation
-- NeMo ASR
+More details could be found in [this tutorial]().
 
-Please make sure that requirements are installed.
-```
-python ....
-```
-
-# Referance
-The tool is based on the [CTC-Segmentation](https://github.com/cornerfarmer/ctc_segmentation): **CTC-Segmentation of Large Corpora for German End-to-end Speech Recognition** https://doi.org/10.1007/978-3-030-60276-5_27 or pre-print https://arxiv.org/abs/2007.09127 
+The tool is based on the [CTC Segmentation](https://github.com/lumaku/ctc-segmentation): 
+**CTC-Segmentation of Large Corpora for German End-to-end Speech Recognition** 
+https://doi.org/10.1007/978-3-030-60276-5_27 or pre-print https://arxiv.org/abs/2007.09127 
 
 ```
 @InProceedings{ctcsegmentation,
 author="K{\"u}rzinger, Ludwig
 and Winkelbauer, Dominik
 and Li, Lujun
-and Watzel, Tobias5
+and Watzel, Tobias
 and Rigoll, Gerhard",
 editor="Karpov, Alexey
 and Potapova, Rodmonga",

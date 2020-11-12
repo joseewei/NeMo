@@ -1,2 +1,2 @@
 pandas
-ctc_segmentation
+ctc_segmentation==1.1.0

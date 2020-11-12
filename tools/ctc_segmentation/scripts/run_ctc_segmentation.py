@@ -118,14 +118,11 @@ if __name__ == '__main__':
         logging.debug(f'Duration: {original_duration}s, file_name: {path_audio}')
         log_probs = asr_model.transcribe(paths2audio_files=[str(path_audio)], batch_size=1, logprobs=True)[0].cpu()
 
-        transcript_default = "a carrier's dog by percy j billinghurst this is a libevox recording all libervoch's recordings are in the public domain for more information or to volunteer please visit libervoch stopborg a carrier on his way to a market town had occasion to stop at some houses by the roadside in the way of his business leaving his cart and horse upon the public road under the protection of a passenger and a trusty dog upon his return he missed a lead horse belonging to a gentleman in the neighbourhood which he had tied to the end of the cart and likewise one of the female passengers on inquiry he was informed that during his absence the female who had been anxious to try the medal of the pony had mounted it and that the animal had set off at full speed the carrier expressed much anxiety for the safety of the young woman casting at the same time an expressive look at his dog oscar observed his master's eye and aware of its meaning instantly set off in pursuit of the pony which coming up with soon after he made a sudden spring seized the britdle and held the animal fast several people having observed the circumstance and the perilous situation of the girl came to relieve her oscar however notwithstanding their repeated endeavours would not quit his hold and the pony was actually led into the stable with the dog till such time as the carrier should arrive upon the carrier entering the stable oscar wagged his tail in token of satisfaction and immediately relinquished the brittle to his master end of a carrier's dog by percy j billinghurst"
-
-        transcript = asr_model.transcribe(paths2audio_files=[str(path_audio)], batch_size=1)[0]
-
         # move blank values to the first column
         log_probs = np.squeeze(log_probs, axis=0)
         blank_col = log_probs[:, -1].reshape((log_probs.shape[0], 1))
         log_probs = np.concatenate((blank_col, log_probs[:, :-1]), axis=1)
+
         all_log_probs.append(log_probs)
         all_segment_file.append(str(segment_file))
         all_transcript_file.append(str(transcript_file))

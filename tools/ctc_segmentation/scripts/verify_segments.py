@@ -15,7 +15,7 @@ parser.add_argument(
 )
 
 
-def process_log_file(log_file):
+def _process_log_file(log_file: str):
     processes = {}
     with open(log_file, 'r') as f:
         for line in f:
@@ -55,14 +55,13 @@ if __name__ == '__main__':
     log_files = Path(log_dir).glob('*.log')
     dfs = []
     for log in log_files:
-        dfs.append(process_log_file(log))
+        dfs.append(_process_log_file(log))
 
     dfs = pd.concat(dfs)
     summary_file = os.path.join(log_dir, 'log_summary.csv')
     dfs.to_csv(summary_file, index=False)
     print(f'Log summary saved to {summary_file}')
 
-    window_lenghts = [8000, 10000, 12000]
     segments_dir = os.path.join(args.base_dir, 'segments')
     if not os.path.exists(segments_dir):
         raise ValueError(f'"segments" directory was not found at {args.base_dir}.')
@@ -95,7 +94,7 @@ if __name__ == '__main__':
             num_segments = len(all_alignments[0])
             stats[part]['Original number of segments'] = num_segments
             stats[part]['Verified segments'] = 0
-            stats[part]['Origianl Duration, min'] = 0
+            stats[part]['Original Duration, min'] = 0
             stats[part]['Verified Duration, min'] = 0
 
             for i in range(num_segments):
@@ -106,7 +105,7 @@ if __name__ == '__main__':
                 else:
                     info = line.split('|')[0].split()
                     duration = (float(info[1]) - float(info[0])) / 60
-                stats[part]['Origianl Duration, min'] += duration
+                stats[part]['Original Duration, min'] += duration
                 for alignment in all_alignments:
                     if line != alignment[i]:
                         valid_line = False
@@ -117,13 +116,13 @@ if __name__ == '__main__':
 
     stats = pd.DataFrame.from_dict(stats, orient='index').reset_index()
     stats['Number dropped'] = stats['Original number of segments'] - stats['Verified segments']
-    stats['Duration of dropped, min'] = round(stats['Origianl Duration, min'] - stats['Verified Duration, min'])
+    stats['Duration of dropped, min'] = round(stats['Original Duration, min'] - stats['Verified Duration, min'])
     stats['% dropped, min'] = round(stats['Duration of dropped, min'] / stats['Original number of segments'] * 100)
-    stats['Misalignments present'] = stats['Number dropped'] > 0
-    stats['Origianl Duration, min'] = round(stats['Origianl Duration, min'])
+    stats['Misalignment present'] = stats['Number dropped'] > 0
+    stats['Original Duration, min'] = round(stats['Original Duration, min'])
     stats['Verified Duration, min'] = round(stats['Verified Duration, min'])
 
     stats_file = os.path.join(args.base_dir, 'alignment_summary.csv')
     stats.to_csv(stats_file, index=False)
-    print(stats)
+    print(stats.head())
     print(f'Alignment summary saved to {stats_file}')

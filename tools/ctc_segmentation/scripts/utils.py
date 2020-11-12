@@ -22,8 +22,6 @@ from typing import List, Tuple, Union
 import ctc_segmentation as cs
 import numpy as np
 
-__all__ = ['get_segments']
-
 
 def get_segments(
     log_probs: np.ndarray,
@@ -81,8 +79,6 @@ def get_segments(
 
     timings, char_probs, char_list = cs.ctc_segmentation(config, log_probs, ground_truth_mat)
     segments = cs.determine_utterance_segments(config, utt_begin_indices, char_probs, timings, text)
-    print('\n', segments[0])
-    import pdb; pdb.set_trace()
     write_output(output_file, path_wav, segments, text, text_no_preprocessing)
 
 
