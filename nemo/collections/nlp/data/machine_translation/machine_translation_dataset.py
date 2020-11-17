@@ -79,7 +79,7 @@ class TranslationDataset(Dataset):
     def __getitem__(self, idx):
         src_ids = self.batches[idx]["src"]
         tgt = self.batches[idx]["tgt"]
-        tgt_lens = np.arraty(self.batches[idx]["tgt_lens"]).astype(np.int32)
+        tgt_lens = np.array(self.batches[idx]["tgt_lens"]).astype(np.int32)
         if self.mask_predict:
             tgt_ids, labels = self._mask_target(tgt, tgt_lens)
         else:
