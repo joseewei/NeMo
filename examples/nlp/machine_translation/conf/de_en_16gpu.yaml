@@ -47,13 +47,13 @@ model:
   train_ds:
     src_file_name: /data/train.de
     tgt_file_name: /data/train.en
-    tokens_in_batch: 6250  # This is limit per gpu. Total limit is 50000
+    tokens_in_batch: 12500  # This is limit per gpu. Total limit is 50000
     clean: true
     max_seq_length: 512
     shuffle: true
     num_samples: -1 # number of samples to be considered, -1 means all the dataset
     drop_last: false # drops the last last batch if it is smaller than the batch size
-    pin_memory: false # enables pin_memory feature of the data loaders
+    pin_memory: true # enables pin_memory feature of the data loaders
     num_workers: 8 # number of workers for data loaders
 
   validation_ds:
@@ -80,14 +80,14 @@ model:
 
   optim:
     name: adam
-    lr: 7e-4
+    lr: 0.001
     betas: [0.9, 0.98]
     weight_decay: 0
 
     sched:
       name: InverseSquareRootAnnealing
       warmup_steps: null
-      warmup_ratio: 0.04
+      warmup_ratio: 0.1
       last_epoch: -1
 
       # pytorch lightning args
