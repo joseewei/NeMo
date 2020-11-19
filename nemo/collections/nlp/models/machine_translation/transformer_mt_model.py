@@ -343,6 +343,7 @@ class TransformerMTModel(ModelPT):
                 src = torch.Tensor(ids).long().to(self._device).unsqueeze(0)
                 src_mask = torch.ones_like(src)
                 src_embeddings = self.src_embedding_layer(input_ids=src)
+                # src_embeddings *= src_embeddings.new_tensor(self.emb_scale)
                 src_hiddens = self.encoder(src_embeddings, src_mask)
                 beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
                 beam_results = self.filter_predicted_ids(beam_results)
