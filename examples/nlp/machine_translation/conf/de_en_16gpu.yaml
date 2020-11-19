@@ -43,6 +43,7 @@ model:
     beam_size: 4
     len_pen: 0.6
     max_generation_delta: 50
+    pre_ln: true
 
   train_ds:
     src_file_name: /data/train.de

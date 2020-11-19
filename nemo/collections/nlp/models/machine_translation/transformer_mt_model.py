@@ -108,6 +108,7 @@ class TransformerMTModel(ModelPT):
             ffn_dropout=cfg.machine_translation.ffn_dropout,
             attn_score_dropout=cfg.machine_translation.attn_score_dropout,
             attn_layer_dropout=cfg.machine_translation.attn_layer_dropout,
+            pre_ln=cfg.machine_translation.pre_ln
         )
         self.decoder = TransformerDecoder(
             hidden_size=cfg.machine_translation.hidden_size,
@@ -117,7 +118,9 @@ class TransformerMTModel(ModelPT):
             ffn_dropout=cfg.machine_translation.ffn_dropout,
             attn_score_dropout=cfg.machine_translation.attn_score_dropout,
             attn_layer_dropout=cfg.machine_translation.attn_layer_dropout,
+            pre_ln=cfg.machine_translation.pre_ln
         )
+
         self.log_softmax = TokenClassifier(
             hidden_size=cfg.machine_translation.hidden_size, num_classes=tgt_vocab_size, log_softmax=True,
         )
