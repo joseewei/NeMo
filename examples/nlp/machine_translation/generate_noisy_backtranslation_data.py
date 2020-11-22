@@ -42,10 +42,10 @@ def main():
     logging.info(f"Translating: {args.text2translate}")
     with open(args.text2translate, 'r') as fin, open(args.output, 'w') as fout:
         for line in fin:
-            translation = model.translate(text=line.strip())
+            translation = model.batch_translate(text=[line.strip()])[0]
+            print(translation, line)
             fout.write(translation + "\n")
     logging.info("all done")
-
 
 if __name__ == '__main__':
     main()  # noqa pylint: disable=no-value-for-parameter

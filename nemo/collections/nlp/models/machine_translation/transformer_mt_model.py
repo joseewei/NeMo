@@ -158,7 +158,7 @@ class TransformerMTModel(ModelPT):
         # https://github.com/pytorch/pytorch/issues/21819
 
     def replace_beam_with_sampling(self):
-        self.self.beam_search = TopKSequenceGenerator(
+        self.beam_search = TopKSequenceGenerator(
             embedding=self.tgt_embedding_layer,
             decoder=self.decoder,
             log_softmax=self.log_softmax,
@@ -168,7 +168,6 @@ class TransformerMTModel(ModelPT):
             pad=self.tgt_tokenizer.pad_id,
             eos=self.tgt_tokenizer.eos_id,
             len_pen=self.beam_search.len_pen,
-            max_delta_length=self.beam_search.max_delta_length,
         )
 
     def filter_predicted_ids(self, ids):
@@ -364,6 +363,40 @@ class TransformerMTModel(ModelPT):
                 beam_results = self.filter_predicted_ids(beam_results)
                 translation_ids = beam_results.cpu()[0].numpy()
                 res.append(self.tgt_tokenizer.ids_to_text(translation_ids))
+        finally:
+            self.train(mode=mode)
+        return res
+
+    @torch.no_grad()
+    def batch_translate(self, text: List[str]) -> List[str]:
+        """
+        Translates list of sentences in batches from source language to target language.
+        Should be regular text, this method performs its own tokenization/de-tokenization
+        Args:
+            text: list of strings to translate
+
+        Returns:
+            list of translated strings
+        """
+        mode = self.training
+        try:
+            self.eval()
+            src_lens = []
+            src_ids = [self.src_tokenizer.text_to_ids(txt) for txt in text]
+            src_len = max([len(item) for item in src_ids])
+            src_ids_ = self.src_tokenizer.pad_id * np.ones((len(text), src_len + 2), dtype=np.int)
+            for i in range(len(text)):
+                src_ids_[i][: len(src_ids[i])] = [self.src_tokenizer.bos_id] + src_ids[i] + [self.src_tokenizer.eos_id]
+                src_lens.append(len(src_ids[i] + 2))
+            
+            src = torch.Tensor(src_ids_).long().to(self._device)
+            src_mask = torch.ne(src, self.src_tokenizer.pad_id)
+            src_embeddings = self.src_embedding_layer(input_ids=src)
+            # src_embeddings *= src_embeddings.new_tensor(self.emb_scale)
+            src_hiddens = self.encoder(src_embeddings, src_mask)
+            beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
+            beam_results = torch.LongTensor([self.filter_predicted_ids(result) for result in beam_results]).cpu().numpy()
+            res = [self.tgt_tokenizer.ids_to_text(result) for result in beam_results])
         finally:
             self.train(mode=mode)
         return res
