@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--model", type=str, required=True, help="")
     parser.add_argument("--text2translate", type=str, required=True, help="")
     parser.add_argument("--output", type=str, required=True, help="")
+    parser.add_argument("--max_length", type=int, default=250, help="")
 
     args = parser.parse_args()
     torch.set_grad_enabled(False)
@@ -43,13 +44,15 @@ def main():
     with open(args.text2translate, 'r') as fin, open(args.output + '.src', 'w') as fout_src, open(args.output + '.tgt', 'w') as fout_tgt:
         lines = []
         for idx, line in enumerate(fin):
+            if len(line.strip().split()) > args.max_length:
+                continue
             lines.append(line.strip())
-            if idx % 100 == 0:
+            if idx % 100 == 0 and idx !=0:
                 translations = model.batch_translate(text=lines)
-            for tgt, src in zip(translations, lines):
-                fout_src.write(src + "\n")
-                fout_tgt.write(tgt + "\n")
-            lines = []
+                for tgt, src in zip(translations, lines):
+                    fout_src.write(src + "\n")
+                    fout_tgt.write(tgt + "\n")
+                lines = []
     logging.info("all done")
 
 if __name__ == '__main__':
