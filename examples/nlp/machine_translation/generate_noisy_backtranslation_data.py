@@ -13,18 +13,14 @@
 # limitations under the License.
 
 from argparse import ArgumentParser
-from omegaconf import DictConfig
-import pytorch_lightning as pl
 
 import torch
 
 import nemo.collections.nlp as nemo_nlp
 from nemo.utils import logging
-from nemo.core.config import hydra_runner
-from nemo.utils.exp_manager import exp_manager
 
-@hydra_runner(config_path="conf", config_name="en_de_8gpu")
-def main(cfg: DictConfig) -> None:
+
+def main():
     parser = ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="")
     parser.add_argument("--text2translate", type=str, required=True, help="")
@@ -32,11 +28,6 @@ def main(cfg: DictConfig) -> None:
 
     args = parser.parse_args()
     torch.set_grad_enabled(False)
-    if cfg.model.test_checkpoint_path is None:
-        raise ValueError("Not checkpoint for testing was provided")
-    logging.info(f'Config: {cfg.pretty()}')
-    trainer = pl.Trainer(**cfg.trainer)
-    exp_manager(trainer, cfg.get("exp_manager", None))
     if args.model.endswith(".nemo"):
         logging.info("Attempting to initialize from .nemo file")
         model = nemo_nlp.models.TransformerMTModel.restore_from(restore_path=args.model)
@@ -55,11 +46,10 @@ def main(cfg: DictConfig) -> None:
             lines.append(line.strip())
             if idx % 100 == 0:
                 translations = model.batch_translate(text=lines)
-                print('Finished %d lines' % (idx))
-                for tgt, src in zip(translations, lines):
-                    fout_src.write(src + "\n")
-                    fout_tgt.write(tgt + "\n")
-                lines = []
+            for tgt, src in zip(translations, lines):
+                fout_src.write(src + "\n")
+                fout_tgt.write(tgt + "\n")
+            lines = []
     logging.info("all done")
 
 if __name__ == '__main__':
