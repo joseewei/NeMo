@@ -8,11 +8,11 @@ model_path=$3
 split -n ${NUM_SHARDS} -d -a 2 ${mono_data} /tmp/shard
 
 for i in $(seq 0 $NUM_GPUS); do
-    if [ $i < 9 ]
+    if [ $i -gt 9 ]
         then
-        suffix=$i$i
-    else
         suffix=$i
+    else
+        suffix=0$i
     fi
     CUDA_VISIBLE_DEVICES=${i} python ../generate_noisy_backtranslation_data.py \
         --model ${model_path} \
