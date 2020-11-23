@@ -163,7 +163,7 @@ class TransformerMTModel(ModelPT):
             decoder=self.decoder,
             log_softmax=self.log_softmax,
             max_sequence_length=self.beam_search.max_seq_length,
-            beam_size=500,
+            beam_size=10, # hyperparam from https://arxiv.org/pdf/1808.09381.pdf
             bos=self.tgt_tokenizer.bos_id,
             pad=self.tgt_tokenizer.pad_id,
             eos=self.tgt_tokenizer.eos_id,
