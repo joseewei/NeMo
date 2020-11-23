@@ -40,11 +40,17 @@ def main():
         model = model.cuda()
 
     logging.info(f"Translating: {args.text2translate}")
-    with open(args.text2translate, 'r') as fin, open(args.output, 'w') as fout:
-        for line in fin:
-            translation = model.batch_translate(text=[line.strip()])[0]
-            print(translation, line)
-            fout.write(translation + "\n")
+    with open(args.text2translate, 'r') as fin, open(args.output + '.src', 'w') as fout_src, open(args.output + '.tgt', 'w') as fout_tgt:
+        lines = []
+        for idx, line in enumerate(fin):
+            lines.append(line.strip())
+            if idx % 100 == 0:
+                translations = model.batch_translate(text=lines)
+                lines = []
+                print('Finished %d lines' % (idx))
+            for tgt, src in zip(translations, lines):
+                fout_src.write(src + "\n")
+                fout_tgt.write(tgt + "\n")
     logging.info("all done")
 
 if __name__ == '__main__':

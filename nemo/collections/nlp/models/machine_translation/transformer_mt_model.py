@@ -167,7 +167,6 @@ class TransformerMTModel(ModelPT):
             bos=self.tgt_tokenizer.bos_id,
             pad=self.tgt_tokenizer.pad_id,
             eos=self.tgt_tokenizer.eos_id,
-            len_pen=self.beam_search.len_pen,
         )
 
     def filter_predicted_ids(self, ids):
@@ -386,17 +385,17 @@ class TransformerMTModel(ModelPT):
             src_len = max([len(item) for item in src_ids])
             src_ids_ = self.src_tokenizer.pad_id * np.ones((len(text), src_len + 2), dtype=np.int)
             for i in range(len(text)):
-                src_ids_[i][: len(src_ids[i])] = [self.src_tokenizer.bos_id] + src_ids[i] + [self.src_tokenizer.eos_id]
-                src_lens.append(len(src_ids[i] + 2))
-            
+                src_ids_[i][: len(src_ids[i]) + 2] = [self.src_tokenizer.bos_id] + src_ids[i] + [self.src_tokenizer.eos_id]
+                src_lens.append(len(src_ids[i]) + 2)
+
             src = torch.Tensor(src_ids_).long().to(self._device)
             src_mask = torch.ne(src, self.src_tokenizer.pad_id)
             src_embeddings = self.src_embedding_layer(input_ids=src)
             # src_embeddings *= src_embeddings.new_tensor(self.emb_scale)
             src_hiddens = self.encoder(src_embeddings, src_mask)
             beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
-            beam_results = torch.LongTensor([self.filter_predicted_ids(result) for result in beam_results]).cpu().numpy()
-            res = [self.tgt_tokenizer.ids_to_text(result) for result in beam_results])
+            beam_results = [self.filter_predicted_ids(result) for result in beam_results]
+            res = [self.tgt_tokenizer.ids_to_text(result) for result in beam_results]
         finally:
             self.train(mode=mode)
         return res
