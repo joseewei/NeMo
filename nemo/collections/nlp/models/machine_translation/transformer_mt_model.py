@@ -27,7 +27,6 @@ from pytorch_lightning.utilities import rank_zero_only
 from sacrebleu import corpus_bleu
 
 from nemo.collections.common.losses import SmoothedCrossEntropyLoss
-from nemo.collections.common.metrics import Perplexity
 from nemo.collections.common.parts import transformer_weights_init
 from nemo.collections.nlp.data import TranslationDataset
 from nemo.collections.nlp.modules.common import TokenClassifier
@@ -151,8 +150,8 @@ class TransformerMTModel(ModelPT):
         # Optimizer setup needs to happen after all model weights are ready
         self.setup_optimization(cfg.optim)
 
-        self.training_perplexity = Perplexity(dist_sync_on_step=True)
-        self.eval_perplexity = Perplexity(compute_on_step=False)
+        # self.training_perplexity = Perplexity(dist_sync_on_step=True)
+        # self.eval_perplexity = Perplexity(compute_on_step=False)
 
         # These attributes are added to bypass Illegal memory access error in PT1.6
         # https://github.com/pytorch/pytorch/issues/21819
@@ -213,11 +212,11 @@ class TransformerMTModel(ModelPT):
         src_ids, src_mask, tgt_ids, tgt_mask, labels, _, _ = batch
         log_probs, _ = self(src_ids, src_mask, tgt_ids, tgt_mask)
         train_loss = self.loss_fn(log_probs=log_probs, labels=labels)
-        training_perplexity = self.training_perplexity(logits=log_probs)
+        # training_perplexity = self.training_perplexity(logits=log_probs)
         tensorboard_logs = {
             'train_loss': train_loss,
             'lr': self._optimizer.param_groups[0]['lr'],
-            "train_ppl": training_perplexity,
+            # "train_ppl": training_perplexity,
         }
         return {'loss': train_loss, 'log': tensorboard_logs}
 
@@ -230,7 +229,7 @@ class TransformerMTModel(ModelPT):
         src_ids, src_mask, tgt_ids, tgt_mask, labels, sent_ids, _ = batch
         log_probs, beam_results = self(src_ids, src_mask, tgt_ids, tgt_mask)
         eval_loss = self.loss_fn(log_probs=log_probs, labels=labels).cpu().numpy()
-        self.eval_perplexity(logits=log_probs)
+        # self.eval_perplexity(logits=log_probs)
         translations = [self.tgt_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
         np_tgt = tgt_ids.cpu().numpy()
         ground_truths = [self.tgt_tokenizer.ids_to_text(tgt) for tgt in np_tgt]
@@ -268,7 +267,7 @@ class TransformerMTModel(ModelPT):
     def eval_epoch_end(self, outputs, mode):
         counts = np.array([x['num_non_pad_tokens'] for x in outputs])
         eval_loss = np.sum(np.array([x[f'{mode}_loss'] for x in outputs]) * counts) / counts.sum()
-        eval_perplexity = self.eval_perplexity.compute()
+        # eval_perplexity = self.eval_perplexity.compute()
         translations = list(itertools.chain(*[x['translations'] for x in outputs]))
         ground_truths = list(itertools.chain(*[x['ground_truths'] for x in outputs]))
         assert len(translations) == len(ground_truths)
@@ -283,7 +282,7 @@ class TransformerMTModel(ModelPT):
             logging.info(f"    Prediction:   {translations[ind]}")
             logging.info(f"    Ground Truth: {ground_truths[ind]}")
 
-        ans = {f"{mode}_loss": eval_loss, f"{mode}_sacreBLEU": sacre_bleu.score, f"{mode}_ppl": eval_perplexity}
+        ans = {f"{mode}_loss": eval_loss, f"{mode}_sacreBLEU": sacre_bleu.score}
         ans['log'] = dict(ans)
         return ans
 
