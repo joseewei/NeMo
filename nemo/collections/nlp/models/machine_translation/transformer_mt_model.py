@@ -381,7 +381,13 @@ class TransformerMTModel(ModelPT):
         try:
             self.eval()
             src_lens = []
-            src_ids = [self.src_tokenizer.text_to_ids(txt) for txt in text]
+            src_ids = []
+            for txt in text:
+                ids = self.src_tokenizer.text_to_ids(txt)
+                if len(ids) > self.src_embedding_layer.max_sequence_length:
+                    return None
+                else:
+                    src_ids.append(ids)
             src_len = max([len(item) for item in src_ids])
             src_ids_ = self.src_tokenizer.pad_id * np.ones((len(text), src_len + 2), dtype=np.int)
             for i in range(len(text)):

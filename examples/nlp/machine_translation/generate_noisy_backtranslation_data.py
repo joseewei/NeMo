@@ -49,6 +49,9 @@ def main():
             lines.append(line.strip())
             if idx % 100 == 0 and idx !=0:
                 translations = model.batch_translate(text=lines)
+                if translations is None:
+                    print('Warning! Translations returned None ...')
+                    continue
                 for tgt, src in zip(translations, lines):
                     fout_src.write(src + "\n")
                     fout_tgt.write(tgt + "\n")
