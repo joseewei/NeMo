@@ -25,3 +25,5 @@ for i in $(seq 0 $NUM_GPUS); do
         --text2translate /tmp/shard${suffix} \
         --output ${output_path}/backtranslation.shard.${i} &
 done
+
+wait
