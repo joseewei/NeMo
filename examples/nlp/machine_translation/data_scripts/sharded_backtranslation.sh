@@ -1,6 +1,6 @@
 PYTHONUNBUFFERED=1
-NUM_SHARDS=16
-NUM_GPUS=15
+NUM_SHARDS=8
+NUM_GPUS=7
 mono_data=$1
 output_path=$2
 model_path=$3

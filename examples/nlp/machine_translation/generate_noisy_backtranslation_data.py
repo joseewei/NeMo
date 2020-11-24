@@ -25,7 +25,7 @@ def main():
     parser.add_argument("--model", type=str, required=True, help="")
     parser.add_argument("--text2translate", type=str, required=True, help="")
     parser.add_argument("--output", type=str, required=True, help="")
-    parser.add_argument("--max_length", type=int, default=250, help="")
+    parser.add_argument("--batch_size", type=int, default=32, help="")
 
     args = parser.parse_args()
     torch.set_grad_enabled(False)
@@ -41,16 +41,15 @@ def main():
         model = model.cuda()
 
     logging.info(f"Translating: {args.text2translate}")
-    with open(args.text2translate, 'r') as fin, open(args.output + '.src', 'w') as fout_src, open(args.output + '.tgt', 'w') as fout_tgt:
+    with open(args.text2translate, 'r') as fin, open(args.output + '.src', 'w', buffering=1) as fout_src, open(args.output + '.tgt', 'w', buffering=1) as fout_tgt:
         lines = []
         for idx, line in enumerate(fin):
-            if len(line.strip().split()) > args.max_length:
-                continue
             lines.append(line.strip())
-            if idx % 100 == 0 and idx !=0:
+            if idx % args.batch_size == 0 and idx !=0:
                 translations = model.batch_translate(text=lines)
                 if translations is None:
-                    print('Warning! Translations returned None ...')
+                    print('Warning! Translations returned None due to max length restrictions ...')
+                    lines = []
                     continue
                 for tgt, src in zip(translations, lines):
                     fout_src.write(src + "\n")
