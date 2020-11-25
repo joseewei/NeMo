@@ -31,8 +31,7 @@ model:
 #      tokenizer_name: yttm
 #      tokenizer_model: /data/bpe_37k_en_de_yttm.model
     hidden_size: 512
-    num_encoder_layers: 6
-    num_decoder_layers: 6
+    num_layers: 6
     num_attn_heads: 8
     inner_size: 2048
     max_seq_length: 512  # maximum allowed length in embedding layer
