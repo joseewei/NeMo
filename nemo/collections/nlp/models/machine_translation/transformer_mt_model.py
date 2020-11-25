@@ -147,8 +147,8 @@ class TransformerMTModel(ModelPT):
         # Optimizer setup needs to happen after all model weights are ready
         self.setup_optimization(cfg.optim)
 
-        self.training_perplexity = Perplexity(dist_sync_on_step=True)
-        self.eval_perplexity = Perplexity(compute_on_step=False)
+        #self.training_perplexity = Perplexity(dist_sync_on_step=True)
+        #self.eval_perplexity = Perplexity(compute_on_step=False)
 
         # These attributes are added to bypass Illegal memory access error in PT1.6
         # https://github.com/pytorch/pytorch/issues/21819
@@ -179,8 +179,9 @@ class TransformerMTModel(ModelPT):
         log_probs = self.log_softmax(hidden_states=tgt_hiddens)
         beam_results = None
         if not self.training:
-            beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
-            beam_results = self.filter_predicted_ids(beam_results)
+            with torch.no_grad():
+                beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
+                beam_results = self.filter_predicted_ids(beam_results)
         return log_probs, beam_results
 
     def training_step(self, batch, batch_idx):
@@ -197,11 +198,11 @@ class TransformerMTModel(ModelPT):
         src_ids, src_mask, tgt_ids, tgt_mask, labels, _ = batch
         log_probs, _ = self(src_ids, src_mask, tgt_ids, tgt_mask)
         train_loss = self.loss_fn(log_probs=log_probs, labels=labels)
-        training_perplexity = self.training_perplexity(logits=log_probs)
+        #training_perplexity = self.training_perplexity(logits=log_probs)
         tensorboard_logs = {
             'train_loss': train_loss,
             'lr': self._optimizer.param_groups[0]['lr'],
-            "train_ppl": training_perplexity,
+        #    "train_ppl": training_perplexity,
         }
         return {'loss': train_loss, 'log': tensorboard_logs}
 
@@ -214,9 +215,9 @@ class TransformerMTModel(ModelPT):
         src_ids, src_mask, tgt_ids, tgt_mask, labels, sent_ids = batch
         log_probs, beam_results = self(src_ids, src_mask, tgt_ids, tgt_mask)
         eval_loss = self.loss_fn(log_probs=log_probs, labels=labels).cpu().numpy()
-        self.eval_perplexity(logits=log_probs)
-        translations = [self.tgt_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
-        np_tgt = tgt_ids.cpu().numpy()
+        #self.eval_perplexity(logits=log_probs)
+        translations = [self.tgt_tokenizer.ids_to_text(tr) for tr in beam_results.detach().cpu().numpy()]
+        np_tgt = tgt_ids.detach().cpu().numpy()
         ground_truths = [self.tgt_tokenizer.ids_to_text(tgt) for tgt in np_tgt]
         num_non_pad_tokens = np.not_equal(np_tgt, self.tgt_tokenizer.pad_id).sum().item()
         tensorboard_logs = {f'{mode}_loss': eval_loss}
@@ -252,7 +253,7 @@ class TransformerMTModel(ModelPT):
     def eval_epoch_end(self, outputs, mode):
         counts = np.array([x['num_non_pad_tokens'] for x in outputs])
         eval_loss = np.sum(np.array([x[f'{mode}_loss'] for x in outputs]) * counts) / counts.sum()
-        eval_perplexity = self.eval_perplexity.compute()
+        #eval_perplexity = self.eval_perplexity.compute()
         translations = list(itertools.chain(*[x['translations'] for x in outputs]))
         ground_truths = list(itertools.chain(*[x['ground_truths'] for x in outputs]))
         assert len(translations) == len(ground_truths)
