@@ -139,7 +139,7 @@ class TransformerMTModel(ModelPT):
 
         # tie weights of embedding and softmax matrices
         self.log_softmax.mlp.layer0.weight = self.tgt_embedding_layer.token_embedding.weight
-        self.emb_scale = cfg.machine_translation.hidden_size ** 0.5
+        # self.emb_scale = cfg.machine_translation.hidden_size ** 0.5
         self.loss_fn = SmoothedCrossEntropyLoss(
             pad_id=self.tgt_tokenizer.pad_id, label_smoothing=cfg.machine_translation.label_smoothing
         )
@@ -268,7 +268,7 @@ class TransformerMTModel(ModelPT):
             logging.info(f"    Prediction:   {translations[ind]}")
             logging.info(f"    Ground Truth: {ground_truths[ind]}")
 
-        ans = {f"{mode}_loss": eval_loss, f"{mode}_sacreBLEU": sacre_bleu.score, f"{mode}_ppl": eval_perplexity}
+        ans = {f"{mode}_loss": eval_loss, f"{mode}_sacreBLEU": sacre_bleu.score} #, f"{mode}_ppl": eval_perplexity}
         ans['log'] = dict(ans)
         return ans
 
