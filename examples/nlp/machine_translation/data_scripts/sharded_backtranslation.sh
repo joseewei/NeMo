@@ -5,10 +5,6 @@ mono_data=$1
 output_path=$2
 model_path=$3
 
-echo "Sharding ${mono_data} ..."
-
-wc -l ${mono_data}
-
 split -n ${NUM_SHARDS} -d -a 2 ${mono_data} /tmp/shard
 
 echo "Launching backtranslation with ${model_path}"
