@@ -135,23 +135,20 @@ class TransformerMTModel(ModelPT):
         )
 
         std_init_range = 1 / cfg.machine_translation.hidden_size ** 0.5
-        self.apply(lambda module: transformer_weights_init(module, std_init_range))
-
         # tie weights of embedding and softmax matrices
         self.log_softmax.mlp.layer0.weight = self.tgt_embedding_layer.token_embedding.weight
         # self.emb_scale = cfg.machine_translation.hidden_size ** 0.5
         self.loss_fn = SmoothedCrossEntropyLoss(
             pad_id=self.tgt_tokenizer.pad_id, label_smoothing=cfg.machine_translation.label_smoothing
         )
-
         # Optimizer setup needs to happen after all model weights are ready
         self.setup_optimization(cfg.optim)
-
         #self.training_perplexity = Perplexity(dist_sync_on_step=True)
         #self.eval_perplexity = Perplexity(compute_on_step=False)
 
         # These attributes are added to bypass Illegal memory access error in PT1.6
         # https://github.com/pytorch/pytorch/issues/21819
+        self.apply(lambda module: transformer_weights_init(module, std_init_range))
 
     def filter_predicted_ids(self, ids):
         ids[ids >= self.tgt_tokenizer.vocab_size] = self.tgt_tokenizer.unk_id
