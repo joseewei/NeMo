@@ -126,6 +126,11 @@ fi
 
 ./clean-corpus-n.perl -ratio 1.5 ${OUTDIR}/train.$lang $lang1 $lang2 ${OUTDIR}/train.clean 1 250
 
+echo 'Shuffling'
+shuf --random-source=${OUTDIR}/train.clean.$lang1 ${OUTDIR}/train.clean.$lang1 > ${OUTDIR}/train.clean.$lang1.shuffled
+shuf --random-source=${OUTDIR}/train.clean.$lang1 ${OUTDIR}/train.clean.$lang2 > ${OUTDIR}/train.clean.$lang2.shuffled
+cat ${OUTDIR}/train.clean.$lang1.shuffled ${OUTDIR}/train.clean.$lang2.shuffled > ${OUTDIR}/train.clean.$lang.shuffled.common
+
 echo "Fetching Validation data $lang" 
 sacrebleu -t wmt13 -l $lang --echo src > ${OUTDIR}/wmt13-$lang.src
 sacrebleu -t wmt13 -l $lang --echo ref > ${OUTDIR}/wmt13-$lang.ref
