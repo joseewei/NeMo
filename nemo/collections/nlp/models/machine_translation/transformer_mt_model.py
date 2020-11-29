@@ -221,6 +221,7 @@ class TransformerMTModel(ModelPT):
         return {'loss': train_loss, 'log': tensorboard_logs}
 
     def eval_step(self, batch, batch_idx, mode):
+        torch.cuda.empty_cache()
         for i in range(len(batch)):
             if batch[i].ndim == 3:
                 # Dataset returns already batched data and the first dimension of size 1 added by DataLoader
