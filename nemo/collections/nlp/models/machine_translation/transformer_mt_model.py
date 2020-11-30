@@ -212,11 +212,13 @@ class TransformerMTModel(ModelPT):
         src_ids, src_mask, tgt_ids, tgt_mask, labels, sent_ids = batch
         log_probs, beam_results = self(src_ids, src_mask, tgt_ids, tgt_mask)
         eval_loss = self.loss_fn(log_probs=log_probs, labels=labels).cpu().numpy()
-        self.eval_perplexity(logits=log_probs)
+        # self.eval_perplexity(logits=log_probs)
         translations = [self.tgt_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
         np_tgt = tgt_ids.cpu().numpy()
         ground_truths = [self.tgt_tokenizer.ids_to_text(tgt) for tgt in np_tgt]
         num_non_pad_tokens = np.not_equal(np_tgt, self.tgt_tokenizer.pad_id).sum().item()
+        del beam_results
+        del log_probs
         return {
             'translations': translations,
             'ground_truths': ground_truths,
@@ -248,7 +250,7 @@ class TransformerMTModel(ModelPT):
     def eval_epoch_end(self, outputs, mode):
         counts = np.array([x['num_non_pad_tokens'] for x in outputs])
         eval_loss = np.sum(np.array([x[f'{mode}_loss'] for x in outputs]) * counts) / counts.sum()
-        eval_perplexity = self.eval_perplexity.compute()
+        # eval_perplexity = self.eval_perplexity.compute()
         translations = list(itertools.chain(*[x['translations'] for x in outputs]))
         ground_truths = list(itertools.chain(*[x['ground_truths'] for x in outputs]))
         assert len(translations) == len(ground_truths)
@@ -256,7 +258,7 @@ class TransformerMTModel(ModelPT):
         self.log_dict(
             {
                 f"{mode}_loss": eval_loss,
-                f"{mode}_ppl": eval_perplexity.cpu().numpy().item(),
+                # f"{mode}_ppl": eval_perplexity.cpu().numpy().item(),
                 f"{mode}_sacreBLEU": sacre_bleu.score,
             },
         )
@@ -271,6 +273,8 @@ class TransformerMTModel(ModelPT):
             logging.info("    " + '\u0332'.join(f"EXAMPLE {i}:"))
             logging.info(f"    Prediction:   {translations[ind]}")
             logging.info(f"    Ground Truth: {ground_truths[ind]}")
+        del translations
+        del ground_truths
 
     def validation_epoch_end(self, outputs):
         """
