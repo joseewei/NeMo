@@ -211,14 +211,12 @@ class TransformerMTModel(ModelPT):
                 batch[i] = batch[i].squeeze(dim=0)
         src_ids, src_mask, tgt_ids, tgt_mask, labels, sent_ids = batch
         log_probs, beam_results = self(src_ids, src_mask, tgt_ids, tgt_mask)
-        eval_loss = self.loss_fn(log_probs=log_probs, labels=labels).cpu().numpy()
+        eval_loss = self.loss_fn(log_probs=log_probs, labels=labels).detach().item()
         # self.eval_perplexity(logits=log_probs)
-        translations = [self.tgt_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
+        translations = [self.tgt_tokenizer.ids_to_text(tr) for tr in beam_results.detach().cpu().numpy()]
         np_tgt = tgt_ids.cpu().numpy()
         ground_truths = [self.tgt_tokenizer.ids_to_text(tgt) for tgt in np_tgt]
         num_non_pad_tokens = np.not_equal(np_tgt, self.tgt_tokenizer.pad_id).sum().item()
-        del beam_results
-        del log_probs
         return {
             'translations': translations,
             'ground_truths': ground_truths,
