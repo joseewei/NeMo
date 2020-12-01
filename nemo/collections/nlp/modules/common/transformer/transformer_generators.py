@@ -98,12 +98,12 @@ class GreedySequenceGenerator(nn.Module):
                 decoder_input_mask,
                 encoder_hidden_states,
                 encoder_input_mask,
-                decoder_mems_list,
-                return_mems=True,
+                decoder_mems_list=None,
+                return_mems=False,
             )
         else:
             decoder_mems_list = self.decoder.forward(
-                decoder_hidden_states, decoder_input_mask, decoder_mems_list, return_mems=True
+                decoder_hidden_states, decoder_input_mask, decoder_mems_list=None, return_mems=False
             )
         log_probs = self.log_softmax.forward(hidden_states=decoder_mems_list[-1][:, -1:])
         return log_probs, decoder_mems_list
@@ -148,8 +148,8 @@ class GreedySequenceGenerator(nn.Module):
         decoder_mems_list = None
         for i in range(max_generation_length):
 
-            log_probs, decoder_mems_list = self._forward(
-                tgt[:, -1:], encoder_hidden_states, encoder_input_mask, decoder_mems_list, i
+            log_probs, _ = self._forward(
+                tgt[:, -1:], encoder_hidden_states, encoder_input_mask, None, i
             )
 
             next_tokens = torch.argmax(log_probs[:, -1], dim=-1, keepdim=True)

@@ -33,7 +33,7 @@ from nemo.collections.nlp.data import TranslationDataset
 from nemo.collections.nlp.modules.common import TokenClassifier
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
 from nemo.collections.nlp.modules.common.transformer import (
-    BeamSearchSequenceGenerator,
+    GreedySequenceGenerator,
     TransformerDecoder,
     TransformerEmbedding,
     TransformerEncoder,
@@ -121,16 +121,14 @@ class TransformerMTModel(ModelPT):
         self.log_softmax = TokenClassifier(
             hidden_size=cfg.machine_translation.hidden_size, num_classes=tgt_vocab_size, log_softmax=True,
         )
-        self.beam_search = BeamSearchSequenceGenerator(
+        self.beam_search = GreedySequenceGenerator(
             embedding=self.tgt_embedding_layer,
             decoder=self.decoder,
             log_softmax=self.log_softmax,
             max_sequence_length=cfg.machine_translation.max_seq_length,
-            beam_size=cfg.machine_translation.beam_size,
             bos=self.tgt_tokenizer.bos_id,
             pad=self.tgt_tokenizer.pad_id,
             eos=self.tgt_tokenizer.eos_id,
-            len_pen=cfg.machine_translation.len_pen,
             max_delta_length=cfg.machine_translation.get("max_generation_delta", 50),
         )
 
