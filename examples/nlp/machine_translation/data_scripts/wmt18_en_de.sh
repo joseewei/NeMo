@@ -1,3 +1,10 @@
+wmt_dir=$1;
+out_dir=$2;
+
+mkdir -p ${out_dir}
+mkdir -p ${wmt_dir}
+mkdir -p ${wmt_dir}/orig
+
 URLS=(
     "http://statmt.org/wmt13/training-parallel-europarl-v7.tgz"
     "http://statmt.org/wmt13/training-parallel-commoncrawl.tgz"
@@ -77,14 +84,16 @@ FILES_en=(
     "news.2017.en.shuffled.deduped.gz"
 )
 
-OUTDIR=wmt18_en_de
+OUTDIR=$out_dir
 lang1=en
 lang2=de
 lang=en-de
 rev_lang=de-en
-orig=orig
+orig=${wmt_dir}/orig
 
 mkdir -p $OUTDIR
+mkdir -p $OUTDIR/parallel
+mkdir -p $OUTDIR/mono
 
 cd $orig
 
@@ -109,12 +118,10 @@ for ((i=0;i<${#URLS[@]};++i)); do
     fi
 done
 
-cd ..
-
 echo "pre-processing train data..."
 for l in $lang1 $lang2; do
     for f in "${CORPORA[@]}"; do
-        cat $orig/$f.$l >> $OUTDIR/train.$lang.$l
+        cat $orig/$f.$l >> $OUTDIR/parallel/train.$lang.$l
     done
 done
 
@@ -124,33 +131,31 @@ then
     chmod +x clean-corpus-n.perl
 fi
 
-./clean-corpus-n.perl -ratio 1.5 ${OUTDIR}/train.$lang $lang1 $lang2 ${OUTDIR}/train.clean 1 250
+./clean-corpus-n.perl -ratio 1.5 ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean 1 250
 
 echo 'Shuffling'
-shuf --random-source=${OUTDIR}/train.clean.$lang1 ${OUTDIR}/train.clean.$lang1 > ${OUTDIR}/train.clean.$lang1.shuffled
-shuf --random-source=${OUTDIR}/train.clean.$lang1 ${OUTDIR}/train.clean.$lang2 > ${OUTDIR}/train.clean.$lang2.shuffled
-cat ${OUTDIR}/train.clean.$lang1.shuffled ${OUTDIR}/train.clean.$lang2.shuffled > ${OUTDIR}/train.clean.$lang.shuffled.common
+shuf --random-source=${OUTDIR}/parallel/train.clean.$lang1 ${OUTDIR}/parallel/train.clean.$lang1 > ${OUTDIR}/parallel/train.clean.$lang1.shuffled
+shuf --random-source=${OUTDIR}/parallel/train.clean.$lang1 ${OUTDIR}/parallel/train.clean.$lang2 > ${OUTDIR}/parallel/train.clean.$lang2.shuffled
+cat ${OUTDIR}/parallel/train.clean.$lang1.shuffled ${OUTDIR}/parallel/train.clean.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.$lang.shuffled.common
 
 echo "Fetching Validation data $lang" 
-sacrebleu -t wmt13 -l $lang --echo src > ${OUTDIR}/wmt13-$lang.src
-sacrebleu -t wmt13 -l $lang --echo ref > ${OUTDIR}/wmt13-$lang.ref
+sacrebleu -t wmt13 -l $lang --echo src > ${OUTDIR}/parallel/wmt13-$lang.src
+sacrebleu -t wmt13 -l $lang --echo ref > ${OUTDIR}/parallel/wmt13-$lang.ref
 
 echo "Fetching Test data $lang" 
-sacrebleu -t wmt14 -l $lang --echo src > ${OUTDIR}/wmt14-$lang.src
-sacrebleu -t wmt14 -l $lang --echo ref > ${OUTDIR}/wmt14-$lang.ref
+sacrebleu -t wmt14 -l $lang --echo src > ${OUTDIR}/parallel/wmt14-$lang.src
+sacrebleu -t wmt14 -l $lang --echo ref > ${OUTDIR}/parallel/wmt14-$lang.ref
 
 echo "Fetching Validation data $rev_lang" 
-sacrebleu -t wmt13 -l $rev_lang --echo src > ${OUTDIR}/wmt13-$rev_lang.src
-sacrebleu -t wmt13 -l $rev_lang --echo ref > ${OUTDIR}/wmt13-$rev_lang.ref
+sacrebleu -t wmt13 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt13-$rev_lang.src
+sacrebleu -t wmt13 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt13-$rev_lang.ref
 
 echo "Fetching Test data $rev_lang" 
-sacrebleu -t wmt14 -l $rev_lang --echo src > ${OUTDIR}/wmt14-$rev_lang.src
-sacrebleu -t wmt14 -l $rev_lang --echo ref > ${OUTDIR}/wmt14-$rev_lang.ref
+sacrebleu -t wmt14 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt14-$rev_lang.src
+sacrebleu -t wmt14 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt14-$rev_lang.ref
 
-SUBSAMPLE_SIZE=25000000
-
-OUTDIR_en=wmt18_en_mono
-mkdir -p $OUTDIR_en
+OUTDIR_MONO=$OUTDIR/mono/
+mkdir -p $OUTDIR_MONO
 
 cd $orig
 
@@ -168,27 +173,20 @@ for ((i=0;i<${#URLS_mono_en[@]};++i)); do
     fi
 done
 
-cd ..
-
-echo "Subsampling data ..."
-if [ -f ${OUTDIR_en}/monolingual.${SUBSAMPLE_SIZE}.en ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.en ]; then
     echo "found monolingual sample, skipping shuffle/sample/tokenize"
 else
-    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) \
-    | shuf -n $SUBSAMPLE_SIZE > $OUTDIR_en/monolingual.${SUBSAMPLE_SIZE}.en
+    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) > $OUTDIR_MONO/monolingual.news.en
 fi
 
 echo "Deduplicating data ..."
-if [ -f ${OUTDIR_en}/monolingual.dedup.${SUBSAMPLE_SIZE}.en ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_en}/monolingual.${SUBSAMPLE_SIZE}.en > ${OUTDIR_en}/bpe.monolingual.dedup.${SUBSAMPLE_SIZE}.en
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
 fi
 
 echo "Fetching German Monolingual data ..."
-
-OUTDIR_de=wmt18_de_mono
-mkdir -p $OUTDIR_de
 
 cd $orig
 
@@ -202,19 +200,16 @@ for ((i=0;i<${#URLS_mono_de[@]};++i)); do
     fi
 done
 
-cd ..
-
 echo "Subsampling data ..."
-if [ -f ${OUTDIR_de}/monolingual.${SUBSAMPLE_SIZE}.de ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.de ]; then
     echo "found monolingual sample, skipping shuffle/sample/tokenize"
 else
-    gzip -c -d -k $(for FILE in "${FILES_de[@]}"; do echo $orig/$FILE; done) \
-    | shuf -n $SUBSAMPLE_SIZE > ${OUTDIR_de}/monolingual.${SUBSAMPLE_SIZE}.de
+    gzip -c -d -k $(for FILE in "${FILES_de[@]}"; do echo $orig/$FILE; done) > ${OUTDIR_MONO}/monolingual.news.de
 fi
 
 echo "Deduplicating data ..."
-if [ -f ${OUTDIR_de}/monolingual.dedup.${SUBSAMPLE_SIZE}.de ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.de ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_de}/monolingual.${SUBSAMPLE_SIZE}.de > ${OUTDIR_de}/bpe.monolingual.dedup.${SUBSAMPLE_SIZE}.de
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
 fi
