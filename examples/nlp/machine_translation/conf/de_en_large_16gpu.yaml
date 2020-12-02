@@ -1,5 +1,5 @@
 # Config file for training left-to-right Transformer language model
-name: &name TransformerMT
+name: &name TransformerLargeNMT
 
 trainer:
   gpus: 16
@@ -41,15 +41,15 @@ model:
     attn_score_dropout: 0.1
     attn_layer_dropout: 0.3
     label_smoothing: 0.1
-    beam_size: 4
-    len_pen: 0.6
+    beam_size: 5
+    len_pen: 1.0
     max_generation_delta: 50
-    pre_ln: true
+    pre_ln: false
 
   train_ds:
     src_file_name: /data/train.de
     tgt_file_name: /data/train.en
-    tokens_in_batch: 12500  # This is limit per gpu. Total limit is 50000
+    tokens_in_batch: 16000  # This is limit per gpu. Total limit is 50000
     clean: true
     max_seq_length: 512
     shuffle: true
@@ -88,12 +88,12 @@ model:
 
     sched:
       name: InverseSquareRootAnnealing
-      warmup_steps: null
-      warmup_ratio: 0.1
+      warmup_steps: 4000
+      warmup_ratio: null
       last_epoch: -1
 
       # pytorch lightning args
-      monitor: val_loss
+      monitor: val_sacreBLEU
       reduce_on_plateau: false
 
 exp_manager:
