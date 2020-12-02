@@ -27,6 +27,7 @@ from pytorch_lightning.utilities import rank_zero_only
 from sacrebleu import corpus_bleu
 
 from nemo.collections.common.losses import SmoothedCrossEntropyLoss
+from nemo.collections.common.metrics import Perplexity
 from nemo.collections.common.parts import transformer_weights_init
 from nemo.collections.nlp.data import TranslationDataset
 from nemo.collections.nlp.modules.common import TokenClassifier
@@ -150,8 +151,8 @@ class TransformerMTModel(ModelPT):
         # Optimizer setup needs to happen after all model weights are ready
         self.setup_optimization(cfg.optim)
 
-        # self.training_perplexity = Perplexity(dist_sync_on_step=True)
-        # self.eval_perplexity = Perplexity(compute_on_step=False)
+        self.training_perplexity = Perplexity(dist_sync_on_step=True)
+        self.eval_perplexity = Perplexity(compute_on_step=False)
 
         # These attributes are added to bypass Illegal memory access error in PT1.6
         # https://github.com/pytorch/pytorch/issues/21819
@@ -225,11 +226,10 @@ class TransformerMTModel(ModelPT):
                 # Dataset returns already batched data and the first dimension of size 1 added by DataLoader
                 # is excess.
                 batch[i] = batch[i].squeeze(dim=0)
-        with torch.no_grad():
-            src_ids, src_mask, tgt_ids, tgt_mask, labels, sent_ids, _ = batch
-            log_probs, beam_results = self(src_ids, src_mask, tgt_ids, tgt_mask)
-            eval_loss = self.loss_fn(log_probs=log_probs, labels=labels).cpu().numpy()
-        # self.eval_perplexity(logits=log_probs)
+        src_ids, src_mask, tgt_ids, tgt_mask, labels, sent_ids, _ = batch
+        log_probs, beam_results = self(src_ids, src_mask, tgt_ids, tgt_mask)
+        eval_loss = self.loss_fn(log_probs=log_probs, labels=labels).cpu().numpy()
+        eval_perplexity = self.eval_perplexity(logits=log_probs)
         translations = [self.tgt_tokenizer.ids_to_text(tr) for tr in beam_results.cpu().numpy()]
         np_tgt = tgt_ids.cpu().numpy()
         ground_truths = [self.tgt_tokenizer.ids_to_text(tgt) for tgt in np_tgt]
@@ -239,6 +239,7 @@ class TransformerMTModel(ModelPT):
             'ground_truths': ground_truths,
             'num_non_pad_tokens': num_non_pad_tokens,
             f'{mode}_loss': eval_loss,
+            f'{mode}_perplexity': eval_perplexity,
         }
 
     def test_step(self, batch, batch_idx):
