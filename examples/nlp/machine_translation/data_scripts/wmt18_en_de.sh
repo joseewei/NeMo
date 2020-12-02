@@ -11,7 +11,6 @@ URLS=(
     "http://data.statmt.org/wmt18/translation-task/training-parallel-nc-v13.tgz"
     "http://data.statmt.org/wmt18/translation-task/rapid2016.tgz"
     "http://data.statmt.org/wmt17/translation-task/dev.tgz"
-    "http://statmt.org/wmt14/test-full.tgz"
 )
 FILES=(
     "training-parallel-europarl-v7.tgz"
@@ -19,7 +18,6 @@ FILES=(
     "training-parallel-nc-v13.tgz"
     "rapid2016.tgz"
     "dev.tgz"
-    "test-full.tgz"
 )
 CORPORA=(
     "training/europarl-v7.de-en"
@@ -119,6 +117,7 @@ for ((i=0;i<${#URLS[@]};++i)); do
 done
 
 echo "pre-processing train data..."
+rm $OUTDIR/parallel/*
 for l in $lang1 $lang2; do
     for f in "${CORPORA[@]}"; do
         cat $orig/$f.$l >> $OUTDIR/parallel/train.$lang.$l
