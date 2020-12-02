@@ -174,7 +174,7 @@ then
     chmod +x clean-corpus-n.perl
 fi
 
-./clean-corpus-n.perl ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean 1 250
+./clean-corpus-n.perl -ratio 1000 ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean 1 250
 
 echo 'Shuffling'
 shuf --random-source=${OUTDIR}/parallel/train.clean.$lang1 ${OUTDIR}/parallel/train.clean.$lang1 > ${OUTDIR}/parallel/train.clean.$lang1.shuffled
