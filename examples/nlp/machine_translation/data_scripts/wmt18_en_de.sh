@@ -200,7 +200,7 @@ echo "Deduplicating data ..."
 if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
 fi
 
 echo "Fetching German Monolingual data ..."
@@ -228,7 +228,7 @@ echo "Deduplicating data ..."
 if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.de ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
 fi
 
 echo "Cleaning data ..."

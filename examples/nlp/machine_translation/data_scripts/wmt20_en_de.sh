@@ -269,17 +269,17 @@ for ((i=0;i<${#URLS_mono_en[@]};++i)); do
     fi
 done
 
-if [ -f ${OUTDIR_MONO}/monolingual.en ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.en ]; then
     echo "found monolingual sample, skipping shuffle/sample/tokenize"
 else
-    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) > $OUTDIR_MONO/monolingual.en
+    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) > $OUTDIR_MONO/monolingual.news.en
 fi
 
 echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.dedup.en ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.en > ${OUTDIR_MONO}/monolingual.dedup.en
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
 fi
 
 echo "Fetching German Monolingual data ..."
@@ -297,17 +297,17 @@ for ((i=0;i<${#URLS_mono_de[@]};++i)); do
 done
 
 echo "Subsampling data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.de ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.de ]; then
     echo "found monolingual sample, skipping shuffle/sample/tokenize"
 else
-    gzip -c -d -k $(for FILE in "${FILES_de[@]}"; do echo $orig/$FILE; done) > ${OUTDIR_MONO}/monolingual.de
+    gzip -c -d -k $(for FILE in "${FILES_de[@]}"; do echo $orig/$FILE; done) > ${OUTDIR_MONO}/monolingual.news.de
 fi
 
 echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.dedup.de ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.de ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.de > ${OUTDIR_MONO}/monolingual.dedup.de
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
 fi
 
 echo "Cleaning data ..."
