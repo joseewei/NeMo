@@ -1,5 +1,6 @@
 wmt_dir=$1;
 out_dir=$2;
+script_dir=$(pwd)
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
@@ -62,7 +63,7 @@ URLS_mono_en=(
 )
 
 FILES_zh=(
-    "news.2007.zh.shuffled.deduped.gz"
+    "news.2008.zh.shuffled.deduped.gz"
     "news.2010.zh.shuffled.deduped.gz"
     "news.2011.zh.shuffled.deduped.gz"
     "news.2012.zh.shuffled.deduped.gz"
@@ -165,7 +166,16 @@ if [ -f $orig/WikiMatrix.v1.en-zh.langid.tsv ]
 then
     echo "Adding Wiki Matrix"
     awk -F "\t" '{ if ($4 == "en" && $5 == "zh") {print $2}}' $orig/WikiMatrix.v1.en-zh.langid.tsv >> $OUTDIR/parallel/train.$lang.en
-    awk -F "\t" '{ if ($4 == "en" && $5 == "zh") {print $2}}' $orig/WikiMatrix.v1.en-zh.langid.tsv >> $OUTDIR/parallel/train.$lang.zh
+    awk -F "\t" '{ if ($4 == "en" && $5 == "zh") {print $3}}' $orig/WikiMatrix.v1.en-zh.langid.tsv >> $OUTDIR/parallel/train.$lang.zh
+fi
+
+echo "Segmenting chinese ..."
+python $script_dir/segment_zh.py $OUTDIR/parallel/train.$lang.zh > $OUTDIR/parallel/train.$lang.seg.zh
+
+if [ ! -f clean-corpus-n.perl ]
+then
+    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/training/clean-corpus-n.perl
+    chmod +x clean-corpus-n.perl
 fi
 
 if [ ! -f clean-corpus-n.perl ]
@@ -174,12 +184,29 @@ then
     chmod +x clean-corpus-n.perl
 fi
 
-./clean-corpus-n.perl -ratio 1000 ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean 1 250
+if [ ! -f normalize-punctuation.perl ]
+then
+    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/normalize-punctuation.perl
+    chmod +x normalize-punctuation.perl
+fi
+
+if [ ! -f remove-non-printing-char.perl ]
+then
+    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/remove-non-printing-char.perl
+    chmod +x remove-non-printing-char.perl
+fi
+
+echo "Cleaning data ..."
+cat $OUTDIR/parallel/train.$lang.en | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.en
+cat $OUTDIR/parallel/train.$lang.seg.zh | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.zh
+
+echo "Filtering data ..."
+./clean-corpus-n.perl -ratio 1.5 ${OUTDIR}/parallel/train.clean.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean.filter 1 250
 
 echo 'Shuffling'
-shuf --random-source=${OUTDIR}/parallel/train.clean.$lang1 ${OUTDIR}/parallel/train.clean.$lang1 > ${OUTDIR}/parallel/train.clean.$lang1.shuffled
-shuf --random-source=${OUTDIR}/parallel/train.clean.$lang1 ${OUTDIR}/parallel/train.clean.$lang2 > ${OUTDIR}/parallel/train.clean.$lang2.shuffled
-cat ${OUTDIR}/parallel/train.clean.$lang1.shuffled ${OUTDIR}/parallel/train.clean.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.$lang.shuffled.common
+shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang1 > ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled
+shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
+cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
 
 echo "Fetching Validation data $lang" 
 sacrebleu -t wmt19 -l $lang --echo src > ${OUTDIR}/parallel/wmt19-$lang.src
@@ -256,3 +283,6 @@ if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.zh ]; then
 else
     awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.zh > ${OUTDIR_MONO}/monolingual.news.dedup.zh
 fi
+
+echo "Segmenting monolingual chinese data ..."
+python $script_dir/segment_zh.py ${OUTDIR_MONO}/monolingual.news.dedup.zh > ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh

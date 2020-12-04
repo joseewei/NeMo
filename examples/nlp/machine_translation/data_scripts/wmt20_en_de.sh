@@ -1,24 +1,37 @@
 wmt_dir=$1;
 out_dir=$2;
+script_dir=$(pwd)
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
 mkdir -p ${wmt_dir}/orig
 
 URLS=(
-    "http://statmt.org/wmt13/training-parallel-europarl-v7.tgz"
-    "http://statmt.org/wmt13/training-parallel-commoncrawl.tgz"
-    "http://data.statmt.org/wmt18/translation-task/training-parallel-nc-v13.tgz"
-    "http://data.statmt.org/wmt18/translation-task/rapid2016.tgz"
-    "http://data.statmt.org/wmt17/translation-task/dev.tgz"
+    "http://www.statmt.org/europarl/v10/training/europarl-v10.de-en.tsv.gz"
+    "http://www.statmt.org/wmt13/training-parallel-commoncrawl.tgz"
+    "https://s3.amazonaws.com/web-language-models/paracrawl/release7.1/en-de.txt.gz"
+    "http://data.statmt.org/news-commentary/v15/training/news-commentary-v15.de-en.tsv.gz"
+    "http://data.statmt.org/wikititles/v2/wikititles-v2.de-en.tsv.gz"
+    "https://tilde-model.s3-eu-west-1.amazonaws.com/EESC2017.de-en.tmx.zip"
+    "https://tilde-model.s3-eu-west-1.amazonaws.com/rapid2019.de-en.tmx.zip"
+    "https://tilde-model.s3-eu-west-1.amazonaws.com/ecb2017.de-en.tmx.zip"
+    "https://tilde-model.s3-eu-west-1.amazonaws.com/EMA2016.de-en.tmx.zip"
+    "http://data.statmt.org/wmt20/translation-task/WikiMatrix/WikiMatrix.v1.de-en.langid.tsv.gz"
 )
+
 FILES=(
-    "training-parallel-europarl-v7.tgz"
+    "europarl-v10.de-en.tsv"
     "training-parallel-commoncrawl.tgz"
-    "training-parallel-nc-v13.tgz"
-    "rapid2016.tgz"
-    "dev.tgz"
+    "en-de.txt.gz"
+    "news-commentary-v15.de-en.tsv.gz"
+    "wikititles-v2.de-en.tsv.gz"
+    "EESC2017.de-en.tmx.zip"
+    "rapid2019.de-en.tmx.zip"
+    "ecb2017.de-en.tmx.zip"
+    "EMA2016.de-en.tmx.zip"
+    "WikiMatrix.v1.de-en.langid.tsv.gz"
 )
+
 CORPORA=(
     "training/europarl-v7.de-en"
     "commoncrawl.de-en"
@@ -112,17 +125,83 @@ for ((i=0;i<${#URLS[@]};++i)); do
             tar zxvf $file
         elif [ ${file: -4} == ".tar" ]; then
             tar xvf $file
+        elif [ ${file: -3} == ".gz" ]; then
+            gunzip -k $file
+        elif [ ${file: -4} == ".zip" ]; then
+            unzip $file
         fi
     fi
 done
 
+cd ..
+
 echo "pre-processing train data..."
 rm $OUTDIR/parallel/*
-for l in $lang1 $lang2; do
-    for f in "${CORPORA[@]}"; do
-        cat $orig/$f.$l >> $OUTDIR/parallel/train.$lang.$l
-    done
-done
+
+echo "Adding Europarl v10"
+awk -F "\t" '{print $1}' $orig/europarl-v10.de-en.tsv >> $OUTDIR/parallel/train.$lang.de
+awk -F "\t" '{print $2}' $orig/europarl-v10.de-en.tsv >> $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding Commoncrawl"
+cat $orig/commoncrawl.de-en.de >> $OUTDIR/parallel/train.$lang.de
+cat $orig/commoncrawl.de-en.en >> $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding News Commentary v15"
+awk -F "\t" '{print $1}' $orig/news-commentary-v15.de-en.tsv >> $OUTDIR/parallel/train.$lang.de
+awk -F "\t" '{print $2}' $orig/news-commentary-v15.de-en.tsv >> $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding Paracrawl 7.1"
+awk -F "\t" '{print $1}' $orig/en-de.txt >> $OUTDIR/parallel/train.$lang.en
+awk -F "\t" '{print $2}' $orig/en-de.txt >> $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding Wikititles v2"
+awk -F "\t" '{print $1}' $orig/wikititles-v2.de-en.tsv >> $OUTDIR/parallel/train.$lang.de
+awk -F "\t" '{print $2}' $orig/wikititles-v2.de-en.tsv >> $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+
+echo "Adding WikiMatrix v1"
+awk -F "\t" '{ if ($4 == "de" && $5 == "en") {print $2}}' $orig/WikiMatrix.v1.de-en.langid.tsv >> $OUTDIR/parallel/train.$lang.de
+awk -F "\t" '{ if ($4 == "de" && $5 == "en") {print $3}}' $orig/WikiMatrix.v1.de-en.langid.tsv >> $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding EESC2017"
+python $script_dir/tmx2txt.py --codelist en,de $orig/EESC.de-en.tmx $orig/EESC.de-en.tmx.txt
+awk -F "\t" '{print $1}' $orig/EESC.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.en
+awk -F "\t" '{print $2}' $orig/EESC.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding Rapid2019"
+python $script_dir/tmx2txt.py --codelist en,de $orig/RAPID_2019.UNIQUE.de-en.tmx $orig/RAPID_2019.UNIQUE.de-en.tmx.txt
+awk -F "\t" '{print $1}' $orig/RAPID_2019.UNIQUE.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.en
+awk -F "\t" '{print $2}' $orig/RAPID_2019.UNIQUE.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding ECB2017"
+python $script_dir/tmx2txt.py --codelist en,de $orig/ecb2017.UNIQUE.de-en.tmx $orig/ecb2017.UNIQUE.de-en.tmx.txt
+awk -F "\t" '{print $1}' $orig/ecb2017.UNIQUE.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.en
+awk -F "\t" '{print $2}' $orig/ecb2017.UNIQUE.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+
+echo "Adding EMA2016"
+python $script_dir/tmx2txt.py --codelist en,de $orig/EMEA2016.de-en.tmx $orig/EMEA2016.de-en.tmx.txt
+awk -F "\t" '{print $1}' $orig/EMEA2016.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.en
+awk -F "\t" '{print $2}' $orig/EMEA2016.de-en.tmx.txt >> $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
+wc -l $OUTDIR/parallel/train.$lang.de
 
 if [ ! -f clean-corpus-n.perl ]
 then
@@ -152,8 +231,8 @@ echo "Filtering data ..."
 
 echo 'Shuffling'
 shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang1 > ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled
-shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
-cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
+shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang2 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
+cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.filter.clean.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
 
 echo "Fetching Validation data $lang" 
 sacrebleu -t wmt13 -l $lang --echo src > ${OUTDIR}/parallel/newstest2013-$lang.src
@@ -190,17 +269,17 @@ for ((i=0;i<${#URLS_mono_en[@]};++i)); do
     fi
 done
 
-if [ -f ${OUTDIR_MONO}/monolingual.news.en ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.en ]; then
     echo "found monolingual sample, skipping shuffle/sample/tokenize"
 else
-    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) > $OUTDIR_MONO/monolingual.news.en
+    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) > $OUTDIR_MONO/monolingual.en
 fi
 
 echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.dedup.en ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.en > ${OUTDIR_MONO}/monolingual.dedup.en
 fi
 
 echo "Fetching German Monolingual data ..."
@@ -218,17 +297,17 @@ for ((i=0;i<${#URLS_mono_de[@]};++i)); do
 done
 
 echo "Subsampling data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.de ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.de ]; then
     echo "found monolingual sample, skipping shuffle/sample/tokenize"
 else
-    gzip -c -d -k $(for FILE in "${FILES_de[@]}"; do echo $orig/$FILE; done) > ${OUTDIR_MONO}/monolingual.news.de
+    gzip -c -d -k $(for FILE in "${FILES_de[@]}"; do echo $orig/$FILE; done) > ${OUTDIR_MONO}/monolingual.de
 fi
 
 echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.de ]; then
+if [ -f ${OUTDIR_MONO}/monolingual.dedup.de ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
+    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.de > ${OUTDIR_MONO}/monolingual.dedup.de
 fi
 
 echo "Cleaning data ..."
