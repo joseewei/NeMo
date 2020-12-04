@@ -169,14 +169,30 @@ then
     awk -F "\t" '{ if ($4 == "en" && $5 == "zh") {print $3}}' $orig/WikiMatrix.v1.en-zh.langid.tsv >> $OUTDIR/parallel/train.$lang.zh
 fi
 
+echo "Fetching Validation data $lang" 
+sacrebleu -t wmt19 -l $lang --echo src > ${OUTDIR}/parallel/wmt19-$lang.src
+sacrebleu -t wmt19 -l $lang --echo ref > ${OUTDIR}/parallel/wmt19-$lang.ref
+
+echo "Fetching Test data $lang" 
+sacrebleu -t wmt20 -l $lang --echo src > ${OUTDIR}/parallel/wmt20-$lang.src
+sacrebleu -t wmt20 -l $lang --echo ref > ${OUTDIR}/parallel/wmt20-$lang.ref
+
+echo "Fetching Validation data $rev_lang" 
+sacrebleu -t wmt19 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt19-$rev_lang.src
+sacrebleu -t wmt19 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt19-$rev_lang.ref
+
+echo "Fetching Test data $rev_lang" 
+sacrebleu -t wmt20 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt20-$rev_lang.src
+sacrebleu -t wmt20 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt20-$rev_lang.ref
+
 echo "Segmenting chinese ..."
 python $script_dir/segment_zh.py $OUTDIR/parallel/train.$lang.zh > $OUTDIR/parallel/train.$lang.seg.zh
 
-if [ ! -f clean-corpus-n.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/training/clean-corpus-n.perl
-    chmod +x clean-corpus-n.perl
-fi
+python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt19-$lang.ref > ${OUTDIR}/parallel/wmt19-$lang.seg.ref
+python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt19-$rev_lang.src > ${OUTDIR}/parallel/wmt19-$rev_lang.seg.src
+
+python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt20-$lang.ref > ${OUTDIR}/parallel/wmt20-$lang.seg.ref
+python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt20-$rev_lang.src > ${OUTDIR}/parallel/wmt20-$rev_lang.seg.src
 
 if [ ! -f clean-corpus-n.perl ]
 then
@@ -200,6 +216,18 @@ echo "Cleaning data ..."
 cat $OUTDIR/parallel/train.$lang.en | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.en
 cat $OUTDIR/parallel/train.$lang.seg.zh | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.zh
 
+cat ${OUTDIR}/parallel/wmt19-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$lang.clean.src
+cat ${OUTDIR}/parallel/wmt19-$lang.seg.ref | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$lang.clean.ref
+
+cat ${OUTDIR}/parallel/wmt20-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$lang.clean.src
+cat ${OUTDIR}/parallel/wmt20-$lang.seg.ref | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$lang.clean.ref
+
+cat ${OUTDIR}/parallel/wmt19-$rev_lang.seg.src | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$rev_lang.clean.src
+cat ${OUTDIR}/parallel/wmt19-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$rev_lang.clean.ref
+
+cat ${OUTDIR}/parallel/wmt20-$rev_lang.seg.src | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$rev_lang.clean.src
+cat ${OUTDIR}/parallel/wmt20-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$rev_lang.clean.ref
+
 echo "Filtering data ..."
 ./clean-corpus-n.perl -ratio 1.5 ${OUTDIR}/parallel/train.clean.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean.filter 1 250
 
@@ -207,22 +235,6 @@ echo 'Shuffling'
 shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang1 > ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled
 shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
 cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
-
-echo "Fetching Validation data $lang" 
-sacrebleu -t wmt19 -l $lang --echo src > ${OUTDIR}/parallel/wmt19-$lang.src
-sacrebleu -t wmt19 -l $lang --echo ref > ${OUTDIR}/parallel/wmt19-$lang.ref
-
-echo "Fetching Test data $lang" 
-sacrebleu -t wmt20 -l $lang --echo src > ${OUTDIR}/parallel/wmt20-$lang.src
-sacrebleu -t wmt20 -l $lang --echo ref > ${OUTDIR}/parallel/wmt20-$lang.ref
-
-echo "Fetching Validation data $rev_lang" 
-sacrebleu -t wmt19 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt19-$rev_lang.src
-sacrebleu -t wmt19 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt19-$rev_lang.ref
-
-echo "Fetching Test data $rev_lang" 
-sacrebleu -t wmt20 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt20-$rev_lang.src
-sacrebleu -t wmt20 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt20-$rev_lang.ref
 
 OUTDIR_MONO=$OUTDIR/mono/
 mkdir -p $OUTDIR_MONO

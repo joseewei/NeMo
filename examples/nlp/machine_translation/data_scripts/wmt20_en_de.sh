@@ -221,19 +221,6 @@ then
     chmod +x remove-non-printing-char.perl
 fi
 
-echo "Cleaning data ..."
-for l in $lang1 $lang2; do
-    cat $OUTDIR/parallel/train.$lang.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$l
-done
-
-echo "Filtering data ..."
-./clean-corpus-n.perl -ratio 1.3 ${OUTDIR}/parallel/train.clean.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean.filter 1 250
-
-echo 'Shuffling'
-shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang1 > ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled
-shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang2 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
-cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.filter.clean.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
-
 echo "Fetching Validation data $lang" 
 sacrebleu -t wmt13 -l $lang --echo src > ${OUTDIR}/parallel/newstest2013-$lang.src
 sacrebleu -t wmt13 -l $lang --echo ref > ${OUTDIR}/parallel/newstest2013-$lang.ref
@@ -249,6 +236,31 @@ sacrebleu -t wmt13 -l $rev_lang --echo ref > ${OUTDIR}/parallel/newstest2013-$re
 echo "Fetching Test data $rev_lang" 
 sacrebleu -t wmt14 -l $rev_lang --echo src > ${OUTDIR}/parallel/newstest2014-$rev_lang.src
 sacrebleu -t wmt14 -l $rev_lang --echo ref > ${OUTDIR}/parallel/newstest2014-$rev_lang.ref
+
+echo "Cleaning data ..."
+for l in $lang1 $lang2; do
+    cat $OUTDIR/parallel/train.$lang.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$l
+done
+
+cat ${OUTDIR}/parallel/newstest2013-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$lang.clean.src
+cat ${OUTDIR}/parallel/newstest2013-$lang.ref | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$lang.clean.ref
+
+cat ${OUTDIR}/parallel/newstest2014-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$lang.clean.src
+cat ${OUTDIR}/parallel/newstest2014-$lang.ref | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$lang.clean.ref
+
+cat ${OUTDIR}/parallel/newstest2013-$rev_lang.src | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$rev_lang.clean.src
+cat ${OUTDIR}/parallel/newstest2013-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$rev_lang.clean.ref
+
+cat ${OUTDIR}/parallel/newstest2014-$rev_lang.src | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$rev_lang.clean.src
+cat ${OUTDIR}/parallel/newstest2014-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$rev_lang.clean.ref
+
+echo "Filtering data ..."
+./clean-corpus-n.perl -ratio 1.3 ${OUTDIR}/parallel/train.clean.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean.filter 1 250
+
+echo 'Shuffling'
+shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang1 > ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled
+shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang2 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
+cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.filter.clean.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
 
 OUTDIR_MONO=$OUTDIR/mono/
 mkdir -p $OUTDIR_MONO
