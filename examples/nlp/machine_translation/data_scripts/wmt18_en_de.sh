@@ -1,5 +1,7 @@
 wmt_dir=$1;
 out_dir=$2;
+bicleaner_model_path=$3;
+bifixer_path=$4;
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
@@ -12,6 +14,7 @@ URLS=(
     "http://data.statmt.org/wmt18/translation-task/rapid2016.tgz"
     "http://data.statmt.org/wmt17/translation-task/dev.tgz"
 )
+
 FILES=(
     "training-parallel-europarl-v7.tgz"
     "training-parallel-commoncrawl.tgz"
@@ -95,6 +98,10 @@ mkdir -p $OUTDIR/mono
 
 cd $orig
 
+echo "=================================================="
+echo "========= Downloading and Unpacking Data ========="
+echo "=================================================="
+
 for ((i=0;i<${#URLS[@]};++i)); do
     file=${FILES[i]}
     if [ -f $file ]; then
@@ -124,6 +131,26 @@ for l in $lang1 $lang2; do
     done
 done
 
+echo "Fetching Validation data $lang" 
+sacrebleu -t wmt13 -l $lang --echo src > ${OUTDIR}/parallel/newstest2013-$lang.src
+sacrebleu -t wmt13 -l $lang --echo ref > ${OUTDIR}/parallel/newstest2013-$lang.ref
+
+echo "Fetching Test data $lang" 
+sacrebleu -t wmt14 -l $lang --echo src > ${OUTDIR}/parallel/newstest2014-$lang.src
+sacrebleu -t wmt14 -l $lang --echo ref > ${OUTDIR}/parallel/newstest2014-$lang.ref
+
+echo "Fetching Validation data $rev_lang" 
+sacrebleu -t wmt13 -l $rev_lang --echo src > ${OUTDIR}/parallel/newstest2013-$rev_lang.src
+sacrebleu -t wmt13 -l $rev_lang --echo ref > ${OUTDIR}/parallel/newstest2013-$rev_lang.ref
+
+echo "Fetching Test data $rev_lang" 
+sacrebleu -t wmt14 -l $rev_lang --echo src > ${OUTDIR}/parallel/newstest2014-$rev_lang.src
+sacrebleu -t wmt14 -l $rev_lang --echo ref > ${OUTDIR}/parallel/newstest2014-$rev_lang.ref
+
+echo "=================================================="
+echo "========= Filtering and Cleaning Data ============"
+echo "=================================================="
+
 if [ ! -f clean-corpus-n.perl ]
 then
     wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/training/clean-corpus-n.perl
@@ -142,27 +169,32 @@ then
     chmod +x remove-non-printing-char.perl
 fi
 
-echo "Fetching Validation data $lang" 
-sacrebleu -t wmt13 -l $lang --echo src > ${OUTDIR}/parallel/newstest2013-$lang.src
-sacrebleu -t wmt13 -l $lang --echo ref > ${OUTDIR}/parallel/newstest2013-$lang.ref
+echo "Filtering data based on max length and length ratio ..."
+./clean-corpus-n.perl -ratio 1.3 ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.$lang.filter 1 250
 
-echo "Fetching Test data $lang" 
-sacrebleu -t wmt14 -l $lang --echo src > ${OUTDIR}/parallel/newstest2014-$lang.src
-sacrebleu -t wmt14 -l $lang --echo ref > ${OUTDIR}/parallel/newstest2014-$lang.ref
+echo "Applying bi-cleaner classifier"
+awk '{print "-\t-"}' $OUTDIR/parallel/train.$lang.filter.en \
+| paste -d "\t" - $OUTDIR/parallel/train.$lang.filter.en $OUTDIR/parallel/train.$lang.filter.de \
+| bicleaner-classify - - $bicleaner_model_path > $OUTDIR/parallel/train.$lang.bicleaner.score
 
-echo "Fetching Validation data $rev_lang" 
-sacrebleu -t wmt13 -l $rev_lang --echo src > ${OUTDIR}/parallel/newstest2013-$rev_lang.src
-sacrebleu -t wmt13 -l $rev_lang --echo ref > ${OUTDIR}/parallel/newstest2013-$rev_lang.ref
+echo "Applying bifixer & dedup"
+cat $OUTDIR/parallel/train.$lang.bicleaner.score \
+| parallel -j 19 --pipe -k -l 30000 python $bifixer_path/bifixer.py \
+    --ignore_segmentation -q - - en de \
+    | awk -F "\t" '!seen[$6]++' - > $OUTDIR/parallel/train.$lang.bifixer.score
 
-echo "Fetching Test data $rev_lang" 
-sacrebleu -t wmt14 -l $rev_lang --echo src > ${OUTDIR}/parallel/newstest2014-$rev_lang.src
-sacrebleu -t wmt14 -l $rev_lang --echo ref > ${OUTDIR}/parallel/newstest2014-$rev_lang.ref
+awk -F "\t" '{ if ($5>0.5) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.en
+awk -F "\t" '{ if ($5>0.5) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.de
 
-echo "Cleaning data ..."
+echo "Normalizing punct ..."
 for l in $lang1 $lang2; do
-    cat $OUTDIR/parallel/train.$lang.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$l
+    cat $OUTDIR/parallel/train.$lang.50.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.50.$l
 done
 
+echo "Creating shared data for vocab creation ..."
+cat $OUTDIR/parallel/train.clean.$lang.50.$lang1 $OUTDIR/parallel/train.clean.$lang.50.$lang2 > $OUTDIR/parallel/train.clean.$lang.50.common
+
+echo "Normalizing valid/test punct ..."
 cat ${OUTDIR}/parallel/newstest2013-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$lang.clean.src
 cat ${OUTDIR}/parallel/newstest2013-$lang.ref | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$lang.clean.ref
 
@@ -175,13 +207,13 @@ cat ${OUTDIR}/parallel/newstest2013-$rev_lang.ref | perl normalize-punctuation.p
 cat ${OUTDIR}/parallel/newstest2014-$rev_lang.src | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$rev_lang.clean.src
 cat ${OUTDIR}/parallel/newstest2014-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$rev_lang.clean.ref
 
-echo "Filtering data ..."
-./clean-corpus-n.perl -ratio 1.3 ${OUTDIR}/parallel/train.clean.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean.filter 1 250
+echo 'Shuffling parallel data ...'
+shuf --random-source=$OUTDIR/parallel/train.clean.$lang.50.$lang1 $OUTDIR/parallel/train.clean.$lang.50.$lang1 > $OUTDIR/parallel/train.clean.$lang.50.$lang1.shuffled
+shuf --random-source=$OUTDIR/parallel/train.clean.$lang.50.$lang1 $OUTDIR/parallel/train.clean.$lang.50.$lang2 > $OUTDIR/parallel/train.clean.$lang.50.$lang2.shuffled
 
-echo 'Shuffling'
-shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang1 > ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled
-shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
-cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
+echo "=================================================="
+echo "========== Fetching Monolingual Data ============="
+echo "=================================================="
 
 OUTDIR_MONO=$OUTDIR/mono/
 mkdir -p $OUTDIR_MONO
@@ -213,6 +245,8 @@ if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
     awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
+    echo "Cleaning data ..."
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.en | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.en
 fi
 
 echo "Fetching German Monolingual data ..."
@@ -241,9 +275,6 @@ if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.de ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
     awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
+    echo "Cleaning data ..."
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.de | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.de
 fi
-
-echo "Cleaning data ..."
-for l in $lang1 $lang2; do
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.$l
-done
