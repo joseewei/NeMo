@@ -1,6 +1,9 @@
 wmt_dir=$1;
 out_dir=$2;
 script_dir=$(pwd)
+bicleaner_model_path=$3;
+bifixer_path=$4;
+langid_model_path=$5;
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
@@ -107,6 +110,10 @@ mkdir -p $OUTDIR/mono
 
 cd $orig
 
+echo "=================================================="
+echo "========= Downloading and Unpacking Data ========="
+echo "=================================================="
+
 for ((i=0;i<${#URLS[@]};++i)); do
     file=${FILES[i]}
     if [ -f $file ]; then
@@ -185,6 +192,10 @@ echo "Fetching Test data $rev_lang"
 sacrebleu -t wmt20 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt20-$rev_lang.src
 sacrebleu -t wmt20 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt20-$rev_lang.ref
 
+echo "=================================================="
+echo "========= Filtering and Cleaning Data ============"
+echo "=================================================="
+
 echo "Segmenting chinese ..."
 python $script_dir/segment_zh.py $OUTDIR/parallel/train.$lang.zh > $OUTDIR/parallel/train.$lang.seg.zh
 
@@ -212,10 +223,64 @@ then
     chmod +x remove-non-printing-char.perl
 fi
 
-echo "Cleaning data ..."
-cat $OUTDIR/parallel/train.$lang.en | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.en
-cat $OUTDIR/parallel/train.$lang.seg.zh | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.zh
+# Hacky symlink to get same prefix for En and Zh
+ln -s ${OUTDIR}/parallel/train.$lang.en $OUTDIR/parallel/train.$lang.seg.en
 
+echo "Filtering data based on max length and length ratio ..."
+./clean-corpus-n.perl \
+    -ratio 1.7 \
+    ${OUTDIR}/parallel/train.$lang.seg \
+    $lang1 $lang2 \
+    ${OUTDIR}/parallel/train.$lang.filter \
+    1 150
+
+echo "Applying language ID filters"
+fasttext predict $langid_model_path \
+    ${OUTDIR}/parallel/train.$lang.filter.en \
+    > ${OUTDIR}/parallel/train.$lang.filter.en.langid
+
+fasttext predict $langid_model_path \
+    ${OUTDIR}/parallel/train.$lang.filter.zh \
+    > ${OUTDIR}/parallel/train.$lang.filter.zh.langid
+
+echo "Lang ID and bi-cleaner"
+paste -d "\t" \
+    ${OUTDIR}/parallel/train.$lang.filter.en \
+    ${OUTDIR}/parallel/train.$lang.filter.zh \
+    ${OUTDIR}/parallel/train.$lang.filter.en.langid \
+    ${OUTDIR}/parallel/train.$lang.filter.zh.langid \
+    | awk -F "\t" '{ if ($3 == "__label__en" && $4 == "__label__zh") {print "-\t-\t"$1"\t"$2}}' \
+    | bicleaner-classify - - $bicleaner_model_path > $OUTDIR/parallel/train.$lang.bicleaner.score
+
+echo "Applying bifixer & dedup"
+cat $OUTDIR/parallel/train.$lang.bicleaner.score \
+| parallel -j 19 --pipe -k -l 30000 python $bifixer_path/bifixer.py \
+    --ignore_segmentation -q - - en zh \
+    | awk -F "\t" '!seen[$6]++' - > $OUTDIR/parallel/train.$lang.bifixer.score
+
+echo "Creating data with different classifier confidence values ..."
+awk -F "\t" '{ if ($5>0.5) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.en
+awk -F "\t" '{ if ($5>0.5) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.zh
+
+awk -F "\t" '{ if ($5>0.6) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.60.en
+awk -F "\t" '{ if ($5>0.6) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.60.zh
+
+awk -F "\t" '{ if ($5>0.75) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.75.en
+awk -F "\t" '{ if ($5>0.75) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.75.zh
+
+echo "=================================================="
+echo "========== Moses Punct Normalization ============="
+echo "=================================================="
+
+echo "Normalizing punct ..."
+for t in 50 60 75; do
+    for l in $lang1 $lang2; do
+        cat $OUTDIR/parallel/train.$lang.$t.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
+    done
+    cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
+done
+
+echo "Normalizing valid/test punct ..."
 cat ${OUTDIR}/parallel/wmt19-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$lang.clean.src
 cat ${OUTDIR}/parallel/wmt19-$lang.seg.ref | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$lang.clean.ref
 
@@ -228,13 +293,9 @@ cat ${OUTDIR}/parallel/wmt19-$rev_lang.ref | perl normalize-punctuation.perl -l 
 cat ${OUTDIR}/parallel/wmt20-$rev_lang.seg.src | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$rev_lang.clean.src
 cat ${OUTDIR}/parallel/wmt20-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$rev_lang.clean.ref
 
-echo "Filtering data ..."
-./clean-corpus-n.perl -ratio 1.5 ${OUTDIR}/parallel/train.clean.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.clean.filter 1 250
-
-echo 'Shuffling'
-shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang1 > ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled
-shuf --random-source=${OUTDIR}/parallel/train.clean.filter.$lang1 ${OUTDIR}/parallel/train.clean.filter.$lang2 > ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled
-cat ${OUTDIR}/parallel/train.clean.filter.$lang1.shuffled ${OUTDIR}/parallel/train.clean.filter.$lang2.shuffled > ${OUTDIR}/parallel/train.clean.filter.$lang.shuffled.common
+echo "=================================================="
+echo "========== Fetching Monolingual Data ============="
+echo "=================================================="
 
 OUTDIR_MONO=$OUTDIR/mono/
 mkdir -p $OUTDIR_MONO
@@ -296,5 +357,9 @@ else
     awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.zh > ${OUTDIR_MONO}/monolingual.news.dedup.zh
 fi
 
-echo "Segmenting monolingual chinese data ..."
-python $script_dir/segment_zh.py ${OUTDIR_MONO}/monolingual.news.dedup.zh > ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh
+if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh ]; then
+    echo "Found segmented monolingual chinese data, skipping segmentation"
+else
+    echo "Segmenting monolingual chinese data ..."
+    python $script_dir/segment_zh.py ${OUTDIR_MONO}/monolingual.news.dedup.zh > ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh
+fi

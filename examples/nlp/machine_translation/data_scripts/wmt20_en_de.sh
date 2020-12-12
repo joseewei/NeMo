@@ -2,7 +2,7 @@ wmt_dir=$1;
 out_dir=$2;
 script_dir=$(pwd)
 bicleaner_model_path=$3;
-bifixer_dir=$4;
+bifixer_path=$4;
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
