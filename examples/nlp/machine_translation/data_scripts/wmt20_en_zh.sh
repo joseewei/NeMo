@@ -4,6 +4,7 @@ script_dir=$(pwd)
 bicleaner_model_path=$3;
 bifixer_path=$4;
 langid_model_path=$5;
+moses_path=$6;
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
@@ -196,38 +197,27 @@ echo "=================================================="
 echo "========= Filtering and Cleaning Data ============"
 echo "=================================================="
 
+echo "Normalizing text to traditional chinese"
+python $script_dir/traditional_to_simplified.py $OUTDIR/parallel/train.$lang.zh > $OUTDIR/parallel/train.$lang.sim.zh
+
+for t in wmt19 wmt20; do
+    python $script_dir/traditional_to_simplified.py ${OUTDIR}/parallel/$t-$lang.ref > ${OUTDIR}/parallel/$t-$lang.sim.ref
+    python $script_dir/traditional_to_simplified.py ${OUTDIR}/parallel/$t-$rev_lang.src > ${OUTDIR}/parallel/$t-$rev_lang.sim.src
+done
+
 echo "Segmenting chinese ..."
-python $script_dir/segment_zh.py $OUTDIR/parallel/train.$lang.zh > $OUTDIR/parallel/train.$lang.seg.zh
+python $script_dir/segment_zh.py $OUTDIR/parallel/train.$lang.sim.zh > $OUTDIR/parallel/train.$lang.seg.zh
 
-python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt19-$lang.ref > ${OUTDIR}/parallel/wmt19-$lang.seg.ref
-python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt19-$rev_lang.src > ${OUTDIR}/parallel/wmt19-$rev_lang.seg.src
-
-python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt20-$lang.ref > ${OUTDIR}/parallel/wmt20-$lang.seg.ref
-python $script_dir/segment_zh.py ${OUTDIR}/parallel/wmt20-$rev_lang.src > ${OUTDIR}/parallel/wmt20-$rev_lang.seg.src
-
-if [ ! -f clean-corpus-n.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/training/clean-corpus-n.perl
-    chmod +x clean-corpus-n.perl
-fi
-
-if [ ! -f normalize-punctuation.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/normalize-punctuation.perl
-    chmod +x normalize-punctuation.perl
-fi
-
-if [ ! -f remove-non-printing-char.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/remove-non-printing-char.perl
-    chmod +x remove-non-printing-char.perl
-fi
+for t in wmt19 wmt20; do
+    python $script_dir/segment_zh.py ${OUTDIR}/parallel/$t-$lang.sim.ref > ${OUTDIR}/parallel/$t-$lang.seg.ref
+    python $script_dir/segment_zh.py ${OUTDIR}/parallel/$t-$rev_lang.sim.src > ${OUTDIR}/parallel/$t-$rev_lang.seg.src
+done
 
 # Hacky symlink to get same prefix for En and Zh
 ln -s ${OUTDIR}/parallel/train.$lang.en $OUTDIR/parallel/train.$lang.seg.en
 
 echo "Filtering data based on max length and length ratio ..."
-./clean-corpus-n.perl \
+$moses_path/scripts/training/clean-corpus-n.perl \
     -ratio 1.7 \
     ${OUTDIR}/parallel/train.$lang.seg \
     $lang1 $lang2 \
@@ -243,7 +233,7 @@ fasttext predict $langid_model_path \
     ${OUTDIR}/parallel/train.$lang.filter.zh \
     > ${OUTDIR}/parallel/train.$lang.filter.zh.langid
 
-echo "Lang ID and bi-cleaner"
+echo "Lang ID and Bi-Cleaner"
 paste -d "\t" \
     ${OUTDIR}/parallel/train.$lang.filter.en \
     ${OUTDIR}/parallel/train.$lang.filter.zh \
@@ -275,23 +265,34 @@ echo "=================================================="
 echo "Normalizing punct ..."
 for t in 50 60 75; do
     for l in $lang1 $lang2; do
-        cat $OUTDIR/parallel/train.$lang.$t.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
+        cat $OUTDIR/parallel/train.$lang.$t.$l | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l $l | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
+        cat $OUTDIR/parallel/train.clean.$lang.$t.$l | perl $moses_path/scripts/tokenizer/tokenizer.perl -l $l -no-escape -threads 20 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$l
     done
     cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
+
+    cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
+    cat $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.tok.common
+
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang1 > $OUTDIR/parallel/train.clean.$lang.$t.$lang1.shuffled
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.$lang2.shuffled
+
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1.shuffled
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2.shuffled
 done
 
-echo "Normalizing valid/test punct ..."
-cat ${OUTDIR}/parallel/wmt19-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$lang.clean.src
-cat ${OUTDIR}/parallel/wmt19-$lang.seg.ref | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$lang.clean.ref
+for t in wmt19 wmt20; do
+    cat ${OUTDIR}/parallel/$t-$lang.src | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$lang.clean.src
+    cat ${OUTDIR}/parallel/$t-$lang.seg.ref | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l zh | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$lang.clean.ref
 
-cat ${OUTDIR}/parallel/wmt20-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$lang.clean.src
-cat ${OUTDIR}/parallel/wmt20-$lang.seg.ref | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$lang.clean.ref
+    cat ${OUTDIR}/parallel/$t-$lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$lang.clean.tok.src
+    cat ${OUTDIR}/parallel/$t-$lang.clean.ref | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l zh > ${OUTDIR}/parallel/$t-$lang.clean.tok.ref
 
-cat ${OUTDIR}/parallel/wmt19-$rev_lang.seg.src | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$rev_lang.clean.src
-cat ${OUTDIR}/parallel/wmt19-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt19-$rev_lang.clean.ref
+    cat ${OUTDIR}/parallel/$t-$rev_lang.seg.src | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l zh | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$rev_lang.clean.src
+    cat ${OUTDIR}/parallel/$t-$rev_lang.ref | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$rev_lang.clean.ref
 
-cat ${OUTDIR}/parallel/wmt20-$rev_lang.seg.src | perl normalize-punctuation.perl -l zh | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$rev_lang.clean.src
-cat ${OUTDIR}/parallel/wmt20-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/wmt20-$rev_lang.clean.ref
+    cat ${OUTDIR}/parallel/$t-$rev_lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l zh> ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.src
+    cat ${OUTDIR}/parallel/$t-$rev_lang.clean.ref | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.ref
+done
 
 echo "=================================================="
 echo "========== Fetching Monolingual Data ============="
@@ -327,6 +328,9 @@ if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
     echo "found deduplicated monolingual sample, skipping deduplication step"
 else
     awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
+    echo "Cleaning data ..."
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.en | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.en
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.en | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.en
 fi
 
 echo "Fetching Chinese Monolingual data ..."
@@ -361,5 +365,8 @@ if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh ]; then
     echo "Found segmented monolingual chinese data, skipping segmentation"
 else
     echo "Segmenting monolingual chinese data ..."
-    python $script_dir/segment_zh.py ${OUTDIR_MONO}/monolingual.news.dedup.zh > ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh
+    python $script_dir/traditional_to_simplified.py ${OUTDIR_MONO}/monolingual.news.dedup.zh > ${OUTDIR_MONO}/monolingual.news.dedup.sim.zh
+    python $script_dir/segment_zh.py ${OUTDIR_MONO}/monolingual.news.dedup.sim.zh > ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l zh | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.zh
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.zh | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l zh > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.zh
 fi
