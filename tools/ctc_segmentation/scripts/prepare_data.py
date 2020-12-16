@@ -132,16 +132,16 @@ def split_text(
         transcript.replace("\n", " ")
         .replace("\t", " ")
         .replace("…", "...")
-        .replace("»", "")
-        .replace("«", "")
-        .replace("\\", "")
-        .replace("”", "")
-        .replace("„", "")
-        .replace("´", "")
+        # .replace("»", "")
+        # .replace("«", "")
+        .replace("\\", " ")
+        # .replace("”", "")
+        # .replace("„", "")
+        # .replace("´", "")
         .replace("--", " -- ")
         .replace("-", " - ")
         .replace(". . .", "...")
-        .replace("’", "'")
+        # .replace("’", "'")
     )
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
@@ -268,12 +268,18 @@ def split_text(
         )
         raise
 
-    # make sure to leave punctuation present in vocabulary
-    all_punct_marks = string.punctuation + "–—’“”"
-    if vocabulary:
-        for v in vocabulary:
-            all_punct_marks = all_punct_marks.replace(v, '')
-    sentences = re.sub("[" + all_punct_marks + "]", "", sentences).strip()
+    # remove all OOV symbols
+    all_symbols = set(sentences)
+    symbols_to_remove = ''.join(all_symbols.difference(set(vocabulary + ['\n'])))
+    sentences = sentences.translate(''.maketrans(symbols_to_remove, len(symbols_to_remove) * ' '))
+
+    # all_symbols = 0
+    # # make sure to leave punctuation present in vocabulary
+    # all_punct_marks = string.punctuation + "–—’“”"
+    # if vocabulary:
+    #     for v in vocabulary:
+    #         all_punct_marks = all_punct_marks.replace(v, '')
+    # sentences = re.sub("[" + all_punct_marks + "]", "", sentences).strip()
 
     # remove extra space
     sentences = re.sub(r' +', ' ', sentences)
