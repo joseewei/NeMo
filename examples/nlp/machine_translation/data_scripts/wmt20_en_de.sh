@@ -3,6 +3,7 @@ out_dir=$2;
 script_dir=$(pwd)
 bicleaner_model_path=$3;
 bifixer_path=$4;
+moses_path=$5;
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
@@ -248,8 +249,14 @@ then
     chmod +x remove-non-printing-char.perl
 fi
 
+if [ ! -f tokenizer.perl ]
+then
+    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/tokenizer.perl
+    chmod +x tokenizer.perl
+fi
+
 echo "Filtering data based on max length and length ratio ..."
-./clean-corpus-n.perl -ratio 1.3 ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.$lang.filter 1 250
+$moses_path/scripts/training/clean-corpus-n.perl -ratio 1.3 ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.$lang.filter 1 250
 
 echo "Applying bi-cleaner classifier"
 awk '{print "-\t-"}' $OUTDIR/parallel/train.$lang.filter.en \
@@ -276,30 +283,37 @@ echo "=================================================="
 echo "========== Moses Punct Normalization ============="
 echo "=================================================="
 
-echo "Normalizing punct ..."
+echo "Normalizing punct and tokenizing ..."
 for t in 50 60 75; do
     for l in $lang1 $lang2; do
-        cat $OUTDIR/parallel/train.$lang.$t.$l | perl normalize-punctuation.perl -l $l | perl remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
+        cat $OUTDIR/parallel/train.$lang.$t.$l | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l $l | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
+        cat $OUTDIR/parallel/train.clean.$lang.$t.$l | perl $moses_path/scripts/tokenizer/tokenizer.perl -l $l -no-escape -threads 20 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$l
     done
     cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
+    cat $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.tok.common
+
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang1 > $OUTDIR/parallel/train.clean.$lang.$t.$lang1.shuffled
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.$lang2.shuffled
+
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1.shuffled
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2.shuffled
 done
 
 echo "Normalizing valid/test punct ..."
-cat ${OUTDIR}/parallel/newstest2013-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$lang.clean.src
-cat ${OUTDIR}/parallel/newstest2013-$lang.ref | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$lang.clean.ref
 
-cat ${OUTDIR}/parallel/newstest2014-$lang.src | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$lang.clean.src
-cat ${OUTDIR}/parallel/newstest2014-$lang.ref | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$lang.clean.ref
+for t in newstest2013 newstest2014; do
+    cat ${OUTDIR}/parallel/$t-$lang.src | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$lang.clean.src
+    cat ${OUTDIR}/parallel/$t-$lang.ref | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l de | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$lang.clean.ref
 
-cat ${OUTDIR}/parallel/newstest2013-$rev_lang.src | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$rev_lang.clean.src
-cat ${OUTDIR}/parallel/newstest2013-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2013-$rev_lang.clean.ref
+    cat ${OUTDIR}/parallel/$t-$lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$lang.clean.tok.src
+    cat ${OUTDIR}/parallel/$t-$lang.clean.ref | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l de > ${OUTDIR}/parallel/$t-$lang.clean.tok.ref
 
-cat ${OUTDIR}/parallel/newstest2014-$rev_lang.src | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$rev_lang.clean.src
-cat ${OUTDIR}/parallel/newstest2014-$rev_lang.ref | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR}/parallel/newstest2014-$rev_lang.clean.ref
+    cat ${OUTDIR}/parallel/$t-$rev_lang.src | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l de | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$rev_lang.clean.src
+    cat ${OUTDIR}/parallel/$t-$rev_lang.ref | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$rev_lang.clean.ref
 
-echo 'Shuffling parallel data ...'
-shuf --random-source=$OUTDIR/parallel/train.clean.$lang.75.$lang1 $OUTDIR/parallel/train.clean.$lang.75.$lang1 > $OUTDIR/parallel/train.clean.$lang.75.$lang1.shuffled
-shuf --random-source=$OUTDIR/parallel/train.clean.$lang.75.$lang1 $OUTDIR/parallel/train.clean.$lang.75.$lang2 > $OUTDIR/parallel/train.clean.$lang.75.$lang2.shuffled
+    cat ${OUTDIR}/parallel/$t-$rev_lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l de > ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.src
+    cat ${OUTDIR}/parallel/$t-$rev_lang.clean.ref | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.ref
+done
 
 echo "=================================================="
 echo "========== Fetching Monolingual Data ============="
@@ -336,9 +350,10 @@ if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
 else
     awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
     echo "Cleaning data ..."
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.en | perl normalize-punctuation.perl -l en | perl remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.en
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.en | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.en
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.en | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.enfi
 fi
-
+clean.
 echo "Fetching German Monolingual data ..."
 
 cd $orig
@@ -366,5 +381,6 @@ if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.de ]; then
 else
     awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
     echo "Cleaning data ..."
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.de | perl normalize-punctuation.perl -l de | perl remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.de
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.de | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l de | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.de
+    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.de | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l de > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.de
 fi

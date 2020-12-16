@@ -249,6 +249,9 @@ cat $OUTDIR/parallel/train.$lang.bicleaner.score \
     | awk -F "\t" '!seen[$6]++' - > $OUTDIR/parallel/train.$lang.bifixer.score
 
 echo "Creating data with different classifier confidence values ..."
+awk -F "\t" '{print $3}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.all.en
+awk -F "\t" '{print $4}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.all.zh
+
 awk -F "\t" '{ if ($5>0.5) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.en
 awk -F "\t" '{ if ($5>0.5) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.zh
 
@@ -263,7 +266,7 @@ echo "========== Moses Punct Normalization ============="
 echo "=================================================="
 
 echo "Normalizing punct ..."
-for t in 50 60 75; do
+for t in all 50 60 75; do
     for l in $lang1 $lang2; do
         cat $OUTDIR/parallel/train.$lang.$t.$l | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l $l | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
         cat $OUTDIR/parallel/train.clean.$lang.$t.$l | perl $moses_path/scripts/tokenizer/tokenizer.perl -l $l -no-escape -threads 20 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$l
