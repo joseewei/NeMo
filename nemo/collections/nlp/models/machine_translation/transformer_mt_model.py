@@ -25,6 +25,7 @@ from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from pytorch_lightning.utilities import rank_zero_only
 from sacrebleu import corpus_bleu
+from sacremoses import MosesDetokenizer
 
 from nemo.collections.common.losses import SmoothedCrossEntropyLoss
 from nemo.collections.common.metrics import Perplexity
@@ -257,6 +258,9 @@ class TransformerMTModel(ModelPT):
         translations = list(itertools.chain(*[x['translations'] for x in outputs]))
         ground_truths = list(itertools.chain(*[x['ground_truths'] for x in outputs]))
         assert len(translations) == len(ground_truths)
+        detokenizer = MosesDetokenizer()
+        translations = [detokenizer.detokenize(item.split()) for item in translations]
+        ground_truths = [detokenizer.detokenize(item.split()) for item in ground_truths]
         sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="13a")
         self.log_dict(
             {
