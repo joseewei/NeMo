@@ -150,6 +150,30 @@ def split_text(
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
 
+    transcript = transcript.replace("“Zarathustra”", "Zarathustra")
+
+    # find phrases in quotes
+    with_quotes = re.findall(r'“[A-Za-z ?]+.*?”', transcript)
+
+    # for w in with_quotes:
+    #     print(w)
+    #     print('-----')
+    # with open('/home/ebakhturina/NeMo/tools/ctc_segmentation/scripts/output/with_quotes.txt', 'a') as f:
+    #     for qq in with_quotes:
+    #         f.write(os.path.basename(in_file) + '\t--->' + qq + '\n')
+
+    sentences = []
+    last_idx = 0
+    for qq in with_quotes:
+        qq_idx = transcript.index(qq, last_idx)
+        if last_idx < qq_idx:
+            sentences.append(transcript[last_idx:qq_idx])
+
+        sentences.append(transcript[qq_idx: qq_idx + len(qq)])
+        last_idx = qq_idx + len(qq)
+    sentences.append(transcript[last_idx:])
+    sentences = [s.strip() for s in sentences if s.strip()]
+
     # Read and split transcript by utterance (roughly, sentences)
     split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!|\.”|\?”\!”)\s"
 
@@ -173,23 +197,9 @@ def split_text(
     elif language not in ['ru', 'eng']:
         print(f'Consider using {language} unicode letters for better sentence split.')
 
-    sentences = regex.split(split_pattern, transcript)
-
-    # sentences = ["different names; “but in the end,” he declares in a note on subject! “I had to do a PERSIAN the honour ohis dynasty of a thousand ---years.”", "test"]
-
     new_sentences = []
     for sent in sentences:
-        # find phrases in quotes
-        with_quotes = re.findall(r'“[A-Za-z ?]+.+?”', sent)
-        last_idx = 0
-        for qq in with_quotes:
-            qq_idx = sent.index(qq)
-            if last_idx < qq_idx:
-                new_sentences.append(sent[last_idx:qq_idx])
-
-            new_sentences.append(sent[qq_idx : qq_idx + len(qq)])
-            last_idx = qq_idx + len(qq)
-        new_sentences.append(sent[last_idx:])
+        new_sentences.extend(regex.split(split_pattern, sent))
     sentences = [s.strip() for s in new_sentences if s.strip()]
 
     def additional_split(sentences, split_on_symbols, max_length):
@@ -221,6 +231,11 @@ def split_text(
         return sentences
 
     sentences = additional_split(sentences, additional_split_symbols, max_length)
+
+    # check to make sure there will be no utterances for segmentation with all OOV symbols
+    no_space_voc = set(vocabulary)
+    no_space_voc.remove(' ')
+    sentences = [s for s in sentences if len(no_space_voc.intersection(set(s))) > 0]
 
     if min_length > 0:
         sentences_comb = []
@@ -287,14 +302,6 @@ def split_text(
     all_symbols = set(sentences)
     symbols_to_remove = ''.join(all_symbols.difference(set(vocabulary + ['\n'])))
     sentences = sentences.translate(''.maketrans(symbols_to_remove, len(symbols_to_remove) * ' '))
-
-    # all_symbols = 0
-    # # make sure to leave punctuation present in vocabulary
-    # all_punct_marks = string.punctuation + "–—’“”"
-    # if vocabulary:
-    #     for v in vocabulary:
-    #         all_punct_marks = all_punct_marks.replace(v, '')
-    # sentences = re.sub("[" + all_punct_marks + "]", "", sentences).strip()
 
     # remove extra space
     sentences = re.sub(r' +', ' ', sentences)
