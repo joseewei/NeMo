@@ -231,30 +231,6 @@ echo "=================================================="
 echo "========= Filtering and Cleaning Data ============"
 echo "=================================================="
 
-if [ ! -f clean-corpus-n.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/training/clean-corpus-n.perl
-    chmod +x clean-corpus-n.perl
-fi
-
-if [ ! -f normalize-punctuation.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/normalize-punctuation.perl
-    chmod +x normalize-punctuation.perl
-fi
-
-if [ ! -f remove-non-printing-char.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/remove-non-printing-char.perl
-    chmod +x remove-non-printing-char.perl
-fi
-
-if [ ! -f tokenizer.perl ]
-then
-    wget https://raw.githubusercontent.com/moses-smt/mosesdecoder/master/scripts/tokenizer/tokenizer.perl
-    chmod +x tokenizer.perl
-fi
-
 echo "Filtering data based on max length and length ratio ..."
 $moses_path/scripts/training/clean-corpus-n.perl -ratio 1.3 ${OUTDIR}/parallel/train.$lang $lang1 $lang2 ${OUTDIR}/parallel/train.$lang.filter 1 250
 
@@ -270,6 +246,9 @@ cat $OUTDIR/parallel/train.$lang.bicleaner.score \
     | awk -F "\t" '!seen[$6]++' - > $OUTDIR/parallel/train.$lang.bifixer.score
 
 echo "Creating data with different classifier confidence values ..."
+awk -F "\t" '{ print $3}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.all.en
+awk -F "\t" '{ print $4}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.all.de
+
 awk -F "\t" '{ if ($5>0.5) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.en
 awk -F "\t" '{ if ($5>0.5) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.de
 
@@ -284,7 +263,7 @@ echo "========== Moses Punct Normalization ============="
 echo "=================================================="
 
 echo "Normalizing punct and tokenizing ..."
-for t in 50 60 75; do
+for t in all 50 60 75; do
     for l in $lang1 $lang2; do
         cat $OUTDIR/parallel/train.$lang.$t.$l | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l $l | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
         cat $OUTDIR/parallel/train.clean.$lang.$t.$l | perl $moses_path/scripts/tokenizer/tokenizer.perl -l $l -no-escape -threads 20 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$l
@@ -314,73 +293,3 @@ for t in newstest2013 newstest2014; do
     cat ${OUTDIR}/parallel/$t-$rev_lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l de > ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.src
     cat ${OUTDIR}/parallel/$t-$rev_lang.clean.ref | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.ref
 done
-
-echo "=================================================="
-echo "========== Fetching Monolingual Data ============="
-echo "=================================================="
-
-OUTDIR_MONO=$OUTDIR/mono/
-mkdir -p $OUTDIR_MONO
-
-cd $orig
-
-echo "Done Processing Parallel Corpus, Fetching Monolingual Data ..."
-
-echo "Fetching English Monolingual data ..."
-
-for ((i=0;i<${#URLS_mono_en[@]};++i)); do
-    file=${FILES_en[i]}
-    if [ -f $file ]; then
-        echo "$file already exists, skipping download"
-    else
-        url=${URLS_mono_en[i]}
-        wget "$url"
-    fi
-done
-
-if [ -f ${OUTDIR_MONO}/monolingual.news.en ]; then
-    echo "found monolingual sample, skipping shuffle/sample/tokenize"
-else
-    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) > $OUTDIR_MONO/monolingual.news.en
-fi
-
-echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
-    echo "found deduplicated monolingual sample, skipping deduplication step"
-else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
-    echo "Cleaning data ..."
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.en | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.en
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.en | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.enfi
-fi
-clean.
-echo "Fetching German Monolingual data ..."
-
-cd $orig
-
-for ((i=0;i<${#URLS_mono_de[@]};++i)); do
-    file=${FILES_de[i]}
-    if [ -f $file ]; then
-        echo "$file already exists, skipping download"
-    else
-        url=${URLS_mono_de[i]}
-        wget "$url"
-    fi
-done
-
-echo "Subsampling data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.de ]; then
-    echo "found monolingual sample, skipping shuffle/sample/tokenize"
-else
-    gzip -c -d -k $(for FILE in "${FILES_de[@]}"; do echo $orig/$FILE; done) > ${OUTDIR_MONO}/monolingual.news.de
-fi
-
-echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.de ]; then
-    echo "found deduplicated monolingual sample, skipping deduplication step"
-else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.de > ${OUTDIR_MONO}/monolingual.news.dedup.de
-    echo "Cleaning data ..."
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.de | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l de | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.de
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.de | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l de > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.de
-fi
