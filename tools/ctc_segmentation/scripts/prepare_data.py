@@ -16,10 +16,10 @@ import argparse
 import multiprocessing
 import os
 import re
-import string
 from pathlib import Path
 from typing import List
 
+import regex
 import scipy.io.wavfile as wav
 from normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from num2words import num2words
@@ -43,9 +43,7 @@ parser.add_argument(
 parser.add_argument(
     '--model', type=str, default='QuartzNet15x5Base-En', help='Pre-trained model name or path to model checkpoint'
 )
-parser.add_argument(
-    '--min_length', type=int, default=20, help='Min number of chars of the text segment for alignment.'
-)
+parser.add_argument('--min_length', type=int, default=0, help='Min number of chars of the text segment for alignment.')
 parser.add_argument(
     '--max_length', type=int, default=100, help='Max number of chars of the text segment for alignment.'
 )
@@ -153,7 +151,7 @@ def split_text(
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
 
     # Read and split transcript by utterance (roughly, sentences)
-    split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!)\s"
+    split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!|\.”|\?”\!”)\s"
 
     if language == 'ru':
         lower_case_ru_letters_unicode = '\u0430-\u04FF'
@@ -175,7 +173,24 @@ def split_text(
     elif language not in ['ru', 'eng']:
         print(f'Consider using {language} unicode letters for better sentence split.')
 
-    sentences = re.split(split_pattern, transcript)
+    sentences = regex.split(split_pattern, transcript)
+
+    # sentences = ["different names; “but in the end,” he declares in a note on subject! “I had to do a PERSIAN the honour ohis dynasty of a thousand ---years.”", "test"]
+
+    new_sentences = []
+    for sent in sentences:
+        # find phrases in quotes
+        with_quotes = re.findall(r'“[A-Za-z ?]+.+?”', sent)
+        last_idx = 0
+        for qq in with_quotes:
+            qq_idx = sent.index(qq)
+            if last_idx < qq_idx:
+                new_sentences.append(sent[last_idx:qq_idx])
+
+            new_sentences.append(sent[qq_idx : qq_idx + len(qq)])
+            last_idx = qq_idx + len(qq)
+        new_sentences.append(sent[last_idx:])
+    sentences = [s.strip() for s in new_sentences if s.strip()]
 
     def additional_split(sentences, split_on_symbols, max_length):
         if len(split_on_symbols) == 0:
