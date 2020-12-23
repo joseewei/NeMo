@@ -22,7 +22,7 @@ __all__ = ['YouTokenToMeTokenizer']
 
 
 class YouTokenToMeTokenizer(TokenizerSpec):
-    def __init__(self, model_path, bpe_dropout=0.0):
+    def __init__(self, model_path, bpe_dropout=0.1):
         model_path = Path(model_path).expanduser()
         self.tokenizer = yttm.BPE(model=str(model_path))
         self.vocab_size = len(self.tokenizer.vocab())
