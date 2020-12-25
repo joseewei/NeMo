@@ -38,6 +38,7 @@ from nemo.collections.nlp.modules.common.transformer import (
     TransformerDecoder,
     TransformerEmbedding,
     TransformerEncoder,
+    TopKSequenceGenerator
 )
 from nemo.core.classes.common import typecheck
 from nemo.core.classes.modelPT import ModelPT
@@ -155,6 +156,18 @@ class TransformerMTModel(ModelPT):
 
         # These attributes are added to bypass Illegal memory access error in PT1.6
         # https://github.com/pytorch/pytorch/issues/21819
+    
+    def replace_beam_with_sampling(self, topk=500):
+        self.beam_search = TopKSequenceGenerator(
+            embedding=self.tgt_embedding_layer,
+            decoder=self.decoder,
+            log_softmax=self.log_softmax,
+            max_sequence_length=self.beam_search.max_seq_length,
+            beam_size=topk, # hyperparam from https://arxiv.org/pdf/1808.09381.pdf
+            bos=self.tgt_tokenizer.bos_id,
+            pad=self.tgt_tokenizer.pad_id,
+            eos=self.tgt_tokenizer.eos_id,
+        )
 
     def filter_predicted_ids(self, ids):
         ids[ids >= self.tgt_tokenizer.vocab_size] = self.tgt_tokenizer.unk_id
@@ -176,7 +189,7 @@ class TransformerMTModel(ModelPT):
         src_embeddings = self.src_embedding_layer(input_ids=src)
         # src_embeddings *= src_embeddings.new_tensor(self.emb_scale)
         src_hiddens = self.encoder(src_embeddings, src_mask)
-        if self.training or not self.only_beam_search_during_eval:
+        if self.training:
             tgt_embeddings = self.tgt_embedding_layer(input_ids=tgt)
             # tgt_embeddings *= tgt_embeddings.new_tensor(self.emb_scale)
             tgt_hiddens = self.decoder(tgt_embeddings, tgt_mask, src_hiddens, src_mask)

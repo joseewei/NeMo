@@ -15,6 +15,7 @@
 
 import os
 from argparse import ArgumentParser
+from sacremoses import MosesDetokenizer
 
 import torch
 import torch.distributed as dist
@@ -55,6 +56,7 @@ def cleanup():
 def translate(rank, world_size, args):
     setup(rank, world_size, args)
     ddp_model = TransformerMTModel.load_from_checkpoint(args.model)
+    ddp_model.replace_beam_with_sampling()
     ddp_model.teacher_forcing_forward = False
     ddp_model = DDP(ddp_model.to(rank), device_ids=[rank])
     ddp_model.eval()
@@ -64,7 +66,7 @@ def translate(rank, world_size, args):
         src_tokenizer,
         args.text2translate,
         tokens_in_batch=args.max_num_tokens_in_batch,
-        max_seq_length=2048,
+        max_seq_length=150,
         cache_ids=True,
     )
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
@@ -74,7 +76,7 @@ def translate(rank, world_size, args):
     originals_file_name = os.path.join(result_dir, 'originals.txt')
     translations_file_name = os.path.join(result_dir, 'translations.txt')
     num_translated_sentences = 0
-
+    detokenizer = MosesDetokenizer()
     with open(originals_file_name, 'w') as of, open(translations_file_name, 'w') as tf:
         for batch_idx, batch in enumerate(loader):
             for i in range(len(batch)):
@@ -91,9 +93,9 @@ def translate(rank, world_size, args):
             _, translations = ddp_model(src_ids, src_mask)
             translations = translations.cpu().numpy()
             for t in translations:
-                tf.write(tgt_tokenizer.ids_to_text(t) + '\n')
+                tf.write(detokenizer.detokenize(tgt_tokenizer.ids_to_text(t).split()) + '\n')
             for o in src_ids:
-                of.write(src_tokenizer.ids_to_text(o) + '\n')
+                of.write(detokenizer.detokenize(src_tokenizer.ids_to_text(o).split()) + '\n')
     cleanup()
 
 
