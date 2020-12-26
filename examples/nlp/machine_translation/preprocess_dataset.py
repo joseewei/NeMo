@@ -16,10 +16,6 @@ if __name__ == '__main__':
                 help='Whether to share encoder/decoder tokenizers')
     parser.add_argument('--clean', action="store_true",
                 help='Whether to clean dataset based on length diff')
-    parser.add_argument('--shuffle', action="store_true",
-                help='Whether to shuffle dataset')
-    parser.add_argument('--pin_memory', action="store_true",
-                help='Whether to pin memory in PT dataloader')
     parser.add_argument('--bpe_dropout', type=float, default=0.1,
                 help='Whether to share encoder/decoder tokenizers')
     parser.add_argument('--src_fname', type=str, required=True,
@@ -76,7 +72,7 @@ if __name__ == '__main__':
         bpe_dropout=args.bpe_dropout
     )
 
-    tokens_in_batch = [int(item) for item in args.tokens_in_batch.split()]
+    tokens_in_batch = [int(item) for item in args.tokens_in_batch.split(',')]
     for num_tokens in tokens_in_batch:
         dataset = TranslationDataset(
             tokenizer_src=encoder_tokenizer,
