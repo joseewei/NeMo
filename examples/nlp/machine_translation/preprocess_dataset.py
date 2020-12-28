@@ -89,7 +89,20 @@ if __name__ == '__main__':
             cache_data_per_node=False,
             use_cache=False,
         )
+
         start = time.time()
-        pickle.dump(dataset.batches, open(os.path.join(args.out_dir, 'batches.%d.pkl' % (num_tokens)), 'wb'))
+        pickle.dump({
+            'batches': dataset.batches,
+            'batch_indices': dataset.batch_indices,
+            'src_fname': args.src_fname,
+            'tgt_fname': args.tgt_fname,
+            'tokens_in_batch': num_tokens,
+            'max_seq_length': args.max_seq_length,
+            'min_seq_length': args.min_seq_length,
+            'max_seq_length_diff': args.max_seq_length,
+            'max_seq_length_ratio': args.max_seq_length,
+            'clean': args.clean,
+        }, open(os.path.join(args.out_dir, 'batches.%d.pkl' % (num_tokens)), 'wb'))
         end = time.time()
         print('Took %f time to pickle' % (end - start))
+    
