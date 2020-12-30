@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from argparse import ArgumentParser
+from sacremoses import MosesDetokenizer
 
 import torch
 
@@ -46,7 +47,7 @@ def main():
     translation = model.translate(text=txt_to_translate)
     with open(args.output, 'w') as fout:
         for txt in translation:
-            fout.write(txt + "\n")
+            fout.write(detokenizer.detokenize(txt.split()) + "\n")
     logging.info("all done")
 
 

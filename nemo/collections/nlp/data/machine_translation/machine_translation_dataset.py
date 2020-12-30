@@ -16,6 +16,7 @@
 
 from collections import OrderedDict
 from dataclasses import dataclass
+import pickle
 
 import numpy as np
 from omegaconf.omegaconf import MISSING
@@ -59,37 +60,55 @@ class TranslationDataset(Dataset):
         cache_ids=False,
         cache_data_per_node=False,
         use_cache=False,
+        cache_path_provided=True
     ):
 
-        self.src_tokenizer = tokenizer_src
-        self.tgt_tokenizer = tokenizer_tgt
-        self.tokens_in_batch = tokens_in_batch
+        if cache_path_provided:
+            assert dataset_src == dataset_tgt
+            assert dataset_src.endswith('.pkl')
+            self.src_tokenizer = tokenizer_src
+            self.tgt_tokenizer = tokenizer_tgt
+            pickled_dataset = pickle.load(open(dataset_src, 'rb'))
+            self.batches = pickled_dataset['batches']
+            self.batch_indices = pickled_dataset['batch_indices']
+            self.src_fname = pickled_dataset['src_fname']
+            self.tgt_fname = pickled_dataset['tgt_fname']
+            self.tokens_in_batch = pickled_dataset['tokens_in_batch']
+            self.max_seq_length = pickled_dataset['max_seq_length']
+            self.min_seq_length = pickled_dataset['min_seq_length']
+            self.max_seq_length_diff = pickled_dataset['max_seq_length_diff']
+            self.max_seq_length_ratio = pickled_dataset['max_seq_length_ratio']
+            self.clean = pickled_dataset['clean']
+        else:
+            self.src_tokenizer = tokenizer_src
+            self.tgt_tokenizer = tokenizer_tgt
+            self.tokens_in_batch = tokens_in_batch
 
-        src_ids = dataset_to_ids(
-            dataset_src,
-            tokenizer_src,
-            cache_ids=cache_ids,
-            cache_data_per_node=cache_data_per_node,
-            use_cache=use_cache,
-        )
-        tgt_ids = dataset_to_ids(
-            dataset_tgt,
-            tokenizer_tgt,
-            cache_ids=cache_ids,
-            cache_data_per_node=cache_data_per_node,
-            use_cache=use_cache,
-        )
-        if clean:
-            src_ids, tgt_ids = self.clean_src_and_target(
-                src_ids,
-                tgt_ids,
-                max_tokens=max_seq_length,
-                min_tokens=min_seq_length,
-                max_tokens_diff=max_seq_length_diff,
-                max_tokens_ratio=max_seq_length_ratio,
+            src_ids = dataset_to_ids(
+                dataset_src,
+                tokenizer_src,
+                cache_ids=cache_ids,
+                cache_data_per_node=cache_data_per_node,
+                use_cache=use_cache,
             )
-        self.batch_indices = self.pack_data_into_batches(src_ids, tgt_ids)
-        self.batches = self.pad_batches(src_ids, tgt_ids, self.batch_indices)
+            tgt_ids = dataset_to_ids(
+                dataset_tgt,
+                tokenizer_tgt,
+                cache_ids=cache_ids,
+                cache_data_per_node=cache_data_per_node,
+                use_cache=use_cache,
+            )
+            if clean:
+                src_ids, tgt_ids = self.clean_src_and_target(
+                    src_ids,
+                    tgt_ids,
+                    max_tokens=max_seq_length,
+                    min_tokens=min_seq_length,
+                    max_tokens_diff=max_seq_length_diff,
+                    max_tokens_ratio=max_seq_length_ratio,
+                )
+            self.batch_indices = self.pack_data_into_batches(src_ids, tgt_ids)
+            self.batches = self.pad_batches(src_ids, tgt_ids, self.batch_indices)
 
     def __len__(self):
         return len(self.batches)
