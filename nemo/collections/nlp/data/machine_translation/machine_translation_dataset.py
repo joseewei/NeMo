@@ -60,14 +60,15 @@ class TranslationDataset(Dataset):
         cache_ids=False,
         cache_data_per_node=False,
         use_cache=False,
-        cache_path_provided=True
+        cache_path_provided=True,
+        reverse_lang_direction=False
     ):
-
         if cache_path_provided:
             assert dataset_src == dataset_tgt
             assert dataset_src.endswith('.pkl')
             self.src_tokenizer = tokenizer_src
             self.tgt_tokenizer = tokenizer_tgt
+            self.reverse_lang_direction = reverse_lang_direction
             pickled_dataset = pickle.load(open(dataset_src, 'rb'))
             self.batches = pickled_dataset['batches']
             self.batch_indices = pickled_dataset['batch_indices']
@@ -83,6 +84,7 @@ class TranslationDataset(Dataset):
             self.src_tokenizer = tokenizer_src
             self.tgt_tokenizer = tokenizer_tgt
             self.tokens_in_batch = tokens_in_batch
+            self.reverse_lang_direction = reverse_lang_direction
 
             src_ids = dataset_to_ids(
                 dataset_src,
@@ -116,6 +118,8 @@ class TranslationDataset(Dataset):
     def __getitem__(self, idx):
         src_ids = self.batches[idx]["src"]
         tgt = self.batches[idx]["tgt"]
+        if self.reverse_lang_direction:
+            src_ids, tgt = tgt, src_ids
         labels = tgt[:, 1:]
         tgt_ids = tgt[:, :-1]
         src_mask = (src_ids != self.src_tokenizer.pad_id).astype(np.int32)

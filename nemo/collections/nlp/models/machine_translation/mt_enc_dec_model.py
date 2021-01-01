@@ -264,7 +264,8 @@ class MTEncDecModel(EncDecNLPModel):
             cache_ids=cfg.get("cache_ids", False),
             cache_data_per_node=cfg.get("cache_data_per_node", False),
             use_cache=cfg.get("use_cache", False),
-            cache_path_provided=cfg.get("cache_path_provided", False)
+            cache_path_provided=cfg.get("cache_path_provided", False),
+            reverse_lang_direction=cfg.get("reverse_lang_direction", False),
         )
         if cfg.shuffle:
             sampler = pt_data.RandomSampler(dataset)
