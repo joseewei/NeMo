@@ -37,6 +37,7 @@ def main():
         model = nemo_nlp.models.MTEncDecModel.load_from_checkpoint(checkpoint_path=args.model)
     if torch.cuda.is_available():
         model = model.cuda()
+    detokenizer = MosesDetokenizer()
 
     logging.info(f"Translating: {args.text2translate}")
     txt_to_translate = []
@@ -45,6 +46,7 @@ def main():
             txt_to_translate.append(line.strip())
     print(txt_to_translate)
     translation = model.translate(text=txt_to_translate)
+    print(translation)
     with open(args.output, 'w') as fout:
         for txt in translation:
             fout.write(detokenizer.detokenize(txt.split()) + "\n")

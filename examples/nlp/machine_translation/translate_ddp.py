@@ -26,6 +26,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from nemo.collections.nlp.data.machine_translation import TranslationOneSideDataset
 from nemo.collections.nlp.models.machine_translation import TransformerMTModel
+from nemo.collections.nlp.models.machine_translation.mt_enc_dec_model import MTEncDecModel
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
 from nemo.utils import logging
 
@@ -34,7 +35,6 @@ def get_args():
     parser = ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="")
     parser.add_argument("--text2translate", type=str, required=True, help="")
-    parser.add_argument("--tokenizer_model", type=str, required=True, help="")
     parser.add_argument("--max_num_tokens_in_batch", type=int, required=True, help="")
     parser.add_argument("--result_dir", type=str, required=True, help="")
     args = parser.parse_args()
@@ -55,15 +55,18 @@ def cleanup():
 
 def translate(rank, world_size, args):
     setup(rank, world_size, args)
-    ddp_model = TransformerMTModel.load_from_checkpoint(args.model)
-    ddp_model.replace_beam_with_sampling()
-    ddp_model.teacher_forcing_forward = False
-    ddp_model = DDP(ddp_model.to(rank), device_ids=[rank])
+    torch.set_grad_enabled(False)
+    if args.model.endswith(".nemo"):
+        logging.info("Attempting to initialize from .nemo file")
+        model = MTEncDecModel.restore_from(restore_path=args.model)
+    elif args.model.endswith(".ckpt"):
+        logging.info("Attempting to initialize from .ckpt file")
+        model = MTEncDecModel.load_from_checkpoint(checkpoint_path=args.model)
+    model.replace_beam_with_sampling(topk=500)
+    ddp_model = DDP(model.to(rank), device_ids=[rank])
     ddp_model.eval()
-    src_tokenizer = get_tokenizer(tokenizer_name='yttm', tokenizer_model=args.tokenizer_model)
-    tgt_tokenizer = src_tokenizer
     dataset = TranslationOneSideDataset(
-        src_tokenizer,
+        model.encoder_tokenizer,
         args.text2translate,
         tokens_in_batch=args.max_num_tokens_in_batch,
         max_seq_length=150,
@@ -83,19 +86,19 @@ def translate(rank, world_size, args):
                 if batch[i].ndim == 3:
                     batch[i] = batch[i].squeeze(dim=0)
                 batch[i] = batch[i].to(rank)
-            src_ids, src_mask, sent_ids = batch
+            src_ids, src_mask = batch
             if batch_idx % 100 == 0:
                 logging.info(
                     f"{batch_idx} batches ({num_translated_sentences} sentences) were translated by process with "
                     f"rank {rank}"
                 )
             num_translated_sentences += len(src_ids)
-            _, translations = ddp_model(src_ids, src_mask)
+            _, translations = ddp_model(src_ids, src_mask, None, None)
             translations = translations.cpu().numpy()
             for t in translations:
-                tf.write(detokenizer.detokenize(tgt_tokenizer.ids_to_text(t).split()) + '\n')
+                tf.write(detokenizer.detokenize(model.encoder_tokenizer.ids_to_text(t).split()) + '\n')
             for o in src_ids:
-                of.write(detokenizer.detokenize(src_tokenizer.ids_to_text(o).split()) + '\n')
+                of.write(detokenizer.detokenize(model.encoder_tokenizer.ids_to_text(o).split()) + '\n')
     cleanup()
 
 

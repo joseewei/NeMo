@@ -35,7 +35,7 @@ from nemo.collections.nlp.data import TranslationDataset
 from nemo.collections.nlp.models.enc_dec_nlp_model import EncDecNLPModel
 from nemo.collections.nlp.models.machine_translation.mt_enc_dec_config import MTEncDecModelConfig
 from nemo.collections.nlp.modules.common import TokenClassifier
-from nemo.collections.nlp.modules.common.transformer import BeamSearchSequenceGenerator, TransformerEmbedding
+from nemo.collections.nlp.modules.common.transformer import BeamSearchSequenceGenerator, TransformerEmbedding, TopKSequenceGenerator
 from nemo.core.classes.common import typecheck
 from nemo.utils import logging
 
@@ -130,9 +130,12 @@ class MTEncDecModel(EncDecNLPModel):
         """
         src_embeddings = self.encoder_embedding(input_ids=src)
         src_hiddens = self.encoder(src_embeddings, src_mask)
-        tgt_embeddings = self.decoder_embedding(input_ids=tgt)
-        tgt_hiddens = self.decoder(tgt_embeddings, tgt_mask, src_hiddens, src_mask)
-        log_probs = self.log_softmax(hidden_states=tgt_hiddens)
+        if tgt is not None:
+            tgt_embeddings = self.decoder_embedding(input_ids=tgt)
+            tgt_hiddens = self.decoder(tgt_embeddings, tgt_mask, src_hiddens, src_mask)
+            log_probs = self.log_softmax(hidden_states=tgt_hiddens)
+        else:
+            log_probs = None
         beam_results = None
         if not self.training:
             beam_results = self.beam_search(encoder_hidden_states=src_hiddens, encoder_input_mask=src_mask)
@@ -278,6 +281,18 @@ class MTEncDecModel(EncDecNLPModel):
             num_workers=cfg.get("num_workers", 2),
             pin_memory=cfg.get("pin_memory", False),
             drop_last=cfg.get("drop_last", False),
+        )
+    
+    def replace_beam_with_sampling(self, topk=500):
+        self.beam_search = TopKSequenceGenerator(
+            embedding=self.decoder_embedding,
+            decoder=self.decoder,
+            log_softmax=self.log_softmax,
+            max_sequence_length=self.beam_search.max_seq_length,
+            beam_size=topk,
+            bos=self.decoder_tokenizer.bos_id,
+            pad=self.decoder_tokenizer.pad_id,
+            eos=self.decoder_tokenizer.eos_id,
         )
 
     @torch.no_grad()
