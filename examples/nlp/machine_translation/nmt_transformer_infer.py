@@ -26,6 +26,8 @@ def main():
     parser.add_argument("--model", type=str, required=True, help="")
     parser.add_argument("--text2translate", type=str, required=True, help="")
     parser.add_argument("--output", type=str, required=True, help="")
+    parser.add_argument("--beam_size", type=int, default=4, help="")
+    parser.add_argument("--len_pen", type=float, default=0.6, help="")
 
     args = parser.parse_args()
     torch.set_grad_enabled(False)
@@ -35,6 +37,8 @@ def main():
     elif args.model.endswith(".ckpt"):
         logging.info("Attempting to initialize from .ckpt file")
         model = nemo_nlp.models.MTEncDecModel.load_from_checkpoint(checkpoint_path=args.model)
+    model.beam_search.beam_size = args.beam_size
+    model.beam_search.len_pen = args.len_pen
     if torch.cuda.is_available():
         model = model.cuda()
     detokenizer = MosesDetokenizer()
