@@ -71,6 +71,7 @@ def translate(rank, world_size, args):
         tokens_in_batch=args.max_num_tokens_in_batch,
         max_seq_length=150,
         cache_ids=True,
+        clean=True
     )
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
     loader = DataLoader(dataset, batch_size=1, sampler=sampler, shuffle=False)
