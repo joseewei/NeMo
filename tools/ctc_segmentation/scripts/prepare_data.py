@@ -130,37 +130,25 @@ def split_text(
         transcript.replace("\n", " ")
         .replace("\t", " ")
         .replace("…", "...")
-        # .replace("»", "")
-        # .replace("«", "")
         .replace("\\", " ")
-        # .replace("”", "")
-        # .replace("„", "")
-        # .replace("´", "")
         .replace("--", " -- ")
-        .replace("-", " - ")
         .replace(". . .", "...")
-        # .replace("’", "'")
     )
+
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
-    transcript = re.sub(r'(\.+)', '. ', transcript)
 
+    transcript = re.sub(r'(\.+)', '. ', transcript)
     if remove_square_brackets:
         transcript = re.sub(r'(\[.*?\])', ' ', transcript)
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
 
+    # one book specific
     transcript = transcript.replace("“Zarathustra”", "Zarathustra")
 
     # find phrases in quotes
     with_quotes = re.findall(r'“[A-Za-z ?]+.*?”', transcript)
-
-    # for w in with_quotes:
-    #     print(w)
-    #     print('-----')
-    # with open('/home/ebakhturina/NeMo/tools/ctc_segmentation/scripts/output/with_quotes.txt', 'a') as f:
-    #     for qq in with_quotes:
-    #         f.write(os.path.basename(in_file) + '\t--->' + qq + '\n')
 
     sentences = []
     last_idx = 0
@@ -174,28 +162,21 @@ def split_text(
     sentences.append(transcript[last_idx:])
     sentences = [s.strip() for s in sentences if s.strip()]
 
-    # Read and split transcript by utterance (roughly, sentences)
-    split_pattern = "(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<![A-Z]\.)(?<=\.|\?|\!|\.”|\?”\!”)\s"
-
+    lower_case_unicode = ''
+    upper_case_unicode = ''
     if language == 'ru':
-        lower_case_ru_letters_unicode = '\u0430-\u04FF'
-        upper_case_ru_letters_unicode = '\u0410-\u042F'
-        # remove space in the middle of the lower case abbreviation to avoid spliting into separate sentences
-        matches = re.findall(r'[a-z\u0430-\u04FF]\.\s[a-z\u0430-\u04FF]\.', transcript)
-        for match in matches:
-            transcript = transcript.replace(match, match.replace('. ', '.'))
-
-        split_pattern = (
-            "(?<!\w\.\w.)(?<![A-Z"
-            + upper_case_ru_letters_unicode
-            + "][a-z"
-            + lower_case_ru_letters_unicode
-            + "]\.)(?<!["
-            + upper_case_ru_letters_unicode
-            + "]\.)(?<=\.|\?|\!)\s"
-        )
+        lower_case_unicode = '\u0430-\u04FF'
+        upper_case_unicode = '\u0410-\u042F'
     elif language not in ['ru', 'eng']:
         print(f'Consider using {language} unicode letters for better sentence split.')
+
+    # remove space in the middle of the lower case abbreviation to avoid spliting into separate sentences
+    matches = re.findall(r'[a-z' + lower_case_unicode + ']\.\s[a-z' + lower_case_unicode + ']\.', transcript)
+    for match in matches:
+        transcript = transcript.replace(match, match.replace('. ', '.'))
+
+    # Read and split transcript by utterance (roughly, sentences)
+    split_pattern = f"(?<!\w\.\w.)(?<![A-Z{upper_case_unicode}][a-z{lower_case_unicode}]\.)(?<![A-Z{upper_case_unicode}]\.)(?<=\.|\?|\!|\.”|\?”\!”)\s"
 
     new_sentences = []
     for sent in sentences:
@@ -207,10 +188,6 @@ def split_text(
             return sentences
 
         split_on_symbols = split_on_symbols.split('|')
-        for i, sym in enumerate(split_on_symbols):
-            if sym == '-':
-                split_on_symbols[i] = ' - '
-
         def _split(sentences, symbol, max_length):
             result = []
             for s in sentences:
@@ -231,6 +208,8 @@ def split_text(
         return sentences
 
     sentences = additional_split(sentences, additional_split_symbols, max_length)
+
+    # TO DO remove senteces with all OOV symbols
 
     # check to make sure there will be no utterances for segmentation with all OOV symbols
     no_space_voc = set(vocabulary)
@@ -263,12 +242,7 @@ def split_text(
     if do_lower_case:
         sentences = sentences.lower()
 
-    if language == 'eng':
-        # remove non acsii characters
-        sentences = ''.join(i for i in sentences if ord(i) < 128)
-    elif language == 'ru':
-        if vocabulary and '-' not in vocabulary:
-            sentences = sentences.replace('-', ' ')
+    if language == 'ru':
         # replace Latin characters with Russian
         for k, v in LATIN_TO_RU.items():
             sentences = sentences.replace(k, v)
