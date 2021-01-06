@@ -66,13 +66,13 @@ def translate(rank, world_size, args):
     ddp_model = DDP(model.to(rank), device_ids=[rank])
     ddp_model.eval()
     dataset = TranslationOneSideDataset(
-        model.encoder_tokenizer,
         args.text2translate,
         tokens_in_batch=args.max_num_tokens_in_batch,
         max_seq_length=150,
         cache_ids=True,
         clean=True
     )
+    dataset.batchify(model.encoder_tokenizer)
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=False)
     loader = DataLoader(dataset, batch_size=1, sampler=sampler, shuffle=False)
     result_dir = os.path.join(args.result_dir, f'rank{rank}')

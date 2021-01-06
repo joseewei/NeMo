@@ -27,7 +27,6 @@ __all__ = ['TranslationOneSideDataset']
 class TranslationOneSideDataset(Dataset):
     def __init__(
         self,
-        tokenizer,
         dataset,
         tokens_in_batch=1024,
         clean=False,
@@ -35,13 +34,18 @@ class TranslationOneSideDataset(Dataset):
         max_seq_length=512,
         min_seq_length=1,
     ):
-
-        self.tokenizer = tokenizer
+        self.dataset = dataset
         self.tokens_in_batch = tokens_in_batch
-
-        ids = dataset_to_ids(dataset, tokenizer, cache_ids=cache_ids)
-        if clean:
-            ids = self.clean(ids, max_tokens=max_seq_length, min_tokens=min_seq_length)
+        self.clean = clean
+        self.cache_ids = cache_ids
+        self.max_seq_length = max_seq_length
+        self.min_seq_length = min_seq_length
+    
+    def batchify(self, tokenizer):
+        self.pad_id = tokenizer.pad_id
+        ids = dataset_to_ids(self.dataset, tokenizer, cache_ids=self.cache_ids)
+        if self.clean:
+            ids = self.clean_data(ids, max_tokens=self.max_seq_length, min_tokens=self.min_seq_length)
         self.batch_sent_ids, self.batch_elem_lengths = self.pack_data_into_batches(ids)
         self.batches = self.pad_batches()
 
@@ -50,7 +54,7 @@ class TranslationOneSideDataset(Dataset):
 
     def __getitem__(self, idx):
         ids = self.batches[idx]
-        mask = (ids != self.tokenizer.pad_id).astype(np.int32)
+        mask = (ids != self.pad_id).astype(np.int32)
         return ids, mask
 
     def pad_batches(self):
@@ -61,7 +65,7 @@ class TranslationOneSideDataset(Dataset):
 
         batches = []
         for batch_elem_len, batch_sent_ids in zip(self.batch_elem_lengths, self.batch_sent_ids):
-            batch = self.tokenizer.pad_id * np.ones((len(batch_sent_ids), batch_elem_len), dtype=np.int)
+            batch = self.pad_id * np.ones((len(batch_sent_ids), batch_elem_len), dtype=np.int)
             for i, sentence in enumerate(batch_sent_ids):
                 batch[i][: len(sentence)] = sentence
             batches.append(batch)
@@ -99,7 +103,7 @@ class TranslationOneSideDataset(Dataset):
             batch_elem_lengths.append(len_of_longest_sent)
         return batches, batch_elem_lengths
 
-    def clean(self, ids, max_tokens=None, min_tokens=None):
+    def clean_data(self, ids, max_tokens=None, min_tokens=None):
         """
         Cleans source and target sentences to get rid of noisy data.
         Specifically, a pair of sentences is removed if
