@@ -44,6 +44,7 @@ class TokenizerConfig:
     tokenizer_model: Optional[str] = None
     vocab_file: Optional[str] = None
     special_tokens: Optional[Dict[str, str]] = None
+    bpe_dropout: Optional[float] = 0.0
 
 
 def get_tokenizer(
@@ -52,7 +53,7 @@ def get_tokenizer(
     vocab_file: Optional[str] = None,
     special_tokens: Optional[Dict[str, str]] = None,
     use_fast: Optional[bool] = False,
-    bpe_dropout: Optional[float] = 0.0
+    bpe_dropout: Optional[float] = 0.0,
 ):
     """
     Args:

@@ -13,11 +13,12 @@
 # limitations under the License.
 
 import argparse
-import youtokentome as yttm
 import os
-from pathlib import Path
 import pickle
 import time
+from pathlib import Path
+
+import youtokentome as yttm
 
 from nemo.collections.nlp.data import TranslationDataset
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
@@ -81,27 +82,23 @@ if __name__ == '__main__':
         yttm.BPE.train(
             data=args.src_fname,
             vocab_size=args.vocab_size,
-            model=os.path.join(args.out_dir, 'tokenizer.encoder.%d.BPE.model' % (args.vocab_size))
+            model=os.path.join(args.out_dir, 'tokenizer.encoder.%d.BPE.model' % (args.vocab_size)),
         )
 
         yttm.BPE.train(
             data=args.tgt_fname,
             vocab_size=args.vocab_size,
-            model=os.path.join(args.out_dir, 'tokenizer.decoder.%d.BPE.model' % (args.vocab_size))
+            model=os.path.join(args.out_dir, 'tokenizer.decoder.%d.BPE.model' % (args.vocab_size)),
         )
         encoder_tokenizer_model = os.path.join(args.out_dir, 'tokenizer.encoder.%d.BPE.model' % (args.vocab_size))
         decoder_tokenizer_model = os.path.join(args.out_dir, 'tokenizer.decoder.%d.BPE.model' % (args.vocab_size))
 
     encoder_tokenizer = get_tokenizer(
-        tokenizer_name='yttm',
-        tokenizer_model=encoder_tokenizer_model,
-        bpe_dropout=args.bpe_dropout
+        tokenizer_name='yttm', tokenizer_model=encoder_tokenizer_model, bpe_dropout=args.bpe_dropout
     )
 
     decoder_tokenizer = get_tokenizer(
-        tokenizer_name='yttm',
-        tokenizer_model=decoder_tokenizer_model,
-        bpe_dropout=args.bpe_dropout
+        tokenizer_name='yttm', tokenizer_model=decoder_tokenizer_model, bpe_dropout=args.bpe_dropout
     )
 
     tokens_in_batch = [int(item) for item in args.tokens_in_batch.split(',')]
@@ -122,9 +119,6 @@ if __name__ == '__main__':
         print('Batchifying ...')
         dataset.batchify(encoder_tokenizer, decoder_tokenizer)
         start = time.time()
-        pickle.dump(
-            dataset,
-            open(os.path.join(args.out_dir, 'batches.tokens.%d.pkl' % (num_tokens)), 'wb')
-        )
+        pickle.dump(dataset, open(os.path.join(args.out_dir, 'batches.tokens.%d.pkl' % (num_tokens)), 'wb'))
         end = time.time()
         print('Took %f time to pickle' % (end - start))

@@ -30,6 +30,7 @@ import nemo.collections.nlp as nemo_nlp
 from nemo.utils import logging
 import time
 
+
 def main():
     parser = ArgumentParser()
     parser.add_argument("--model", type=str, required=True, help="")
