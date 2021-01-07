@@ -28,6 +28,7 @@ import torch
 
 import nemo.collections.nlp as nemo_nlp
 from nemo.utils import logging
+import time
 
 def main():
     parser = ArgumentParser()
@@ -55,6 +56,7 @@ def main():
     logging.info(f"Translating: {args.srctext}")
 
     count = 0
+    start = time.time()
     with open(args.srctext, 'r') as src_f:
         for line in src_f:
             src_text.append(line.strip())
@@ -72,7 +74,8 @@ def main():
             #    print(f"Translated {count} sentences")
         if len(src_text) > 0:
             tgt_text += model.translate(text=src_text, target_lang=args.target_lang)
-
+    end = time.time()
+    print('Took %.3f seconds to translate ' % (end - start))
     with open(args.tgtout, 'w') as tgt_f:
         for line in tgt_text:
             tgt_f.write(line + "\n")

@@ -27,7 +27,6 @@ __all__ = ['TranslationOneSideDataset']
 class TranslationOneSideDataset(Dataset):
     def __init__(
         self,
-        tokenizer,
         dataset,
         tokens_in_batch=1024,
         clean=False,
@@ -35,26 +34,33 @@ class TranslationOneSideDataset(Dataset):
         max_seq_length=512,
         min_seq_length=1,
     ):
-
-        self.tokenizer = tokenizer
+        self.dataset = dataset
         self.tokens_in_batch = tokens_in_batch
-
-        ids = dataset_to_ids(dataset, tokenizer, cache_ids=cache_ids)
-        if clean:
-            ids = self.clean(ids, max_tokens=max_seq_length, min_tokens=min_seq_length)
+        self.clean = clean
+        self.cache_ids = cache_ids
+        self.max_seq_length = max_seq_length
+        self.min_seq_length = min_seq_length
+    
+    def batchify(self, tokenizer):
+        self.pad_id = tokenizer.pad_id
+        ids = dataset_to_ids(self.dataset, tokenizer, cache_ids=self.cache_ids)
+        if self.clean:
+            print('Cleaning data ...')
+            ids = self.clean_data(ids, max_tokens=self.max_seq_length, min_tokens=self.min_seq_length)
+        print('Packing data into batches ...')
         self.batch_sent_ids, self.batch_elem_lengths = self.pack_data_into_batches(ids)
-        self.batches = self.pad_batches(ids)
+        print('Padding batches ...')
+        self.batches = self.pad_batches()
 
     def __len__(self):
         return len(self.batches)
 
     def __getitem__(self, idx):
         ids = self.batches[idx]
-        mask = (ids != self.tokenizer.pad_id).astype(np.int32)
-        sent_ids = np.array(self.batch_sent_ids[idx])
-        return ids, mask, sent_ids
+        mask = (ids != self.pad_id).astype(np.int32)
+        return ids, mask
 
-    def pad_batches(self, ids):
+    def pad_batches(self):
         """
         Augments source and target ids in the batches with padding symbol
         to make the lengths of all sentences in the batches equal.
@@ -62,9 +68,9 @@ class TranslationOneSideDataset(Dataset):
 
         batches = []
         for batch_elem_len, batch_sent_ids in zip(self.batch_elem_lengths, self.batch_sent_ids):
-            batch = self.tokenizer.pad_id * np.ones((len(batch_sent_ids), batch_elem_len), dtype=np.int)
-            for i, sentence_idx in enumerate(batch_sent_ids):
-                batch[i][: len(ids[sentence_idx])] = ids[sentence_idx]
+            batch = self.pad_id * np.ones((len(batch_sent_ids), batch_elem_len), dtype=np.int)
+            for i, sentence in enumerate(batch_sent_ids):
+                batch[i][: len(sentence)] = sentence
             batches.append(batch)
         return batches
 
@@ -74,45 +80,33 @@ class TranslationOneSideDataset(Dataset):
         into batches to minimize the use of padding tokens. Returns a list of
         batches where each batch contains indices of sentences included into it
         """
-
-        # create buckets sorted by the number of src tokens
-        # each bucket is also sorted by the number of tgt tokens
-        buckets = {}
-        for i, line_ids in enumerate(ids):
-            len_ = len(line_ids)
-            if len_ not in buckets:
-                buckets[len_] = [i]
-            else:
-                buckets[len_].append(i)
-
-        for b_idx in buckets:
-            buckets[b_idx] = sorted(buckets[b_idx])
-
-        buckets = OrderedDict(sorted(buckets.items()))
-
         batches = []
-        batch_elem_lengths = []
         curr_batch = []
-        len_of_longest_sent = 0
-        for sent_len, bucket in buckets.items():
-            for sent_i in bucket:
-                if sent_len * (len(curr_batch) + 1) > self.tokens_in_batch:
-                    if not curr_batch:
-                        raise ValueError(
-                            f"The limitation on number of tokens in batch {self.tokens_in_batch} is too strong."
-                            f"Several sentences contain {sent_len} tokens."
-                        )
-                    batches.append(curr_batch)
-                    batch_elem_lengths.append(sent_len)
-                    curr_batch = []
-                curr_batch.append(sent_i)
-            len_of_longest_sent = sent_len
+        batch_elem_lengths = []
+        len_of_longest_sent = -1
+        for line_ids in ids:
+            if len_of_longest_sent == -1:
+                len_of_longest_sent = len(curr_batch)
+            if len_of_longest_sent * (len(curr_batch) + 1) > self.tokens_in_batch:
+                if not curr_batch:
+                    raise ValueError(
+                        f"The limitation on number of tokens in batch {self.tokens_in_batch} is too strong."
+                        f"Several sentences contain {sent_len} tokens."
+                    )
+                batches.append(curr_batch)
+                batch_elem_lengths.append(len_of_longest_sent)
+                curr_batch = []
+                len_of_longest_sent = -1
+            curr_batch.append(line_ids)
+            len_of_longest_sent = max(
+                len_of_longest_sent, len(line_ids)
+            )
         if curr_batch:
             batches.append(curr_batch)
             batch_elem_lengths.append(len_of_longest_sent)
         return batches, batch_elem_lengths
 
-    def clean(self, ids, max_tokens=None, min_tokens=None):
+    def clean_data(self, ids, max_tokens=None, min_tokens=None):
         """
         Cleans source and target sentences to get rid of noisy data.
         Specifically, a pair of sentences is removed if

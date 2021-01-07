@@ -375,13 +375,13 @@ def dataset_to_ids(dataset, tokenizer, cache_ids=False, add_bos_eos=True, cache_
         ids = pickle.load(open(cached_ids_dataset, "rb"))
     else:
         logging.info("Tokenizing dataset ...")
-        data = open(dataset, "rb").readlines()
         ids = []
-        for sentence in tqdm(data, desc='Tokenizing sentence'):
-            sent_ids = tokenizer.text_to_ids(sentence.decode("utf-8"))
-            if add_bos_eos:
-                sent_ids = [tokenizer.bos_id] + sent_ids + [tokenizer.eos_id]
-            ids.append(sent_ids)
+        with open(dataset, "rb") as f:
+            for sentence in tqdm(f, desc='Tokenizing sentence'):
+                sent_ids = tokenizer.text_to_ids(sentence.strip().decode("utf-8"))
+                if add_bos_eos:
+                    sent_ids = [tokenizer.bos_id] + sent_ids + [tokenizer.eos_id]
+                ids.append(sent_ids)
         if cache_ids and (
             not torch.distributed.is_initialized() or (cache_data_per_node and get_envint("LOCAL_RANK", 0) == 0)
         ):

@@ -44,18 +44,40 @@ if __name__ == '__main__':
                 help='Min Sequence Length')
     parser.add_argument('--tokens_in_batch', type=str, default="8000,12000,16000,40000",
                 help='# Tokens per batch per GPU')
+    parser.add_argument('--encoder_tokenizer_model', type=str, default="None",
+                help='# Tokens per batch per GPU')
+    parser.add_argument('--decoder_tokenizer_model', type=str, default="None",
+                help='# Tokens per batch per GPU')
 
     args = parser.parse_args()
     if args.shared_tokenizer:
-        os.system('cat %s %s > %s' % (args.src_fname, args.tgt_fname, '/tmp/concat_dataset.txt'))
-        yttm.BPE.train(
-            data='/tmp/concat_dataset.txt',
-            vocab_size=args.vocab_size,
-            model=os.path.join(args.out_dir, 'tokenizer.%d.BPE.model' % (args.vocab_size))
-        )
-        encoder_tokenizer_model = os.path.join(args.out_dir, 'tokenizer.%d.BPE.model' % (args.vocab_size))
-        decoder_tokenizer_model = os.path.join(args.out_dir, 'tokenizer.%d.BPE.model' % (args.vocab_size))
+        if args.encoder_tokenizer_model != "None":
+            assert args.encoder_tokenizer_model == args.decoder_tokenizer_model
+            encoder_tokenizer_model = args.encoder_tokenizer_model
+            decoder_tokenizer_model = args.decoder_tokenizer_model
+        elif args.decoder_tokenizer_model != "None":
+            assert args.encoder_tokenizer_model == args.decoder_tokenizer_model
+            encoder_tokenizer_model = args.encoder_tokenizer_model
+            decoder_tokenizer_model = args.decoder_tokenizer_model
+        else:
+            os.system('cat %s %s > %s' % (args.src_fname, args.tgt_fname, '/tmp/concat_dataset.txt'))
+            yttm.BPE.train(
+                data='/tmp/concat_dataset.txt',
+                vocab_size=args.vocab_size,
+                model=os.path.join(args.out_dir, 'tokenizer.%d.BPE.model' % (args.vocab_size))
+            )
+            encoder_tokenizer_model = os.path.join(args.out_dir, 'tokenizer.%d.BPE.model' % (args.vocab_size))
+            decoder_tokenizer_model = os.path.join(args.out_dir, 'tokenizer.%d.BPE.model' % (args.vocab_size))
     else:
+        if args.encoder_tokenizer_model != "None":
+            assert args.decoder_tokenizer_model != "None"
+            encoder_tokenizer_model = args.encoder_tokenizer_model
+            decoder_tokenizer_model = args.decoder_tokenizer_model
+        elif args.decoder_tokenizer_model != "None":
+            assert args.encoder_tokenizer_model != "None"
+            encoder_tokenizer_model = args.encoder_tokenizer_model
+            decoder_tokenizer_model = args.decoder_tokenizer_model
+
         yttm.BPE.train(
             data=args.src_fname,
             vocab_size=args.vocab_size,
@@ -106,9 +128,3 @@ if __name__ == '__main__':
         )
         end = time.time()
         print('Took %f time to pickle' % (end - start))
-        start = time.time()
-        dataset = pickle.load(
-            open(os.path.join(args.out_dir, 'batches.tokens.%d.pkl' % (num_tokens)), 'rb')
-        )
-        end = time.time()
-        print('Took %f time to unpickle' % (end - start))
