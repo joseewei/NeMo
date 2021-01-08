@@ -242,24 +242,18 @@ paste -d "\t" \
     | awk -F "\t" '{ if ($3 == "__label__en" && $4 == "__label__zh") {print "-\t-\t"$1"\t"$2}}' \
     | bicleaner-classify - - $bicleaner_model_path > $OUTDIR/parallel/train.$lang.bicleaner.score
 
-echo "Applying bifixer & dedup"
-cat $OUTDIR/parallel/train.$lang.bicleaner.score \
-| parallel -j 19 --pipe -k -l 30000 python $bifixer_path/bifixer.py \
-    --ignore_segmentation -q - - en zh \
-    | awk -F "\t" '!seen[$6]++' - > $OUTDIR/parallel/train.$lang.bifixer.score
-
 echo "Creating data with different classifier confidence values ..."
-awk -F "\t" '{print $3}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.all.en
-awk -F "\t" '{print $4}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.all.zh
+awk -F "\t" '{print $3}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.all.en
+awk -F "\t" '{print $4}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.all.zh
 
-awk -F "\t" '{ if ($5>0.5) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.en
-awk -F "\t" '{ if ($5>0.5) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.50.zh
+awk -F "\t" '{ if ($5>0.5) {print $3}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.50.en
+awk -F "\t" '{ if ($5>0.5) {print $4}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.50.zh
 
-awk -F "\t" '{ if ($5>0.6) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.60.en
-awk -F "\t" '{ if ($5>0.6) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.60.zh
+awk -F "\t" '{ if ($5>0.6) {print $3}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.60.en
+awk -F "\t" '{ if ($5>0.6) {print $4}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.60.zh
 
-awk -F "\t" '{ if ($5>0.75) {print $3}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.75.en
-awk -F "\t" '{ if ($5>0.75) {print $4}}' $OUTDIR/parallel/train.$lang.bifixer.score > $OUTDIR/parallel/train.$lang.75.zh
+awk -F "\t" '{ if ($5>0.75) {print $3}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.75.en
+awk -F "\t" '{ if ($5>0.75) {print $4}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.75.zh
 
 echo "=================================================="
 echo "========== Moses Punct Normalization ============="
@@ -267,11 +261,11 @@ echo "=================================================="
 
 echo "Normalizing punct ..."
 for t in all 50 60 75; do
-    for l in $lang1 $lang2; do
+    for l in $lang1; do
         cat $OUTDIR/parallel/train.$lang.$t.$l | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l $l | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
         cat $OUTDIR/parallel/train.clean.$lang.$t.$l | perl $moses_path/scripts/tokenizer/tokenizer.perl -l $l -no-escape -threads 20 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$l
     done
-    cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
+    cp $OUTDIR/parallel/train.$lang.$t.$lang2 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2
 
     cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
     cat $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.tok.common
@@ -285,91 +279,10 @@ done
 
 for t in wmt19 wmt20; do
     cat ${OUTDIR}/parallel/$t-$lang.src | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$lang.clean.src
-    cat ${OUTDIR}/parallel/$t-$lang.seg.ref | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l zh | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$lang.clean.ref
-
+    cp ${OUTDIR}/parallel/$t-$lang.seg.ref ${OUTDIR}/parallel/$t-$lang.clean.tok.ref
     cat ${OUTDIR}/parallel/$t-$lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$lang.clean.tok.src
-    cat ${OUTDIR}/parallel/$t-$lang.clean.ref | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l zh > ${OUTDIR}/parallel/$t-$lang.clean.tok.ref
 
-    cat ${OUTDIR}/parallel/$t-$rev_lang.seg.src | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l zh | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$rev_lang.clean.src
     cat ${OUTDIR}/parallel/$t-$rev_lang.ref | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$rev_lang.clean.ref
-
-    cat ${OUTDIR}/parallel/$t-$rev_lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l zh> ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.src
+    cp ${OUTDIR}/parallel/$t-$rev_lang.seg.src ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.src
     cat ${OUTDIR}/parallel/$t-$rev_lang.clean.ref | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$rev_lang.clean.tok.ref
 done
-
-echo "=================================================="
-echo "========== Fetching Monolingual Data ============="
-echo "=================================================="
-
-OUTDIR_MONO=$OUTDIR/mono/
-mkdir -p $OUTDIR_MONO
-
-cd $orig
-
-echo "Done Processing Parallel Corpus, Fetching Monolingual Data ..."
-
-echo "Fetching English Monolingual data ..."
-
-for ((i=0;i<${#URLS_mono_en[@]};++i)); do
-    file=${FILES_en[i]}
-    if [ -f $file ]; then
-        echo "$file already exists, skipping download"
-    else
-        url=${URLS_mono_en[i]}
-        wget "$url"
-    fi
-done
-
-if [ -f ${OUTDIR_MONO}/monolingual.news.en ]; then
-    echo "found monolingual sample, skipping shuffle/sample/tokenize"
-else
-    gzip -c -d -k $(for FILE in "${FILES_en[@]}"; do echo $orig/$FILE; done) > $OUTDIR_MONO/monolingual.news.en
-fi
-
-echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.en ]; then
-    echo "found deduplicated monolingual sample, skipping deduplication step"
-else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.en > ${OUTDIR_MONO}/monolingual.news.dedup.en
-    echo "Cleaning data ..."
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.en | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.en
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.en | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.en
-fi
-
-echo "Fetching Chinese Monolingual data ..."
-
-cd $orig
-
-for ((i=0;i<${#URLS_mono_zh[@]};++i)); do
-    file=${FILES_zh[i]}
-    if [ -f $file ]; then
-        echo "$file already exists, skipping download"
-    else
-        url=${URLS_mono_zh[i]}
-        wget "$url"
-    fi
-done
-
-echo "Unzipping data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.zh ]; then
-    echo "found monolingual sample, skipping shuffle/sample/tokenize"
-else
-    gzip -c -d -k $(for FILE in "${FILES_zh[@]}"; do echo $orig/$FILE; done) > ${OUTDIR_MONO}/monolingual.news.zh
-fi
-
-echo "Deduplicating data ..."
-if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.zh ]; then
-    echo "found deduplicated monolingual sample, skipping deduplication step"
-else
-    awk '!a[$0]++' ${OUTDIR_MONO}/monolingual.news.zh > ${OUTDIR_MONO}/monolingual.news.dedup.zh
-fi
-
-if [ -f ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh ]; then
-    echo "Found segmented monolingual chinese data, skipping segmentation"
-else
-    echo "Segmenting monolingual chinese data ..."
-    python $script_dir/traditional_to_simplified.py ${OUTDIR_MONO}/monolingual.news.dedup.zh > ${OUTDIR_MONO}/monolingual.news.dedup.sim.zh
-    python $script_dir/segment_zh.py ${OUTDIR_MONO}/monolingual.news.dedup.sim.zh > ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.seg.zh | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l zh | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR_MONO}/monolingual.news.dedup.clean.zh
-    cat ${OUTDIR_MONO}/monolingual.news.dedup.clean.zh | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l zh > ${OUTDIR_MONO}/monolingual.news.dedup.clean.tok.zh
-fi
