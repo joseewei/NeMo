@@ -40,6 +40,7 @@ def main():
     parser.add_argument("--beam_size", type=int, default=4, help="")
     parser.add_argument("--len_pen", type=float, default=0.6, help="")
     parser.add_argument("--target_lang", type=str, default="en", help="")
+    parser.add_argument("--source_lang", type=str, default="de", help="")
 
     args = parser.parse_args()
     torch.set_grad_enabled(False)
@@ -74,7 +75,7 @@ def main():
             # if count % 300 == 0:
             #    print(f"Translated {count} sentences")
         if len(src_text) > 0:
-            tgt_text += model.translate(text=src_text, target_lang=args.target_lang)
+            tgt_text += model.translate(text=src_text, target_lang=args.target_lang, source_lang=args.source_lang)
     end = time.time()
     print('Took %.3f seconds to translate ' % (end - start))
     with open(args.tgtout, 'w') as tgt_f:
