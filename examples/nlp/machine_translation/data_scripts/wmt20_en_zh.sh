@@ -149,12 +149,18 @@ then
     done
 fi
 
+wc -l $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.zh
+
 if [ -f $orig/news-commentary-v15.en-zh.tsv ]
 then
     echo "Adding news commentary"
     awk -F "\t" '{print $1}' $orig/news-commentary-v15.en-zh.tsv >> $OUTDIR/parallel/train.$lang.en
     awk -F "\t" '{print $2}' $orig/news-commentary-v15.en-zh.tsv >> $OUTDIR/parallel/train.$lang.zh
 fi
+
+wc -l $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.zh
 
 if [ -f $orig/news.translatedto.zh ]
 then
@@ -163,6 +169,9 @@ then
     cat $orig/news.en >> $OUTDIR/parallel/train.$lang.en
 fi
 
+wc -l $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.zh
+
 if [ -f $orig/wikititles-v2.zh-en.tsv ]
 then
     echo "Adding Wiki titles"
@@ -170,12 +179,18 @@ then
     awk -F "\t" '{print $2}' $orig/wikititles-v2.zh-en.tsv >> $OUTDIR/parallel/train.$lang.en
 fi
 
+wc -l $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.zh
+
 if [ -f $orig/WikiMatrix.v1.en-zh.langid.tsv ]
 then
     echo "Adding Wiki Matrix"
     awk -F "\t" '{ if ($4 == "en" && $5 == "zh") {print $2}}' $orig/WikiMatrix.v1.en-zh.langid.tsv >> $OUTDIR/parallel/train.$lang.en
     awk -F "\t" '{ if ($4 == "en" && $5 == "zh") {print $3}}' $orig/WikiMatrix.v1.en-zh.langid.tsv >> $OUTDIR/parallel/train.$lang.zh
 fi
+
+wc -l $OUTDIR/parallel/train.$lang.en
+wc -l $OUTDIR/parallel/train.$lang.zh
 
 echo "Fetching Validation data $lang" 
 sacrebleu -t wmt19 -l $lang --echo src > ${OUTDIR}/parallel/wmt19-$lang.src
@@ -265,6 +280,7 @@ for t in all 50 60 75; do
         cat $OUTDIR/parallel/train.$lang.$t.$l | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l $l | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
         cat $OUTDIR/parallel/train.clean.$lang.$t.$l | perl $moses_path/scripts/tokenizer/tokenizer.perl -l $l -no-escape -threads 20 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$l
     done
+    cp $OUTDIR/parallel/train.$lang.$t.$lang2 $OUTDIR/parallel/train.clean.$lang.$t.$lang2
     cp $OUTDIR/parallel/train.$lang.$t.$lang2 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2
 
     cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
