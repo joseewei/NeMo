@@ -378,7 +378,7 @@ def dataset_to_ids(dataset, tokenizer, cache_ids=False, add_bos_eos=True, cache_
         ids = []
         with open(dataset, "rb") as f:
             for sentence in tqdm(f, desc='Tokenizing sentence'):
-                sent_ids = tokenizer.text_to_ids(sentence.strip().decode("utf-8"))
+                sent_ids = tokenizer.text_to_ids(sentence.strip())
                 if add_bos_eos:
                     sent_ids = [tokenizer.bos_id] + sent_ids + [tokenizer.eos_id]
                 ids.append(sent_ids)
