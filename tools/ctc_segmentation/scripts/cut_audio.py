@@ -62,8 +62,8 @@ def add_transcript_to_manifest(
             for i, line in enumerate(f):
                 info = json.loads(line)
                 info['transcript'] = transcripts[i].strip()
-                info['WER'] = round(word_error_rate([transcripts[i]], [info['text']]) * 100, 2)
-                info['CER'] = round(word_error_rate([transcripts[i]], [info['text']], use_cer=True) * 100, 2)
+                info['WER'] = round(word_error_rate([info['transcript']], [info['text']]) * 100, 2)
+                info['CER'] = round(word_error_rate([info['transcript']], [info['text']], use_cer=True) * 100, 2)
                 json.dump(info, f_updated, ensure_ascii=False)
                 f_updated.write('\n')
 

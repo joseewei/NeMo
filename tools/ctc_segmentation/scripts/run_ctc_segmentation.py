@@ -149,26 +149,43 @@ if __name__ == '__main__':
 
         listener = multiprocessing.Process(target=listener_process, args=(queue, listener_configurer, log_file, level))
         listener.start()
-        workers = []
-        for i in range(len(all_log_probs)):
-            worker = multiprocessing.Process(
-                target=worker_process,
-                args=(
-                    queue,
-                    worker_configurer,
-                    level,
-                    all_log_probs[i],
-                    all_wav_paths[i],
-                    all_transcript_file[i],
-                    all_segment_file[i],
-                    vocabulary,
-                    args.window_len,
-                ),
-            )
-            workers.append(worker)
-            worker.start()
-        for w in workers:
-            w.join()
+
+        size = 50
+        l = list(range(len(all_log_probs)))
+        last_idx = 0
+        subsets = []
+        done = False
+        while not done:
+            next_idx = last_idx + size
+            if next_idx >= len(l):
+                subsets.append(l[last_idx:])
+                done = True
+            else:
+                subsets.append(l[last_idx: next_idx])
+                last_idx = next_idx
+
+
+        for s in subsets:
+            workers = []
+            for i in s:
+                worker = multiprocessing.Process(
+                    target=worker_process,
+                    args=(
+                        queue,
+                        worker_configurer,
+                        level,
+                        all_log_probs[i],
+                        all_wav_paths[i],
+                        all_transcript_file[i],
+                        all_segment_file[i],
+                        vocabulary,
+                        args.window_len,
+                    ),
+                )
+                workers.append(worker)
+                worker.start()
+            for w in workers:
+                w.join()
         queue.put_nowait(None)
         listener.join()
 

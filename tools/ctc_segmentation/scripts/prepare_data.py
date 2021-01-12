@@ -209,9 +209,7 @@ def split_text(
 
     sentences = additional_split(sentences, additional_split_symbols, max_length)
 
-    # TO DO remove senteces with all OOV symbols
-
-    # check to make sure there will be no utterances for segmentation with all OOV symbols
+    # check to make sure there will be no utterances for segmentation with only OOV symbols
     no_space_voc = set(vocabulary)
     no_space_voc.remove(' ')
     sentences = [s for s in sentences if len(no_space_voc.intersection(set(s))) > 0]
