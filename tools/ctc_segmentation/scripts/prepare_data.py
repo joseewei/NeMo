@@ -21,9 +21,9 @@ from typing import List
 
 import regex
 import scipy.io.wavfile as wav
-from normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from num2words import num2words
 
+from .normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from nemo.collections import asr as nemo_asr
 
 parser = argparse.ArgumentParser(description="Prepares text and audio files for segmentation")
@@ -72,7 +72,7 @@ def convert_audio(in_file: str, wav_file: str = None, sample_rate: int = 16000) 
     if not os.path.exists(in_file):
         raise ValueError(f'{in_file} not found')
     if wav_file is None:
-        wav_file = in_file.replace(".mp3", f"_{sample_rate}.wav")
+        wav_file = in_file.replace(os.path.splitext(in_file)[-1], f"_{sample_rate}.wav")
 
     os.system(f'ffmpeg -i {in_file} -ac 1 -af aresample=resampler=soxr -ar {sample_rate} {wav_file} -y')
     return wav_file
@@ -86,7 +86,6 @@ def process_audio(in_file: str, wav_file: str = None, cut_prefix: int = 0, sampl
         wav_file: path to the output .wav file
         cut_prefix: number of seconds to cut from the beginning of the audio file
         sample_rate: target sampling rate
-
     """
     wav_audio = convert_audio(str(in_file), wav_file, sample_rate)
 
@@ -101,7 +100,7 @@ def split_text(
     out_file: str,
     vocabulary: List[str] = None,
     language='eng',
-    remove_square_brackets=True,
+    remove_brackets=True,
     do_lower_case=True,
     min_length=20,
     max_length=100,
@@ -116,9 +115,12 @@ def split_text(
         out_file: path to the output file
         vocabulary: ASR model vocabulary
         language: text language
-        remove_square_brackets: Set to True if square brackets [] should be removed from text.
-            Text in square brackets often contains unaudibale fragments like notes or translations
+        remove_brackets: Set to True if square [] and curly {} brackets should be removed from text.
+            Text in square/curly brackets often contains unaudibale fragments like notes or translations
         do_lower_case: flag that determines whether to apply lower case to the in_file text
+        min_length: Min number of chars of the text segment for alignment
+        max_length: Max number of chars of the text segment for alignment
+        additional_split_symbols: Additional symbols to use for sentence split if eos sentence split resulted in sequence longer than --max_length
     """
 
     print(f'Splitting text in {in_file} into sentences.')
@@ -139,7 +141,7 @@ def split_text(
     transcript = re.sub(r' +', ' ', transcript)
 
     transcript = re.sub(r'(\.+)', '. ', transcript)
-    if remove_square_brackets:
+    if remove_brackets:
         transcript = re.sub(r'(\[.*?\])', ' ', transcript)
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
@@ -157,7 +159,7 @@ def split_text(
         if last_idx < qq_idx:
             sentences.append(transcript[last_idx:qq_idx])
 
-        sentences.append(transcript[qq_idx: qq_idx + len(qq)])
+        sentences.append(transcript[qq_idx : qq_idx + len(qq)])
         last_idx = qq_idx + len(qq)
     sentences.append(transcript[last_idx:])
     sentences = [s.strip() for s in sentences if s.strip()]
@@ -188,6 +190,7 @@ def split_text(
             return sentences
 
         split_on_symbols = split_on_symbols.split('|')
+
         def _split(sentences, symbol, max_length):
             result = []
             for s in sentences:

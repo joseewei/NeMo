@@ -177,8 +177,8 @@ def process_alignment(alignment_file: str, args):
                 segment = signal[round(st * sampling_rate) : round(end * sampling_rate)]
                 duration = len(segment) / sampling_rate
                 if duration > 0:
-                    text_processed = ref_text_processed[i]
-                    text_no_preprocessing = ref_text_no_preprocessing[i]
+                    text_processed = ref_text_processed[i].strip()
+                    text_no_preprocessing = ref_text_no_preprocessing[i].strip()
                     if score > args.threshold:
                         high_score_dur += duration
                         audio_filepath = os.path.join(fragments_dir, f'{base_name}_{i:04}.wav')

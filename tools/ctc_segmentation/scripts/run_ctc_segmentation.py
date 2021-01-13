@@ -161,9 +161,8 @@ if __name__ == '__main__':
                 subsets.append(l[last_idx:])
                 done = True
             else:
-                subsets.append(l[last_idx: next_idx])
+                subsets.append(l[last_idx:next_idx])
                 last_idx = next_idx
-
 
         for s in subsets:
             workers = []
