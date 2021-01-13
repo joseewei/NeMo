@@ -20,12 +20,10 @@ USAGE Example:
 2. Translate:
     python nmt_transformer_infer.py --model=[Path to .nemo file] --srctext=wmt14-de-en.src --tgtout=wmt14-de-en.pre
 """
-
-
 from argparse import ArgumentParser
 
 import torch
-
+from tqdm import tqdm
 import nemo.collections.nlp as nemo_nlp
 from nemo.utils import logging
 import time
@@ -49,8 +47,16 @@ def main():
         model = nemo_nlp.models.machine_translation.MTEncDecModel.restore_from(restore_path=args.model)
         src_text = []
         tgt_text = []
+    elif args.model.endswith(".ckpt"):
+        logging.info("Attempting to initialize from .ckpt file")
+        model = nemo_nlp.models.machine_translation.MTEncDecModel.load_from_checkpoint(checkpoint_path=args.model)
+        src_text = []
+        tgt_text = []
     else:
         raise NotImplemented(f"Only support .nemo files, but got: {args.model}")
+    
+    model.beam_search.beam_size = args.beam_size
+    model.beam_search.len_pen = args.len_pen
 
     if torch.cuda.is_available():
         model = model.cuda()
@@ -60,7 +66,7 @@ def main():
     count = 0
     start = time.time()
     with open(args.srctext, 'r') as src_f:
-        for line in src_f:
+        for line in tqdm(src_f):
             src_text.append(line.strip())
             if len(src_text) == args.batch_size:
                 res = model.translate(text=src_text)
