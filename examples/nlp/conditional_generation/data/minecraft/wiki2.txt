@@ -1,0 +1,95 @@
+Minecraft is an indie survival sandbox construction video game designed by Markus Notch Persson and Mojang Studios and developed on Java.
+The game allows players to collect, assemble, or destroy a variety of blocks in a three-dimensional, procedurally-generated environment.
+The game takes inspiration from multiple sources, specifically the game Infiniminer.
+Development began in May 2009, with pre-orders for the full game starting June 13, 2009. The game was officially released by Notch in mid-November 2011 during MineCon.
+During late 2019, Minecraft has sold over 176 million copies worldwide across all platforms, making it the 2nd highest selling video game of all time, only behind Tetris.
+
+Blocks make up the Minecraft landscape and are integral to gameplay. They can be broken, collected, and placed in an infinite number of arrangements.
+They can be used in crafting and manipulated in many other ways. The face of a block is 16 by 16 pixels, and each block is proportionately one cubic meter.
+
+Minecraft is a game that has no specific goals to accomplish, allowing players a large amount of freedom in choosing how to play it.
+However, there is an achievements system. While the gameplay revolves through the players' experiences, the game encourages many players to choose their own way of adventure.
+There is no right or wrong way to play the game, players can play the game however they want it to be.
+There are two game modes in the game: Survival and Creative. In Survival mode, players must gather resources from the Overworld, hunt for food to replenish health and hunger,
+and protect themselves from the deadly hostile mobs that attack them during nighttime, or in cave systems. T
+he most prominent objective in Survival mode, is to mine diamonds to upgrade certain weapons or tools or make convenient armors that would help them throughout their journeys.
+In Creative mode, players are free to roam in the world wherever they want, and just simply build anything that comes within their imagination, like cities,
+redstone machines, etc.
+
+The gameplay is in the first-person perspective by default, but players have the option for a third-person perspective.
+The game also contains a material known as redstone, which can be used to make mechanical devices, electrical circuits, and logic gates, allowing for the construction
+of many complex systems. Players can select any customized skin whenever they want to, but new players start with the default character skin of either Steve or Alex.
+Players encounter various non-player characters known as mobs, such as animals, villagers, and hostile creatures. Passive mobs, such as cows, pigs, and chickens,
+can be hunted for food and crafting materials. They spawn in the daytime, while hostile mobs, including large spiders, skeletons, and zombies—spawn during nighttime
+or in dark places such as caves. Some hostile mobs, such as the Zombie, Skeleton, and Drowned (underwater versions of Zombies), burn under the sun if they have no headgear.
+Other creatures unique to Minecraft include the Creeper (an exploding creature that sneaks up on the player) and the Enderman (a creature with the ability to teleport,
+pick up, and place blocks). There are also variants of mobs that spawn in different conditions; for example, Zombies have Husk variants that spawn in deserts.
+
+Minecraft has two alternate dimensions besides the overworld (the main world): the Nether and the End. The Nether is a hell-like dimension accessed via player-built portals;
+it contains many unique resources and can be used to travel great distances in the overworld. The player can build an optional boss mob called the Wither out of materials
+found in the Nether. The End is a barren land consisting of many islands. A boss dragon called the Ender Dragon dwells on the main island.
+Killing the dragon opens access to an exit portal, which upon entering cues the game's ending credits and a poem written by Irish novelist Julian Gough.
+There is also another portal that access the outer islands of The End, in which players could access the outer islands. Players are then allowed to teleport back
+to their original spawn point in the Overworld and continue the game indefinitely.
+
+Survival game mode.
+The original and core gameplay element of the game. In this mode, players have to gather natural resources such as wood and stone found in the environment in order
+to craft certain blocks and items. Depending on the difficulty, monsters spawn in darker areas outside a certain radius of the character, requiring players to build
+a shelter at night. Players are required to fight off the hostile mobs that attack them in order to protect themselves from certain damages.
+The mode also has a health bar which is depleted by attacks from monsters, falls, drowning, falling into lava, suffocation, starvation, and other events.
+Players also have a hunger bar, which must be periodically refilled by eating food in-game, except in peaceful difficulty. If the hunger bar is depleted,
+automatic healing will stop and eventually health will deplete. Health replenishes when players have a nearly full hunger bar or continuously on peaceful difficulty.
+Players may also trade goods with Villagers or Piglins NPCs throughout a trading or bartering system, which involves trading emeralds or gold for different goods and vice versa.
+Players may acquire experience points by killing mobs and other players, mining, smelting ores, breeding animals, and cooking food.
+Experience can then be spent on enchanting tools, armor and weapons. Enchanted items are generally more powerful, last longer, or have other special effects.
+
+Crafting.
+Since the uses of natural blocks are limited, it is imperative that players make use of the crafting interface to survive. Players can combine items in a 2x2 interface
+(extended to 3x3 by use of a crafting table), with each item taking up one square of the grid. Different arrangements of items create usable items,
+which players can exploit to further their collection of resources, and in turn create more items.
+Players can craft a wide variety of items in Minecraft. Craftable items include armor, which mitigates damage from attacks; weapons (such as swords),
+which allows monsters and animals to be killed more easily; and tools, which break certain types of blocks more quickly. Some items have multiple tiers depending
+on the material used to craft them, with higher-tier items being more effective and durable. Players can construct furnaces, which can cook food, process ores,
+and convert materials into other materials.
+
+Inventory.
+The game has an inventory system, allowing players to carry a limited number of items. Upon dying, items in the players' inventories are dropped,
+and players re-spawn at their spawn point, which by default is where players first spawn in the game, and can be reset by sleeping in a bed or using a respawn anchor.
+Dropped items can be recovered if players can reach them before they disappear, or despawn, after 5 minutes.
+
+Objectives.
+While they are no specific objectives in the game, The main goals of Survival, is to simply survive, gather important resources, construct and expand your
+shelter before nighttime, explore your world, have fun, upgrade your tools, materials or equipments, find diamonds, protect their companions, and fight monsters
+that try to attack them. Survival also has an ending, that is optional to players, and that is to kill the hostile boss mob, Ender Dragon.
+Players can also build the Wither boss by obtaining the right materials from the nether, and defeat it in order to craft a beacon.
+They also have the option to protect the villagers from an pillager raid, which is triggered by the player itself.
+Progress can be made once the player does all of these. Players can also beat the game's achievements, or advancements, but this is completely optional.
+
+Creative game mode.
+In creative mode, players have access to all resources and items in the game through the inventory menu, and can place or remove them instantly.
+Players can toggle the ability to fly freely around the game world at will, and their characters do not take any damage and are not affected by hunger.
+The game mode helps players focus on building and creating projects of any size without disturbance.
+
+Hardcore game mode.
+Hardcore mode is a survival mode variant that is locked to the hardest setting and has permadeath. If a player dies in a hardcore world,
+they are no longer allowed to interact with it, so they can either be put into spectator mode and explore the world or return to title screen.
+You cant change difficulty if you set it to hardcore once unlike survival mode.
+
+Music.
+Minecraft's music and sound effects were produced by German musician Daniel Rosenfeld (born: May 9, 1989 [age 31]), better known as C418.
+The background music in Minecraft is simply instrumental ambient music. On 4 March 2011, Rosenfeld released a soundtrack, titled Minecraft – Volume Alpha;
+it includes most of the tracks featured in Minecraft, as well as other music not featured in the game.
+Kirk Hamilton of Kotaku chose the music in Minecraft as one of the best video game soundtracks of 2011. On 9 November 2013, Rosenfeld released the second official soundtrack,
+titled Minecraft – Volume Beta, which includes the music that was added in later versions of the game.
+A physical release of Volume Alpha, consisting of CDs, black vinyl, and limited-edition transparent green vinyl LPs, was issued by indie electronic
+label Ghostly International on 21 August 2015.
+
+Multiplayer.
+Multiplayer in Minecraft is available through direct game-to-game multiplayer, LAN play, local split screen, and servers (player-hosted and business-hosted).
+It enables multiple players to interact and communicate with each other on a single world. Players can run their own servers, use a hosting provider,
+or connect directly to another player's game via Xbox Live. Single-player worlds have local area network support, allowing players to join a world on locally
+interconnected computers without a server setup. Minecraft multiplayer servers are guided by server operators, who have access to server commands such as setting
+the time of day and teleporting players. Operators can also set up restrictions concerning which usernames or IP addresses are allowed or disallowed to enter the server.
+Multiplayer servers have a wide range of activities, with some servers having their own unique rules and customs. The largest and most popular server is Hypixel,
+which has been visited by over 14 million unique players. Player versus player combat (PvP) can be enabled to allow fighting between players.
+Many servers have custom plugins that allow actions that are not normally possible.

@@ -15,14 +15,8 @@
 from lfqa_utils import *
 
 
-def full_test():
-    # eli5 = nlp.load_dataset('eli5')
-    # wiki40b_snippets = nlp.load_dataset('wiki_snippets', name='wiki40b_en_100_0')['train']
-
-    marvel_snippets = load_data("/home/vgetselevich/data/marvel/wiki/", 100)
-
-    # print(eli5['test_eli5'][12345])
-    # print(wiki40b_snippets[8991855])
+def full_test(directory, proj_name, questions, ir_results=5, use_eqa=True):
+    content_snippets = load_data(directory, 100)
 
     # load models
     # dense IR model
@@ -31,30 +25,30 @@ def full_test():
     _ = qar_model.eval()
 
     # prepare IR index
-    if not os.path.isfile('marvel_passages_reps_32_l-8_h-768_b-512-512.dat'):
+    if not os.path.isfile(f'{proj_name}_passages_reps_32_l-8_h-768_b-512-512.dat'):
         print("*** Generating dense index ***")
         make_qa_dense_index_text_chunks(
             qar_model,
             qar_tokenizer,
             # wiki40b_snippets,
-            marvel_snippets,
+            content_snippets,
             device='cuda:0',
-            index_name='marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
+            index_name=f'{proj_name}_passages_reps_32_l-8_h-768_b-512-512.dat',
         )
 
     # load index to memory
     faiss_res = faiss.StandardGpuResources()
-    marvel_passage_reps = np.memmap(
-        'marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
+    content_passage_reps = np.memmap(
+        f'{proj_name}_passages_reps_32_l-8_h-768_b-512-512.dat',
         dtype='float32',
         mode='r',
         # shape=(wiki40b_snippets.num_rows, 128),
-        shape=(len(marvel_snippets), 128),
+        shape=(len(content_snippets), 128),
     )
 
-    marvel_index_flat = faiss.IndexFlatIP(128)
-    marvel_gpu_index = faiss.index_cpu_to_gpu(faiss_res, 1, marvel_index_flat)
-    marvel_gpu_index.add(marvel_passage_reps)
+    content_index_flat = faiss.IndexFlatIP(128)
+    content_gpu_index = faiss.index_cpu_to_gpu(faiss_res, 1, content_index_flat)
+    content_gpu_index.add(content_passage_reps)
 
     # generative model
     qa_s2s_tokenizer = AutoTokenizer.from_pretrained('yjernite/bart_eli5')
@@ -62,17 +56,12 @@ def full_test():
     _ = qa_s2s_model.eval()
 
     # run examples
-    questions = [
-        "who is iron man?",
-        "who is Tony Stark?",
-        "who directed iron man?",
-    ]
     answers = []
 
     for question in questions:
         # create support document with the dense index
         doc, res_list = query_qa_dense_index(
-            question, qar_model, qar_tokenizer, marvel_snippets, marvel_gpu_index, n_results=5, device='cuda:0'
+            question, qar_model, qar_tokenizer, content_snippets, content_gpu_index, n_results=ir_results, device='cuda:0'
         )
         # concatenate question and support document into BART input
         question_doc = "question: {} context: {}".format(question, doc)
@@ -91,9 +80,11 @@ def full_test():
 
         print(question)
         print("Generative Answer: " + gen_answer)
-        print("Context: " + doc.replace("<P> ", ""))
-        ex_answer_span, ex_answer_sent = extractive_qa(question, doc.replace("<P> ", ""))
-        print("Extractive Answer: " + ex_answer_span + " - " + ex_answer_sent)
+        # print("Context: " + doc.replace("<P> ", ""))
+
+        if use_eqa:
+            ex_answer_span, ex_answer_context = extractive_qa(question, doc.replace("<P> ", ""))
+            print("Extractive Answer: " + ex_answer_span)
 
 
 def short_test():
@@ -151,48 +142,19 @@ def short_test():
     print(answers)
 
 
-def extractive_qa(question, context):
-    '''
-        Uses Extractive QA server.
-        Input: question and context
-        Response: short span with the answer and full sentence that contains this span or 'Not found'
-    '''
-    url = "http://35.193.226.52:9000/longformqa"
-    payload = (
-        f'{{\r\n"question": "{question}",\r\n\"context\": "{context}",\r\n'
-        f'"maxLength": 128,\r\n"minLength": 1,\r\n "numBeams": 8\r\n}}'
-    )
-    headers = {
-        'Content-Type': "application/json",
-        'User-Agent': "PostmanRuntime/7.18.0",
-        'Accept': "*/*",
-        'Cache-Control': "no-cache",
-        'Postman-Token': "30549445-ea95-416a-bd74-8ab14ad2036d,0dd97345-55e6-4517-970c-f7032bd1a0d3",
-        'Host': "35.193.226.52:9000",
-        'Accept-Encoding': "gzip, deflate",
-        'Content-Length': "1513",
-        'Connection': "keep-alive",
-        'cache-control': "no-cache",
-    }
-
-    print(payload)
-    response = requests.request("POST", url, data=payload, headers=headers)
-    if response.ok == True:
-        print(response.text)
-        response_dict = json.loads(response.text)
-        return (response_dict['result_eqa'], response_dict['context'])
-    else:
-        print("Answer not found in the context")
-        return ('Not found', 'Not found')
-
-
 if __name__ == '__main__':
-    # load_data("/home/vgetselevich/data/marvel/wiki/", 100)
-    # short_test()
-    full_test()
+    questions = [
+        "what is minecraft?",
+        "who created minecraft game?",
+        "which modes minecraft game has?",
+    ]
 
-    # question = "Who were the survivors of Titan?"
-    question = "Who is Vlad?"
+    # load_data("/home/vgetselevich/data/minecraft/", 100)
+    # short_test()
+    full_test("/home/vgetselevich/data/minecraft/", "minecraft", questions, ir_results=1, use_eqa=True)
+
+    '''
+    question = "Who is Stark?"
     context = (
         "Anthony Edward Stark is a fictional character portrayed by Robert Downey Jr in the Marvel Cinematic "
         "Universe (MCU) film franchise based on the Marvel Comics character of the same name commonly known "
@@ -209,4 +171,9 @@ if __name__ == '__main__':
         "and his armies, who traveled through time to collect the Infinity Stones, saving the universe "
         "from decimation, and leaving behind a legacy as one of Earth's most revered superheroes."
     )
-    # extractive_qa(question, context)
+    answer_span, context = extractive_qa(question, context)
+    print(answer_span)
+
+    full_answer, content = answer_extender(question, answer_span)
+    print(full_answer)
+    '''

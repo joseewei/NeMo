@@ -38,33 +38,32 @@ def load_models():
 
 @st.cache(allow_output_mutation=True)
 def load_indexes(qar_model, qar_tokenizer):
-    marvel_snippets = load_data("/home/vgetselevich/data/marvel/wiki/", 100)
+    snippets = load_data("/home/vgetselevich/data/minecraft/", 100)
 
     # prepare IR index
-    if not os.path.isfile('marvel_passages_reps_32_l-8_h-768_b-512-512.dat'):
+    if not os.path.isfile('minecraft_passages_reps_32_l-8_h-768_b-512-512.dat'):
         print("*** Generating dense index ***")
         make_qa_dense_index_text_chunks(
             qar_model,
             qar_tokenizer,
-            # wiki40b_snippets,
-            marvel_snippets,
+            snippets,
             device='cuda:0',
-            index_name='marvel_passages_reps_32_l-8_h-768_b-512-512.dat',
+            index_name='minecraft_passages_reps_32_l-8_h-768_b-512-512.dat',
         )
 
     faiss_res = faiss.StandardGpuResources()
     #    wiki40b_passages = nlp.load_dataset(path="wiki_snippets", name="wiki40b_en_100_0")["train"]
     marvel_passage_reps = np.memmap(
-        "marvel_passages_reps_32_l-8_h-768_b-512-512.dat",
+        "minecraft_passages_reps_32_l-8_h-768_b-512-512.dat",
         dtype="float32",
         mode="r",
-        shape=(len(marvel_snippets), 128),
+        shape=(len(snippets), 128),
     )
     wiki40b_index_flat = faiss.IndexFlatIP(128)
     wiki40b_gpu_index_flat = faiss.index_cpu_to_gpu(faiss_res, 1, wiki40b_index_flat)
     wiki40b_gpu_index_flat.add(marvel_passage_reps)  # TODO fix for larger GPU
 
-    return (marvel_snippets, wiki40b_gpu_index_flat)
+    return (snippets, wiki40b_gpu_index_flat)
 
 
 qar_tokenizer, qar_model, s2s_tokenizer, s2s_model = load_models()
@@ -111,21 +110,21 @@ def answer_question(
     return (answer, support_list)
 
 
-st.title("Marvel Universe Question Answering")
+st.title("Minecraft Question Answering")
 
 # Start sidebar
 # header_html = "<img src='https://huggingface.co/front/assets/huggingface_logo.svg'>"
-# header_html = "<img src='iron_man.png'>"
-header_html = "<img width='150' height='200' src='https://vignette.wikia.nocookie.net/marvelcinematicuniverse/images/f/f2/Iron_Man_Armor_-_Mark_LXXXV.png/revision/latest/top-crop/width/360/height/450?cb=20190401222437'>"
+header_html = "<img width='200' height='150' src='https://cdn.vox-cdn.com/thumbor/auxLh0jMJyEywGb5SyA02trm6ag=/1400x1400/filters:format(jpeg)/cdn.vox-cdn.com/uploads/chorus_asset/file/4093800/image.0.jpg'>"
+
 header_full = """
 <html>
   <head>
     <style>
       .img-container {
-        padding-left: 70px;
-        padding-right: 70px;
-        padding-top: 50px;
-        padding-bottom: 50px;
+        padding-left: 50px;
+        padding-right: 100px;
+        padding-top: 100px;
+        padding-bottom: 100px;
         background-color: #f0f3f9;
       }
     </style>
@@ -143,11 +142,11 @@ st.sidebar.markdown(
     header_full, unsafe_allow_html=True,
 )
 
-# Generative QA on Marvel Universe
+# Generative QA on Minecraft data
 description = """
 ---
-This demo presents generative and extractive answers to Marvel Universe content questions.
-First dense IR model fetches a set of relevant snippets from Marvel wiki docs given the question,
+This demo presents generative and extractive answers to Minecraft content questions.
+First dense IR model fetches a set of relevant snippets from Minecraft wiki docs given the question,
 and then Bart  model use them as a context to generate and answer and
 extractive QA model creates an alternative answer.
 """
@@ -222,9 +221,9 @@ if generate_options:
 # start main text
 questions_list = [
     "<MY QUESTION>",
-    "Who is iron man?",
-    "who is Tony Stark?",
-    "who directed iron man?",
+    "what is minecraft?",
+    "who created minecraft game?",
+    "which modes minecraft game has?",
 ]
 question_s = st.selectbox(
     "What would you like to ask? ---- select <MY QUESTION> to enter a new query", questions_list, index=1,
@@ -237,8 +236,8 @@ else:
 if st.button("Show me!"):
     if action in [0, 1, 3]:
         if index_type == "mixed":
-            _, support_list_dense = make_support(question, source=wiki_source, method="dense", n_results=10)
-            _, support_list_sparse = make_support(question, source=wiki_source, method="sparse", n_results=10)
+            _, support_list_dense = make_support(question, source=wiki_source, method="dense", n_results=5)
+            _, support_list_sparse = make_support(question, source=wiki_source, method="sparse", n_results=5)
             support_list = []
             for res_d, res_s in zip(support_list_dense, support_list_sparse):
                 if tuple(res_d) not in support_list:
@@ -248,7 +247,7 @@ if st.button("Show me!"):
             support_list = support_list[:10]
             question_doc = "<P> " + " <P> ".join([res[-1] for res in support_list])
         else:
-            question_doc, support_list = make_support(question, source=wiki_source, method=index_type, n_results=10)
+            question_doc, support_list = make_support(question, source=wiki_source, method=index_type, n_results=5)
     if action in [0, 3]:
         # Geenerative QA
         answer, support_list = answer_question(
@@ -263,17 +262,17 @@ if st.button("Show me!"):
             temp=temp,
         )
 
-        # Extractive QA
-        ex_answer_span, ex_answer_sent = extractive_qa(question, question_doc.replace("<P> ", ""))
-
-        st.markdown("### The model generated answer is:")
+        st.markdown("### The Generative Answer is:")
         st.write(answer)
 
-        st.markdown("### The model extractive answer is:")
-        st.write(ex_answer_span + " - " + ex_answer_sent)
+        # Extractive QA
+        ex_answer_span, ex_answer_context = extractive_qa(question, question_doc.replace("<P> ", ""))
+
+        st.markdown("### The Extractive Answer is:")
+        st.write(ex_answer_span)
 
     if action in [0, 1, 3] and wiki_source != "none":
-        st.markdown("--- \n ### The model is drawing information from the following Marvel snippets:")
+        st.markdown("--- \n ### The model is drawing information from the following Minecraft snippets:")
         for i, res in enumerate(support_list):
             wiki_url = "https://en.wikipedia.org/wiki/{}".format(res[0].replace(" ", "_"))
             sec_titles = res[1].strip()

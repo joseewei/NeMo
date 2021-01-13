@@ -50,41 +50,50 @@ def load_data(directory, max_size):
     for chunk in text_chunks:
         print(f'{len(chunk.split())} - {chunk}')
 
+    print('-----------------------------')
+
     return text_chunks
 
+qa_url = "http://34.72.18.118/qa_api"
+def extractive_qa(question, content):
+    payload = f'{{ \
+        "question": "{question}", \
+        "input_context": "{content}" \
+        }}'
 
-def extractive_qa(question, context):
-    '''
-        Uses Extractive QA server.
-        Input: question and context
-        Response: short span with the answer and full sentence that contains this span or 'Not found'
-    '''
-    url = "http://35.193.226.52:9000/longformqa"
-    payload = (
-        f'{{\r\n"question": "{question}",\r\n\"context\": "{context}",\r\n'
-        f'"maxLength": 128,\r\n"minLength": 1,\r\n "numBeams": 8\r\n}}'
-    )
     headers = {
-        'Content-Type': "application/json",
-        'User-Agent': "PostmanRuntime/7.18.0",
-        'Accept': "*/*",
-        'Cache-Control': "no-cache",
-        'Postman-Token': "30549445-ea95-416a-bd74-8ab14ad2036d,0dd97345-55e6-4517-970c-f7032bd1a0d3",
-        'Host': "35.193.226.52:9000",
-        'Accept-Encoding': "gzip, deflate",
-        'Content-Length': "1513",
-        'Connection': "keep-alive",
-        'cache-control': "no-cache",
+    'Content-Type': 'application/json',
     }
 
-    print(payload)
-    response = requests.request("POST", url, data=payload, headers=headers)
-    if response.ok == True:
-        print(response.text)
-        response_dict = json.loads(response.text)
-        return (response_dict['result_eqa'], response_dict['context'])
+    response = requests.request("POST", qa_url, headers=headers, data=payload)
+#    print(response.text.encode('utf8'))
+    response_dict = json.loads(response.text)
+
+    if response_dict['result']:
+        #print(response_dict['result'])
+        return (response_dict['result'], response_dict['context'])
     else:
-        print("Answer not found in the context")
+        #print("Answer not found in the context")
+        return ('Not found', 'Not found')
+
+
+qa_url = "http://34.72.18.118/gen_qa"
+def answer_extender(question, content):
+    payload = f'{{ \
+        "question": "{question}", \
+        "input_context": "{content}" \
+        }}'
+
+    headers = {
+    'Content-Type': 'application/json',
+    }
+
+    response = requests.request("POST", qa_url, headers=headers, data=payload)
+    response_dict = json.loads(response.text)
+
+    if response_dict['result']:
+        return (response_dict['result'], response_dict['context'])
+    else:
         return ('Not found', 'Not found')
 
 
