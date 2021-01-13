@@ -277,7 +277,7 @@ class NLPModel(ModelPT):
                         p.model_parallel = False
 
                 # Update PTL trainer to use our configure_ddp
-                self._trainer.accelerator_backend.configure_ddp = self.configure_ddp
+                self._trainer.accelerator_backend.ddp_plugin.configure_ddp = self.configure_ddp
                 # Update PTL trainer to use our _clip_gradients
                 self._trainer.accelerator_backend._clip_gradients = self._clip_gradients
 
