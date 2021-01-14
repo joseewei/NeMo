@@ -105,6 +105,7 @@ def split_text(
     min_length=20,
     max_length=100,
     additional_split_symbols=None,
+    split_quotes_by_speakers=False
 ):
     """
     Breaks down the in_file into sentences. Each sentence will be on a separate line.
@@ -121,6 +122,7 @@ def split_text(
         min_length: Min number of chars of the text segment for alignment
         max_length: Max number of chars of the text segment for alignment
         additional_split_symbols: Additional symbols to use for sentence split if eos sentence split resulted in sequence longer than --max_length
+        split_quotes_by_speakers: Carry quotes around characters phrases to distinguish narrator and characters if the reader impersonates
     """
 
     print(f'Splitting text in {in_file} into sentences.')
@@ -140,7 +142,31 @@ def split_text(
     transcript = re.sub(r' +', ' ', transcript)
 
     # one book specific
-    transcript = transcript.replace("“Zarathustra”", "Zarathustra")
+    transcript = transcript.replace("“Zarathustra”", "Zarathustra").replace("d’ Alegre", "d’Alegre").replace("Cæsar", "Cesar")
+
+    def _valid_apostrophe(text, i):
+        valid_phrases = ["Sant’"]
+        exceptions_for_case_2 = ["articulo mortis’"]
+
+        ch = text[i]
+        case_1 = (ch == "'" or ch == "’") and len(text) > i + 1 and text[i + 1].isalpha() and i > 0 and text[i - 1].isalpha()
+        case_2 = (ch == "'" or ch == "’") and len(text) > i + 1 and text[i + 1] in [' ', ",", "."] and i > 0 and text[i - 1] == 's'
+
+        if case_2:
+            for exception in exceptions_for_case_2:
+                if exception in text[i-20: i+20]:
+                    case_2 = False
+
+        case_3 = False
+        for phrase in valid_phrases:
+            if phrase in text[i-20: i+20]:
+                case_3 = True
+
+        valid = case_1 or case_2 or case_3
+        if valid:
+            print('----->', text[i-20:i+20])
+            # import pdb; pdb.set_trace()
+        return valid
 
     def _find_quotes(text, quote='"', delimiter="~"):
         if len(delimiter) != 1:
@@ -148,16 +174,21 @@ def split_text(
         clean_transcript = ''
         replace_id = 0
         for i, ch in enumerate(text):
-            if ch == quote and not (len(text) > i + 1 and text[i+1].isalpha() and i > 0 and text[i-1].isalpha()):
-                clean_transcript += f'{delimiter}{(replace_id) % 2}{quote}{delimiter}'
+            if ch == quote and not _valid_apostrophe(text, i):
+                clean_transcript += f'{delimiter}{replace_id % 2}{quote}{delimiter}'
+                print (i, replace_id, text[i -20: i +20])
+                print(clean_transcript[-30:])
                 replace_id += 1
             else:
                 clean_transcript += ch
+        if (replace_id % 2) != 0:
+            import pdb; pdb.set_trace()
         return clean_transcript, f'{delimiter}?{quote}{delimiter}'
 
-    transcript, delimiter1 = _find_quotes(transcript)
-    transcript, delimiter2 = _find_quotes(transcript, "’", "#")
-    delimiters = [delimiter1, delimiter2]
+    if split_quotes_by_speakers:
+        transcript, delimiter1 = _find_quotes(transcript)
+        transcript, delimiter2 = _find_quotes(transcript, "’", "#")
+        delimiters = [delimiter1, delimiter2]
 
     transcript = re.sub(r'(\.+)', '. ', transcript)
     if remove_brackets:
@@ -237,65 +268,48 @@ def split_text(
                         sentences[i] = sentences[i][len(delim): ].strip()
         return sentences
 
-    for _ in range(2):
-        sentences = _remove_delim_from_beginning(delimiters, sentences)
+    if split_quotes_by_speakers:
+        for _ in range(2):
+            sentences = _remove_delim_from_beginning(delimiters, sentences)
 
-    delimiters_stack = []
-    for i, sent in enumerate(sentences):
-        for j in range(len(sent) - len(delimiters[0]) + 1):
+        delimiters_stack = []
+        for i, sent in enumerate(sentences):
+            for j in range(len(sent) - len(delimiters[0]) + 1):
+                for delimiter in delimiters:
+                    for delim_id in ['0', '1']:
+                        delim = delimiter.replace('?', delim_id)
+                        if sent[j:].startswith(delim):
+                            if '0' in delim:
+                                delimiters_stack.append(delim)
+                            elif '1' in delim:
+                                if len(delimiters_stack) > 0:
+                                    if delimiters_stack[-1] == delim.replace('1', '0'):
+                                        delimiters_stack.pop()
+                                        # add delimiters from stack at the end of the phrase
+                                        if delim.replace('1', '0') not in sent:
+                                            sentences[i] = delim.replace('1', '0') + sentences[i]
+                                    else:
+                                        import pdb; pdb.set_trace()
+                                        raise ValueError('Quotes do not match')
+
+            # add delimiters from stack at the end of the phrase
+            for d in reversed(range(len(delimiters_stack))):
+                sentences[i] = sentences[i] + delimiters_stack[d].replace('0', '1')
+            # add delimiters from stack at the beginning of the phrase if missing, i.e. when the quote started
+            # in a previous line
+            for d in delimiters_stack:
+                if d not in sentences[i]:
+                    sentences[i] = d + sentences[i]
+
+        if len(delimiters_stack) != 0:
+            raise ValueError('Quotes do not match')
+
+
+        for i in range(len(sentences)):
             for delimiter in delimiters:
-                for delim_id in ['0', '1']:
-                    delim = delimiter.replace('?', delim_id)
-                    if sent[j:].startswith(delim):
-                        if '0' in delim:
-                            delimiters_stack.append(delim)
-                        elif '1' in delim:
-                            if len(delimiters_stack) > 0:
-                                if delimiters_stack[-1] == delim.replace('1', '0'):
-                                    delimiters_stack.pop()
-                                    # add delimiters from stack at the end of the phrase
-                                    if delim.replace('1', '0') not in sent:
-                                        sentences[i] = delim.replace('1', '0') + sentences[i]
-                                else:
-                                    import pdb; pdb.set_trace()
-                                    raise ValueError('Quotes do not match')
-
-        # add delimiters from stack at the end of the phrase
-        for d in reversed(range(len(delimiters_stack))):
-            sentences[i] = sentences[i] + delimiters_stack[d].replace('0', '1')
-        # add delimiters from stack at the beginning of the phrase if missing, i.e. when the quote started
-        # in a previous line
-        for d in delimiters_stack:
-            if d not in sentences[i]:
-                sentences[i] = d + sentences[i]
-
-    if len(delimiters_stack) != 0:
-        raise ValueError('Quotes do not match')
-
-
-    for i in range(len(sentences)):
-        for delimiter in delimiters:
-            for id in ['0', '1']:
-                delim = delimiter.replace('?', id)
-                sentences[i] = sentences[i].replace(delim, delim[2])
-                        # if '1' in delim_id and delimiters_stack[-1] == delim_id.replace('1', '0'):
-                        # delimiters_stack.append(delim_id)
-    #
-    #
-    #
-    #             if sent[j:].startswith
-    #     for delim in delimiters:
-    #         delim = delim.replace('?', '1')
-    #         if sent.startswith(delim):
-    #             if i > 0:
-    #                 import pdb; pdb.set_trace()
-    #                 sentences[i - 1] = sentences[i - 1] + delim
-    #                 sentences[i] = sentences[i][: -len(delim)]
-
-    #         if delim:
-    #             delimiters_stack.append(delim)
-    #
-    # import pdb; pdb.set_trace()
+                for id in ['0', '1']:
+                    delim = delimiter.replace('?', id)
+                    sentences[i] = sentences[i].replace(delim, delim[2])
 
     # check to make sure there will be no utterances for segmentation with only OOV symbols
     no_space_voc = set(vocabulary)
