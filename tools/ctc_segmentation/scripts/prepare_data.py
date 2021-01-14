@@ -143,6 +143,8 @@ def split_text(
     transcript = transcript.replace("“Zarathustra”", "Zarathustra")
 
     def _find_quotes(text, quote='"', delimiter="~"):
+        if len(delimiter) != 1:
+            raise ValueError('The length of the delimiter should be 1.')
         clean_transcript = ''
         replace_id = 0
         for i, ch in enumerate(text):
@@ -238,8 +240,6 @@ def split_text(
     for _ in range(2):
         sentences = _remove_delim_from_beginning(delimiters, sentences)
 
-    for sent in sentences[:10]:
-        print(sent)
     delimiters_stack = []
     for i, sent in enumerate(sentences):
         for j in range(len(sent) - len(delimiters[0]) + 1):
@@ -259,7 +259,7 @@ def split_text(
                                 else:
                                     import pdb; pdb.set_trace()
                                     raise ValueError('Quotes do not match')
-        print('before:', delimiters_stack, sent)
+
         # add delimiters from stack at the end of the phrase
         for d in reversed(range(len(delimiters_stack))):
             sentences[i] = sentences[i] + delimiters_stack[d].replace('0', '1')
@@ -268,14 +268,16 @@ def split_text(
         for d in delimiters_stack:
             if d not in sentences[i]:
                 sentences[i] = d + sentences[i]
-        print('after:', delimiters_stack, sent)
-
 
     if len(delimiters_stack) != 0:
         raise ValueError('Quotes do not match')
-    for sent in sentences[6:]:
-        print(sent)
-    import pdb; pdb.set_trace()
+
+
+    for i in range(len(sentences)):
+        for delimiter in delimiters:
+            for id in ['0', '1']:
+                delim = delimiter.replace('?', id)
+                sentences[i] = sentences[i].replace(delim, delim[2])
                         # if '1' in delim_id and delimiters_stack[-1] == delim_id.replace('1', '0'):
                         # delimiters_stack.append(delim_id)
     #
