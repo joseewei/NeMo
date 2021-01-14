@@ -248,36 +248,34 @@ def split_text(
                     delim = delimiter.replace('?', delim_id)
                     if sent[j:].startswith(delim):
                         if '0' in delim:
-                            if delim in delimiters_stack:
-                                print (sent)
-                                import pdb; pdb.set_trace()
                             delimiters_stack.append(delim)
-                            print (f'added {delim}')
                         elif '1' in delim:
                             if len(delimiters_stack) > 0:
                                 if delimiters_stack[-1] == delim.replace('1', '0'):
-                                    print(f'removed: {delimiters_stack[-1]}')
                                     delimiters_stack.pop()
+                                    # add delimiters from stack at the end of the phrase
+                                    if delim.replace('1', '0') not in sent:
+                                        sentences[i] = delim.replace('1', '0') + sentences[i]
                                 else:
                                     import pdb; pdb.set_trace()
                                     raise ValueError('Quotes do not match')
-        print('----->', sent, delimiters_stack)
-        # import pdb; pdb.set_trace()
+        print('before:', delimiters_stack, sent)
+        # add delimiters from stack at the end of the phrase
         for d in reversed(range(len(delimiters_stack))):
             sentences[i] = sentences[i] + delimiters_stack[d].replace('0', '1')
+        # add delimiters from stack at the beginning of the phrase if missing, i.e. when the quote started
+        # in a previous line
+        for d in delimiters_stack:
+            if d not in sentences[i]:
+                sentences[i] = d + sentences[i]
+        print('after:', delimiters_stack, sent)
 
-    for sent in sentences[:10]:
-        print(sent)
-    import pdb;
 
     if len(delimiters_stack) != 0:
-        print (delimiters_stack)
-        import pdb; pdb.set_trace()
         raise ValueError('Quotes do not match')
-    for sent in sentences[:10]:
+    for sent in sentences[6:]:
         print(sent)
-    import pdb;
-    pdb.set_trace()
+    import pdb; pdb.set_trace()
                         # if '1' in delim_id and delimiters_stack[-1] == delim_id.replace('1', '0'):
                         # delimiters_stack.append(delim_id)
     #
