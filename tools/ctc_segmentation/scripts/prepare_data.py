@@ -23,7 +23,7 @@ import regex
 import scipy.io.wavfile as wav
 from num2words import num2words
 
-from .normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
+from normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from nemo.collections import asr as nemo_asr
 
 parser = argparse.ArgumentParser(description="Prepares text and audio files for segmentation")
@@ -136,9 +136,26 @@ def split_text(
         .replace("--", " -- ")
         .replace(". . .", "...")
     )
-
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
+
+    # one book specific
+    transcript = transcript.replace("“Zarathustra”", "Zarathustra")
+
+    def _find_quotes(text, quote='"', delimiter="~"):
+        clean_transcript = ''
+        replace_id = 0
+        for i, ch in enumerate(text):
+            if ch == quote and not (len(text) > i + 1 and text[i+1].isalpha() and i > 0 and text[i-1].isalpha()):
+                clean_transcript += f'{delimiter}{(replace_id) % 2}{quote}{delimiter}'
+                replace_id += 1
+            else:
+                clean_transcript += ch
+        return clean_transcript, f'{delimiter}?{quote}{delimiter}'
+
+    transcript, delimiter1 = _find_quotes(transcript)
+    transcript, delimiter2 = _find_quotes(transcript, "’", "#")
+    delimiters = [delimiter1, delimiter2]
 
     transcript = re.sub(r'(\.+)', '. ', transcript)
     if remove_brackets:
@@ -146,20 +163,16 @@ def split_text(
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
 
-    # one book specific
-    transcript = transcript.replace("“Zarathustra”", "Zarathustra")
-
     # find phrases in quotes
     with_quotes = re.findall(r'“[A-Za-z ?]+.*?”', transcript)
-
     sentences = []
     last_idx = 0
     for qq in with_quotes:
         qq_idx = transcript.index(qq, last_idx)
         if last_idx < qq_idx:
-            sentences.append(transcript[last_idx:qq_idx])
+            sentences.append(transcript[last_idx: qq_idx])
 
-        sentences.append(transcript[qq_idx : qq_idx + len(qq)])
+        sentences.append(transcript[qq_idx: qq_idx + len(qq)])
         last_idx = qq_idx + len(qq)
     sentences.append(transcript[last_idx:])
     sentences = [s.strip() for s in sentences if s.strip()]
@@ -172,7 +185,7 @@ def split_text(
     elif language not in ['ru', 'eng']:
         print(f'Consider using {language} unicode letters for better sentence split.')
 
-    # remove space in the middle of the lower case abbreviation to avoid spliting into separate sentences
+    # remove space in the middle of the lower case abbreviation to avoid splitting into separate sentences
     matches = re.findall(r'[a-z' + lower_case_unicode + ']\.\s[a-z' + lower_case_unicode + ']\.', transcript)
     for match in matches:
         transcript = transcript.replace(match, match.replace('. ', '.'))
@@ -211,6 +224,78 @@ def split_text(
         return sentences
 
     sentences = additional_split(sentences, additional_split_symbols, max_length)
+
+    def _remove_delim_from_beginning(delimiters, sentences):
+        for i, sent in enumerate(sentences):
+            for delim in delimiters:
+                delim = delim.replace('?', '1')
+                if sent.startswith(delim):
+                    if i > 0:
+                        sentences[i - 1] = sentences[i - 1] + delim
+                        sentences[i] = sentences[i][len(delim): ].strip()
+        return sentences
+
+    for _ in range(2):
+        sentences = _remove_delim_from_beginning(delimiters, sentences)
+
+    for sent in sentences[:10]:
+        print(sent)
+    delimiters_stack = []
+    for i, sent in enumerate(sentences):
+        for j in range(len(sent) - len(delimiters[0]) + 1):
+            for delimiter in delimiters:
+                for delim_id in ['0', '1']:
+                    delim = delimiter.replace('?', delim_id)
+                    if sent[j:].startswith(delim):
+                        if '0' in delim:
+                            if delim in delimiters_stack:
+                                print (sent)
+                                import pdb; pdb.set_trace()
+                            delimiters_stack.append(delim)
+                            print (f'added {delim}')
+                        elif '1' in delim:
+                            if len(delimiters_stack) > 0:
+                                if delimiters_stack[-1] == delim.replace('1', '0'):
+                                    print(f'removed: {delimiters_stack[-1]}')
+                                    delimiters_stack.pop()
+                                else:
+                                    import pdb; pdb.set_trace()
+                                    raise ValueError('Quotes do not match')
+        print('----->', sent, delimiters_stack)
+        # import pdb; pdb.set_trace()
+        for d in reversed(range(len(delimiters_stack))):
+            sentences[i] = sentences[i] + delimiters_stack[d].replace('0', '1')
+
+    for sent in sentences[:10]:
+        print(sent)
+    import pdb;
+
+    if len(delimiters_stack) != 0:
+        print (delimiters_stack)
+        import pdb; pdb.set_trace()
+        raise ValueError('Quotes do not match')
+    for sent in sentences[:10]:
+        print(sent)
+    import pdb;
+    pdb.set_trace()
+                        # if '1' in delim_id and delimiters_stack[-1] == delim_id.replace('1', '0'):
+                        # delimiters_stack.append(delim_id)
+    #
+    #
+    #
+    #             if sent[j:].startswith
+    #     for delim in delimiters:
+    #         delim = delim.replace('?', '1')
+    #         if sent.startswith(delim):
+    #             if i > 0:
+    #                 import pdb; pdb.set_trace()
+    #                 sentences[i - 1] = sentences[i - 1] + delim
+    #                 sentences[i] = sentences[i][: -len(delim)]
+
+    #         if delim:
+    #             delimiters_stack.append(delim)
+    #
+    # import pdb; pdb.set_trace()
 
     # check to make sure there will be no utterances for segmentation with only OOV symbols
     no_space_voc = set(vocabulary)
