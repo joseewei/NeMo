@@ -55,7 +55,8 @@ parser.add_argument(
     sentence split if eos sentence split resulted in sequence longer than --max_length. '
     'Use "|" as a separator between symbols, for example: ";|:|" ',
 )
-
+parser.add_argument('--split_quotes_by_speakers', type=str, default='false', choices=['true', 'false'],
+                    help='Carry quotes around characters phrases to distinguish narrator and characters if the reader impersonates')
 
 def convert_audio(in_file: str, wav_file: str = None, sample_rate: int = 16000) -> str:
     """
@@ -105,7 +106,7 @@ def split_text(
     min_length=20,
     max_length=100,
     additional_split_symbols=None,
-    split_quotes_by_speakers=False
+    split_quotes_by_speakers='false'
 ):
     """
     Breaks down the in_file into sentences. Each sentence will be on a separate line.
@@ -142,20 +143,20 @@ def split_text(
     transcript = re.sub(r' +', ' ', transcript)
 
     # one book specific
-    transcript = transcript.replace("“Zarathustra”", "Zarathustra").replace("d’ Alegre", "d’Alegre").replace("Cæsar", "Cesar")
+    transcript = (transcript.replace("“Zarathustra”", "Zarathustra")
+                  .replace("d’ Alegre", "d’Alegre")
+                  .replace("Cæsar", "Cesar")
+                  .replace("‘", "’")
+                  .replace("Project Gutenberg™’s", "Project Gutenberg’s"))
 
     def _valid_apostrophe(text, i):
         valid_phrases = ["Sant’"]
-        exceptions_for_case_2 = ["articulo mortis’"]
+        valid_list = ["articulo mortis’", " th’",  "cat-o’-nine-tails"]
+        invalid_list = ["’Tours’"]
 
         ch = text[i]
         case_1 = (ch == "'" or ch == "’") and len(text) > i + 1 and text[i + 1].isalpha() and i > 0 and text[i - 1].isalpha()
         case_2 = (ch == "'" or ch == "’") and len(text) > i + 1 and text[i + 1] in [' ', ",", "."] and i > 0 and text[i - 1] == 's'
-
-        if case_2:
-            for exception in exceptions_for_case_2:
-                if exception in text[i-20: i+20]:
-                    case_2 = False
 
         case_3 = False
         for phrase in valid_phrases:
@@ -163,9 +164,18 @@ def split_text(
                 case_3 = True
 
         valid = case_1 or case_2 or case_3
+
         if valid:
-            print('----->', text[i-20:i+20])
-            # import pdb; pdb.set_trace()
+            for exception in invalid_list:
+                if exception in text[i-20: i+20]:
+                    valid = False
+        else:
+            for exception in valid_list:
+                if exception in text[i-20: i+20]:
+                    valid = True
+
+        # if valid:
+        #     print('----->', text[i-20:i+20])
         return valid
 
     def _find_quotes(text, quote='"', delimiter="~"):
@@ -176,8 +186,8 @@ def split_text(
         for i, ch in enumerate(text):
             if ch == quote and not _valid_apostrophe(text, i):
                 clean_transcript += f'{delimiter}{replace_id % 2}{quote}{delimiter}'
-                print (i, replace_id, text[i -20: i +20])
-                print(clean_transcript[-30:])
+                # print (i, replace_id, text[i -20: i +20])
+                # print(clean_transcript[-30:])
                 replace_id += 1
             else:
                 clean_transcript += ch
@@ -185,6 +195,7 @@ def split_text(
             import pdb; pdb.set_trace()
         return clean_transcript, f'{delimiter}?{quote}{delimiter}'
 
+    split_quotes_by_speakers = split_quotes_by_speakers == 'true'
     if split_quotes_by_speakers:
         transcript, delimiter1 = _find_quotes(transcript)
         transcript, delimiter2 = _find_quotes(transcript, "’", "#")
@@ -420,6 +431,7 @@ if __name__ == '__main__':
                 min_length=args.min_length,
                 max_length=args.max_length,
                 additional_split_symbols=args.additional_split_symbols,
+                split_quotes_by_speakers=args.split_quotes_by_speakers
             )
         print(f'Processed text saved at {args.output_dir}')
 
