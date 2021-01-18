@@ -103,7 +103,7 @@ def get_huggingface_lm_model(
         else:
             return model_class.from_pretrained(pretrained_model_name)
     else:
-        raise ValueError(f"Use HuffingFace API directly in NeMo for {pretrained_model_name}")
+        raise ValueError(f"Use HuggingFace API directly in NeMo for {pretrained_model_name}")
 
 
 def get_huggingface_pretrained_lm_models_list(include_external: bool = False,) -> List[str]:

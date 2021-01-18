@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from nemo.collections.nlp.modules.common.encoder_module import EncoderModule
 import os
 import re
 from typing import Dict, Optional
@@ -26,7 +27,7 @@ from nemo.utils import logging
 __all__ = ['BertModule']
 
 
-class BertModule(NeuralModule, Exportable):
+class BertModule(EncoderModule, Exportable):
     @property
     def input_types(self) -> Optional[Dict[str, NeuralType]]:
         return {
