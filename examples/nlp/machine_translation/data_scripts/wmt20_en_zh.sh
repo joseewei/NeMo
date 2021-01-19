@@ -1,10 +1,8 @@
 wmt_dir=$1;
 out_dir=$2;
 script_dir=$(pwd)
-bicleaner_model_path=$3;
-bifixer_path=$4;
-langid_model_path=$5;
-moses_path=$6;
+langid_model_path=$3;
+moses_path=$4;
 
 mkdir -p ${out_dir}
 mkdir -p ${wmt_dir}
@@ -193,6 +191,9 @@ wc -l $OUTDIR/parallel/train.$lang.en
 wc -l $OUTDIR/parallel/train.$lang.zh
 
 echo "Fetching Validation data $lang" 
+sacrebleu -t wmt18 -l $lang --echo src > ${OUTDIR}/parallel/wmt18-$lang.src
+sacrebleu -t wmt18 -l $lang --echo ref > ${OUTDIR}/parallel/wmt18-$lang.ref
+
 sacrebleu -t wmt19 -l $lang --echo src > ${OUTDIR}/parallel/wmt19-$lang.src
 sacrebleu -t wmt19 -l $lang --echo ref > ${OUTDIR}/parallel/wmt19-$lang.ref
 
@@ -201,6 +202,9 @@ sacrebleu -t wmt20 -l $lang --echo src > ${OUTDIR}/parallel/wmt20-$lang.src
 sacrebleu -t wmt20 -l $lang --echo ref > ${OUTDIR}/parallel/wmt20-$lang.ref
 
 echo "Fetching Validation data $rev_lang" 
+sacrebleu -t wmt18 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt18-$rev_lang.src
+sacrebleu -t wmt18 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt18-$rev_lang.ref
+
 sacrebleu -t wmt19 -l $rev_lang --echo src > ${OUTDIR}/parallel/wmt19-$rev_lang.src
 sacrebleu -t wmt19 -l $rev_lang --echo ref > ${OUTDIR}/parallel/wmt19-$rev_lang.ref
 
@@ -215,17 +219,9 @@ echo "=================================================="
 echo "Normalizing text to traditional chinese"
 python $script_dir/traditional_to_simplified.py $OUTDIR/parallel/train.$lang.zh > $OUTDIR/parallel/train.$lang.sim.zh
 
-for t in wmt19 wmt20; do
+for t in wmt18 wmt19 wmt20; do
     python $script_dir/traditional_to_simplified.py ${OUTDIR}/parallel/$t-$lang.ref > ${OUTDIR}/parallel/$t-$lang.sim.ref
     python $script_dir/traditional_to_simplified.py ${OUTDIR}/parallel/$t-$rev_lang.src > ${OUTDIR}/parallel/$t-$rev_lang.sim.src
-done
-
-echo "Segmenting chinese ..."
-python $script_dir/segment_zh.py $OUTDIR/parallel/train.$lang.sim.zh > $OUTDIR/parallel/train.$lang.seg.zh
-
-for t in wmt19 wmt20; do
-    python $script_dir/segment_zh.py ${OUTDIR}/parallel/$t-$lang.sim.ref > ${OUTDIR}/parallel/$t-$lang.seg.ref
-    python $script_dir/segment_zh.py ${OUTDIR}/parallel/$t-$rev_lang.sim.src > ${OUTDIR}/parallel/$t-$rev_lang.seg.src
 done
 
 # Hacky symlink to get same prefix for En and Zh
@@ -233,8 +229,8 @@ ln -s ${OUTDIR}/parallel/train.$lang.en $OUTDIR/parallel/train.$lang.seg.en
 
 echo "Filtering data based on max length and length ratio ..."
 $moses_path/scripts/training/clean-corpus-n.perl \
-    -ratio 1.7 \
-    ${OUTDIR}/parallel/train.$lang.seg \
+    -ratio 1000 \
+    ${OUTDIR}/parallel/train.$lang.sim \
     $lang1 $lang2 \
     ${OUTDIR}/parallel/train.$lang.filter \
     1 150
@@ -248,52 +244,49 @@ fasttext predict $langid_model_path \
     ${OUTDIR}/parallel/train.$lang.filter.zh \
     > ${OUTDIR}/parallel/train.$lang.filter.zh.langid
 
-echo "Lang ID and Bi-Cleaner"
 paste -d "\t" \
-    ${OUTDIR}/parallel/train.$lang.filter.en \
-    ${OUTDIR}/parallel/train.$lang.filter.zh \
-    ${OUTDIR}/parallel/train.$lang.filter.en.langid \
-    ${OUTDIR}/parallel/train.$lang.filter.zh.langid \
-    | awk -F "\t" '{ if ($3 == "__label__en" && $4 == "__label__zh") {print "-\t-\t"$1"\t"$2}}' \
-    | bicleaner-classify - - $bicleaner_model_path > $OUTDIR/parallel/train.$lang.bicleaner.score
+    $OUTDIR/parallel/train.$lang.filter.en \
+    $OUTDIR/parallel/train.$lang.filter.zh \
+    $OUTDIR/parallel/train.$lang.filter.en.langid \
+    $OUTDIR/parallel/train.$lang.filter.zh.langid \
+    | awk -F "\t" '{ if ($3 == "__label__en" && $4 == "__label__zh") {print $1}}' > $OUTDIR/parallel/train.$lang.all.en
 
-echo "Creating data with different classifier confidence values ..."
-awk -F "\t" '{print $3}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.all.en
-awk -F "\t" '{print $4}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.all.zh
+paste -d "\t" \
+    $OUTDIR/parallel/train.$lang.filter.en \
+    $OUTDIR/parallel/train.$lang.filter.zh \
+    $OUTDIR/parallel/train.$lang.filter.en.langid \
+    $OUTDIR/parallel/train.$lang.filter.zh.langid \
+    | awk -F "\t" '{ if ($3 == "__label__en" && $4 == "__label__zh") {print $2}}' > $OUTDIR/parallel/train.$lang.all.zh
 
-awk -F "\t" '{ if ($5>0.5) {print $3}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.50.en
-awk -F "\t" '{ if ($5>0.5) {print $4}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.50.zh
-
-awk -F "\t" '{ if ($5>0.6) {print $3}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.60.en
-awk -F "\t" '{ if ($5>0.6) {print $4}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.60.zh
-
-awk -F "\t" '{ if ($5>0.75) {print $3}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.75.en
-awk -F "\t" '{ if ($5>0.75) {print $4}}' $OUTDIR/parallel/train.$lang.bicleaner.score > $OUTDIR/parallel/train.$lang.75.zh
+echo "Segmenting chinese ..."
+python $script_dir/segment_zh.py $OUTDIR/parallel/train.$lang.all.zh > $OUTDIR/parallel/train.$lang.all.seg.zh
 
 echo "=================================================="
 echo "========== Moses Punct Normalization ============="
 echo "=================================================="
 
 echo "Normalizing punct ..."
-for t in all 50 60 75; do
+for t in all; do
     for l in $lang1; do
         cat $OUTDIR/parallel/train.$lang.$t.$l | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l $l | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > $OUTDIR/parallel/train.clean.$lang.$t.$l
         cat $OUTDIR/parallel/train.clean.$lang.$t.$l | perl $moses_path/scripts/tokenizer/tokenizer.perl -l $l -no-escape -threads 20 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$l
     done
     cp $OUTDIR/parallel/train.$lang.$t.$lang2 $OUTDIR/parallel/train.clean.$lang.$t.$lang2
-    cp $OUTDIR/parallel/train.$lang.$t.$lang2 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2
+    cp $OUTDIR/parallel/train.$lang.$t.seg.$lang2 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2
 
     cat $OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.common
     cat $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.tok.common
+    cat $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.srctok.common
 
     shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang1 > $OUTDIR/parallel/train.clean.$lang.$t.$lang1.shuffled
     shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.$lang2.shuffled
 
     shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1.shuffled
     shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.tok.$lang2.shuffled
+    shuf --random-source=$OUTDIR/parallel/train.clean.$lang.$t.tok.$lang1 $OUTDIR/parallel/train.clean.$lang.$t.$lang2 > $OUTDIR/parallel/train.clean.$lang.$t.srctok.$lang2.shuffled
 done
 
-for t in wmt19 wmt20; do
+for t in wmt18 wmt19 wmt20; do
     cat ${OUTDIR}/parallel/$t-$lang.src | perl $moses_path/scripts/tokenizer/normalize-punctuation.perl -l en | perl $moses_path/scripts/tokenizer/remove-non-printing-char.perl > ${OUTDIR}/parallel/$t-$lang.clean.src
     cp ${OUTDIR}/parallel/$t-$lang.seg.ref ${OUTDIR}/parallel/$t-$lang.clean.tok.ref
     cat ${OUTDIR}/parallel/$t-$lang.clean.src | perl $moses_path/scripts/tokenizer/tokenizer.perl -threads 20 -no-escape -l en > ${OUTDIR}/parallel/$t-$lang.clean.tok.src
