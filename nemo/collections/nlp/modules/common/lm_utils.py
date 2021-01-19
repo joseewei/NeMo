@@ -30,6 +30,8 @@ from nemo.collections.nlp.modules.common.megatron.megatron_utils import (
     get_megatron_lm_models_list,
 )
 from nemo.utils import logging
+from transformers import AutoConfig, AutoModel
+from hydra.utils import instantiate
 
 __all__ = ['get_pretrained_lm_models_list', 'get_lm_model']
 
@@ -107,13 +109,15 @@ def get_transformer(
     encoder: bool = True,
 ) -> Union[EncoderModule, DecoderModule]:
 
-    module = None
+    assert model_name is None or config_dict is None, 'Only one of model_name or config_dict should be used'
+
+    model = None
 
     if library == 'nemo':
         if model_name is not None:
             logging.error(f'NeMo transformers cannot be loaded from NGC yet.')
 
-        module = get_nemo_transformer_model(model_name, config_dict, encoder)
+        model = get_nemo_transformer_model(model_name, config_dict, encoder)
 
         if checkpoint_file is not None:
             if os.path.isfile(checkpoint_file):
@@ -122,4 +126,16 @@ def get_transformer(
             else:
                 logging.error(f'Checkpoint not found at {checkpoint_file}.')
 
-    return module
+    elif library == 'huggingface':
+        if model_name is not None:
+            if model_name in get_huggingface_pretrained_lm_models_list():
+                if pretrained:
+                    model = AutoModel.from_pretrained(model_name)
+                else:
+                    cfg = AutoConfig.from_pretrained(model_name)
+                    model = AutoModel.from_config(cfg)
+        else:
+            cfg = instantiate(config_dict)
+            model = AutoModel.from_config(cfg)
+
+    return model
