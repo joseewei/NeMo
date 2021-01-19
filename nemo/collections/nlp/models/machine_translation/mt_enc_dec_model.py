@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import itertools
+from nemo.collections.nlp.modules.common.lm_utils import get_transformer
 
 import omegaconf
 from omegaconf.omegaconf import OmegaConf
@@ -81,7 +82,8 @@ class MTEncDecModel(EncDecNLPModel):
         # )
         encoder_cfg = OmegaConf.to_container(cfg.get('encoder'))
         encoder_cfg['vocab_size'] = self.encoder_vocab_size
-        self.encoder = get_nemo_transformer_model(config_dict=encoder_cfg)
+        library = encoder_cfg.pop('library', 'nemo')
+        self.encoder = get_transformer(library=library, config_dict=encoder_cfg)
 
         # TODO: user get_decoder function with support for HF and Megatron
         self.decoder = TransformerDecoderNM(

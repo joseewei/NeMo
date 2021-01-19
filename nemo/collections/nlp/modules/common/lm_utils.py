@@ -14,10 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from logging import config
+from nemo.collections.nlp.modules.common.decoder_module import DecoderModule
 from nemo.collections.nlp.modules.common.transformer.transformer_utils import get_nemo_transformer_model
 from nemo.collections.nlp.modules.common.encoder_module import EncoderModule
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from nemo.collections.nlp.modules.common.bert_module import BertModule
 from nemo.collections.nlp.modules.common.huggingface.huggingface_utils import (
@@ -97,55 +98,28 @@ def get_lm_model(
     return model
 
 
-def get_lm_encoder(
-    name: Optional[str] = None,
+def get_transformer(
+    library: str = 'nemo',
+    model_name: Optional[str] = None,
+    pretrained: bool = False,
     config_dict: Optional[dict] = None,
-    config_file: Optional[str] = None,
     checkpoint_file: Optional[str] = None,
-) -> EncoderModule:
-    """
-    Helper function to instantiate a pretrained language model encoder. 
-    Only one of config_file, config_dict, or pretrained_model_name should be used.
-    If pretrained_model_name is used, then a pretrained model will be downloaded and cached from either HuggingFace or NGC.
-    To initialize the model with random weights a config file or config dict must be used.
-    If using random weights, _target_ should be included in the config_dict or config_file
-    as we are using hydra.utils.instantiate.
+    encoder: bool = True,
+) -> Union[EncoderModule, DecoderModule]:
 
-    Args:
-        pretrained_model_name: pretrained model name, for example, bert-base-uncased or megatron-bert-cased.
-            See get_pretrained_lm_models_list() for full list.
-        config_dict: path to the model configuration dictionary
-        config_file: path to the model configuration file
-        checkpoint_file: path to the pretrained model checkpoint
+    module = None
 
-    Returns:
-        Pretrained BertModule
-    """
+    if library == 'nemo':
+        if model_name is not None:
+            logging.error(f'NeMo transformers cannot be loaded from NGC yet.')
 
-    # check that only one of pretrained_model_name, config_dict, or config_file is used.
-    assert not (
-        pretrained_model_name is not None or config_dict is not None or config_file is not None
-    ), "Only one of pretrained_model_name, config_dict, or config_file should be used"
+        module = get_nemo_transformer_model(model_name, config_dict, encoder)
 
-    # Pretrained models to be downloaded from HF or NGC.
-    if pretrained_model_name is not None:
-        # check valid model type
-        if not pretrained_model_name or pretrained_model_name not in get_pretrained_lm_models_list(
-            include_external=False
-        ):
-            logging.warning(
-                f'{pretrained_model_name} is not in get_pretrained_lm_models_list(include_external=False), '
-                f'will be using AutoModel from HuggingFace.'
-            )
+        if checkpoint_file is not None:
+            if os.path.isfile(checkpoint_file):
+                logging.info(f'Checkpoint found at {checkpoint_file} will be used to restore weights.')
+                logging.error(f'Loading transformer weights from checkpoint file has not been implemented yet.')
+            else:
+                logging.error(f'Checkpoint not found at {checkpoint_file}.')
 
-    if "megatron" in pretrained_model_name:
-        model, checkpoint_file = get_megatron_lm_model(
-            pretrained_model_name=pretrained_model_name, checkpoint_file=checkpoint_file,
-        )
-    else:
-        model = get_huggingface_lm_model(pretrained_model_name=pretrained_model_name,)
-
-    if checkpoint_file and os.path.exists(checkpoint_file):
-        model.restore_weights(restore_path=checkpoint_file)
-
-    return model
+    return module

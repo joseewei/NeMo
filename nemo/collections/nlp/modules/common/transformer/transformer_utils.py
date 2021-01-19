@@ -21,10 +21,8 @@ from typing import Optional, Union
 
 
 def get_nemo_transformer_model(
-    name: Optional[str] = None,
+    pretrained_model_name: Optional[str] = None,
     config_dict: Optional[Union[dict, DictConfig]] = None,
-    config_file: Optional[str] = None,
-    checkpoint_file: Optional[str] = None,
     encoder: bool = True,
 ) -> Union[TransformerEncoderNM, TransformerDecoderNM]:
     """Returns NeMo transformer. Module configuration will be taken in the following order of precedence:
@@ -37,20 +35,15 @@ def get_nemo_transformer_model(
     and must be specified if using config_dict or config_file.
 
     Args:
-        name (Optional[str]): model name to download from NGC
+        pretrained_model_name (Optional[str]): model name to download from NGC
         config_dict (Optional[dict], optional): model configuration parameters. Defaults to None.
         config_file (Optional[str], optional): path to json file containing model configuration. Defaults to None.
         checkpoint_file (Optional[str], optional): load weights from path to local checkpoint. Defaults to None.
         encoder (bool, optional): True will use EncoderTransformerNM, False will use DecoderTransformerNM. Defaults to True.
     """
     cfg = None
-    if config_file is not None:
-        logging.error('Configuring NeMo Transformer from json has not been implemented yet. Please use config_dict.')
-        # raise ValueError(
-        #     "Instantiate NeMo Transformer from json has not been implemented yet. Please use config_dict."
-        # )
 
-    elif config_dict is not None:
+    if config_dict is not None:
         assert (
             config_dict.get('vocab_size') is not None
             and config_dict.get('hidden_size') is not None
@@ -58,18 +51,14 @@ def get_nemo_transformer_model(
             and config_dict.get('inner_size') is not None
         ), 'vocab_size, hidden_size, num_layers, and inner_size must are mandatory arguments'
         cfg = config_dict
+    elif pretrained_model_name is not None:
+        logging.info(
+            f'NeMo transformers cannot be loaded from NGC yet. Using {pretrained_model_name} with configuration {cfg}.'
+        )
 
-    elif name is not None:
-        logging.info(f'NeMo transformers cannot be loaded from NGC yet. Using {name} with configuration {cfg}.')
     if encoder:
         model = TransformerEncoderNM(**cfg)
     else:
         model = TransformerDecoderNM(**cfg)
 
-    if checkpoint_file is not None:
-        if os.path.isfile(checkpoint_file):
-            logging.info(f'Checkpoint found at {checkpoint_file} will be used to restore weights.')
-            logging.error(f'Loading pretrained NeMo transformer has not been implemented yet.')
-        else:
-            logging.error(f'Checkpoint not found at {checkpoint_file}.')
-    return model, checkpoint_file
+    return model
