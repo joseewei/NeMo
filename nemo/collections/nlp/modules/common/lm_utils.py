@@ -86,8 +86,6 @@ def get_lm_model(
             pretrained_model_name=pretrained_model_name,
             checkpoint_file=checkpoint_file,
         )
-    if "nemo_transformer" in pretrained_model_name:
-        model, checkpoint_file = get_nemo_transformer_model()
     else:
         model = get_huggingface_lm_model(
             config_dict=config_dict, config_file=config_file, pretrained_model_name=pretrained_model_name,
@@ -100,7 +98,7 @@ def get_lm_model(
 
 
 def get_lm_encoder(
-    pretrained_model_name: Optional[str] = None,
+    name: Optional[str] = None,
     config_dict: Optional[dict] = None,
     config_file: Optional[str] = None,
     checkpoint_file: Optional[str] = None,

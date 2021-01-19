@@ -72,4 +72,4 @@ def get_nemo_transformer_model(
             logging.error(f'Loading pretrained NeMo transformer has not been implemented yet.')
         else:
             logging.error(f'Checkpoint not found at {checkpoint_file}.')
-    return model
+    return model, checkpoint_file
