@@ -313,9 +313,9 @@ class MTEncDecModel(EncDecNLPModel):
         return self._setup_dataloader_from_config(cfg=self._cfg.test_ds)
 
     def _setup_dataloader_from_config(self, cfg: DictConfig):
-        cached_dataset_fname = self.get_cached_dataset_fname(cfg.src_file_name, cfg.tgt_file_name, cfg.tokens_in_batch)
-        logging.info(f'Loading from cached dataset {cached_dataset_fname}')
-        dataset = pickle.load(open(cached_dataset_fname, 'rb'))
+        cached_dataset_path = self.get_cached_dataset_path(cfg.src_file_name, cfg.tgt_file_name, cfg.tokens_in_batch)
+        logging.info(f'Loading from cached dataset {cached_dataset_path}')
+        dataset = pickle.load(open(cached_dataset_path, 'rb'))
         dataset.reverse_lang_direction = cfg.get("reverse_lang_direction", False)
         if cfg.shuffle:
             sampler = pt_data.RandomSampler(dataset)
@@ -438,9 +438,9 @@ class MTEncDecModel(EncDecNLPModel):
             tokens_in_batch=self._cfg.test_ds.get('tokens_in_batch', 512),
         )
 
-    def get_cached_dataset_fname(self, src_fname: str, tgt_fname: str, num_tokens: int) -> str:
-        cached_dataset_fname = f'{src_fname}_{tgt_fname}_batches.tokens.{num_tokens}.pkl'
-        return cached_dataset_fname
+    def get_cached_dataset_path(self, out_dir: str, src_fname: str, tgt_fname: str, num_tokens: int) -> str:
+        cached_dataset_path = os.path.join(out_dir, f'{src_fname}_{tgt_fname}_batches.tokens.{num_tokens}.pkl')
+        return cached_dataset_path
 
     def preprocess_dataset(
         self,
@@ -514,12 +514,12 @@ class MTEncDecModel(EncDecNLPModel):
         print('Batchifying ...')
         dataset.batchify(encoder_tokenizer, decoder_tokenizer)
         start = time.time()
-        cached_dataset_fname = self.get_cached_dataset_fname(src_fname, tgt_fname, tokens_in_batch)
-        pickle.dump(dataset, open(os.path.join(out_dir, cached_dataset_fname, 'wb')))
+        cached_dataset_path = self.get_cached_dataset_path(out_dir, src_fname, tgt_fname, tokens_in_batch)
+        pickle.dump(dataset, open(cached_dataset_path, 'wb'))
         end = time.time()
         print(f'Took {end - start} time to pickle')
         start = time.time()
-        dataset = pickle.load(open(os.path.join(out_dir, cached_dataset_fname, 'rb')))
+        dataset = pickle.load(open(cached_dataset_path, 'rb'))
         end = time.time()
         print(f'Took {end - start} time to unpickle')
 
