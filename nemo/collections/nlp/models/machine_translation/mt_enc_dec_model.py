@@ -17,7 +17,7 @@ import itertools
 import time
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
 import os
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, TemporaryFile
 
 from youtokentome.youtokentome import BPE
 from nemo.collections.nlp.modules.common.lm_utils import get_transformer
@@ -89,7 +89,7 @@ class MTEncDecModel(EncDecNLPModel):
         #     pre_ln=cfg.encoder.pre_ln,
         # )
         encoder_cfg = OmegaConf.to_container(cfg.get('encoder'))
-        # encoder_cfg['vocab_size'] = self.encoder_vocab_size
+        encoder_cfg['vocab_size'] = self.encoder_vocab_size
         library = encoder_cfg.pop('library', 'nemo')
         model_name = encoder_cfg.pop('model_name', None)
         pretrained = encoder_cfg.pop('pretrained', False)
@@ -285,38 +285,38 @@ class MTEncDecModel(EncDecNLPModel):
     def test_epoch_end(self, outputs):
         return self.eval_epoch_end(outputs, 'test')
 
+    # def setup_training_data(self, train_data_config: Optional[DictConfig]):
+    #     self._train_dl = self._setup_dataloader_from_config(cfg=train_data_config)
+
+    # def setup_validation_data(self, val_data_config: Optional[DictConfig]):
+    #     self._validation_dl = self._setup_dataloader_from_config(cfg=val_data_config)
+
+    # def setup_test_data(self, test_data_config: Optional[DictConfig]):
+    #     self._test_dl = self._setup_dataloader_from_config(cfg=test_data_config)
+
     def setup_training_data(self, train_data_config: Optional[DictConfig]):
-        self._train_dl = self._setup_dataloader_from_config(cfg=train_data_config)
+        pass
 
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
-        self._validation_dl = self._setup_dataloader_from_config(cfg=val_data_config)
+        pass
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
-        self._test_dl = self._setup_dataloader_from_config(cfg=test_data_config)
+        pass
+
+    def train_dataloader(self):
+        return self._setup_dataloader_from_config(cfg=self._cfg.train_ds)
+
+    def validation_dataloader(self):
+        return self._setup_dataloader_from_config(cfg=self._cfg.validation_ds)
+
+    def test_dataloader(self):
+        return self._setup_dataloader_from_config(cfg=self._cfg.test_ds)
 
     def _setup_dataloader_from_config(self, cfg: DictConfig):
-        if cfg.get("load_from_cached_dataset", False):
-            logging.info('Loading from cached dataset %s' % (cfg.src_file_name))
-            if cfg.src_file_name != cfg.tgt_file_name:
-                raise ValueError("src must be equal to target for cached dataset")
-            dataset = pickle.load(open(cfg.src_file_name, 'rb'))
-            dataset.reverse_lang_direction = cfg.get("reverse_lang_direction", False)
-        else:
-            dataset = TranslationDataset(
-                dataset_src=str(Path(cfg.src_file_name).expanduser()),
-                dataset_tgt=str(Path(cfg.tgt_file_name).expanduser()),
-                tokens_in_batch=cfg.tokens_in_batch,
-                clean=cfg.get("clean", False),
-                max_seq_length=cfg.get("max_seq_length", 512),
-                min_seq_length=cfg.get("min_seq_length", 1),
-                max_seq_length_diff=cfg.get("max_seq_length_diff", 512),
-                max_seq_length_ratio=cfg.get("max_seq_length_ratio", 512),
-                cache_ids=cfg.get("cache_ids", False),
-                cache_data_per_node=cfg.get("cache_data_per_node", False),
-                use_cache=cfg.get("use_cache", False),
-                reverse_lang_direction=cfg.get("reverse_lang_direction", False),
-            )
-            dataset.batchify(self.encoder_tokenizer, self.decoder_tokenizer)
+        cached_dataset_fname = self.get_cached_dataset_fname(cfg.src_file_name, cfg.tgt_file_name, cfg.tokens_in_batch)
+        logging.info(f'Loading from cached dataset {cached_dataset_fname}')
+        dataset = pickle.load(open(cached_dataset_fname, 'rb'))
+        dataset.reverse_lang_direction = cfg.get("reverse_lang_direction", False)
         if cfg.shuffle:
             sampler = pt_data.RandomSampler(dataset)
         else:
@@ -376,6 +376,8 @@ class MTEncDecModel(EncDecNLPModel):
 
     def prepare_data(self) -> None:
 
+        logging.info('Preprocessing datasets.')
+
         # preprocess train dataset
         self.preprocess_dataset(
             encoder_tokenizer_library=self._cfg.encoder_tokenizer.get('tokenizer_name', 'yttm'),
@@ -394,7 +396,6 @@ class MTEncDecModel(EncDecNLPModel):
             max_seq_length=self._cfg.encoder.get('max_sequence_length', 512),
             min_seq_length=self._cfg.encoder.get('min_sequence_length', 1),
             tokens_in_batch=self._cfg.train_ds.get('tokens_in_batch', 512),
-            mode='train',
         )
 
         # preprocess validation dataset
@@ -415,7 +416,6 @@ class MTEncDecModel(EncDecNLPModel):
             max_seq_length=self._cfg.encoder.get('max_sequence_length', 512),
             min_seq_length=self._cfg.encoder.get('min_sequence_length', 1),
             tokens_in_batch=self._cfg.validation_ds.get('tokens_in_batch', 512),
-            mode='validation',
         )
 
         # preprocess test dataset
@@ -436,8 +436,11 @@ class MTEncDecModel(EncDecNLPModel):
             max_seq_length=self._cfg.encoder.get('max_sequence_length', 512),
             min_seq_length=self._cfg.encoder.get('min_sequence_length', 1),
             tokens_in_batch=self._cfg.test_ds.get('tokens_in_batch', 512),
-            mode='test',
         )
+
+    def get_cached_dataset_fname(self, src_fname: str, tgt_fname: str, num_tokens: int) -> str:
+        cached_dataset_fname = f'{src_fname}_{tgt_fname}_batches.tokens.{num_tokens}.pkl'
+        return cached_dataset_fname
 
     def preprocess_dataset(
         self,
@@ -456,8 +459,7 @@ class MTEncDecModel(EncDecNLPModel):
         out_dir: str = None,
         max_seq_length: int = 512,
         min_seq_length: int = 1,
-        tokens_in_batch: str = '8000,12000,16000,40000',
-        mode: str = None,
+        tokens_in_batch: int = 8192,
     ) -> None:
         encoder_tokenizer = None
         decoder_tokenizer = None
@@ -514,11 +516,12 @@ class MTEncDecModel(EncDecNLPModel):
             print('Batchifying ...')
             dataset.batchify(encoder_tokenizer, decoder_tokenizer)
             start = time.time()
-            pickle.dump(dataset, open(os.path.join(out_dir, f'{mode}_batches.tokens.{num_tokens}.pkl', 'wb')))
+            cached_dataset_fname = self.get_cached_dataset_fname(src_fname, tgt_fname, tokens_in_batch)
+            pickle.dump(dataset, open(os.path.join(out_dir, cached_dataset_fname, 'wb')))
             end = time.time()
             print(f'Took {end - start} time to pickle')
             start = time.time()
-            dataset = pickle.load(open(os.path.join(out_dir, f'{mode}_batches.tokens.{num_tokens}.pkl', 'rb')))
+            dataset = pickle.load(open(os.path.join(out_dir, cached_dataset_fname, 'rb')))
             end = time.time()
             print(f'Took {end - start} time to unpickle')
 
@@ -532,13 +535,21 @@ def train_yttm_bpe(data: List[str], vocab_size: int, model: str):
         model (str): path to save learned BPE model
     """
     if len(data) > 1:
-        with TemporaryDirectory() as tmpdir:
-            concat_path = os.path.join(tmpdir, 'concat_dataset.txt')
-            with open(concat_path) as out_file:
-                for filepath in data:
-                    with open(filepath) as in_file:
-                        for line in in_file:
-                            out_file.write(line)
+        out_file = TemporaryFile(mode='w+')
+        for filepath in data:
+            with open(filepath) as in_file:
+                for line in in_file:
+                    out_file.write(line)
+        BPE.train(data=out_file, vocab_size=vocab_size, model=model)
+        out_file.close()
+
+        # with TemporaryDirectory() as tmpdir:
+        #     concat_path = os.path.join(tmpdir, 'concat_dataset.txt')
+        #     with open(concat_path) as out_file:
+        #         for filepath in data:
+        #             with open(filepath) as in_file:
+        #                 for line in in_file:
+        #                     out_file.write(line)
     else:
         BPE.train(data=data[0], vocab_size=vocab_size, model=model)
 

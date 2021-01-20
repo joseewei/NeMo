@@ -3,7 +3,7 @@ model:
   len_pen: 0.6
   max_generation_delta: 5
   label_smoothing: 0.1
-  use_shared_tokenizer: False
+  use_shared_tokenizer: True
   data_preprocessing_out_dir: ???
 
   train_ds:
@@ -12,9 +12,9 @@ model:
     tokens_in_batch: 512
     clean: true
     max_seq_length: 512
-    cache_ids: true
+    cache_ids: false
     cache_data_per_node: false
-    use_cache: true
+    use_cache: false
     shuffle: true
     num_samples: -1
     drop_last: false
@@ -27,9 +27,9 @@ model:
     tokens_in_batch: 512
     clean: false
     max_seq_length: 512
-    cache_ids: true
+    cache_ids: false
     cache_data_per_node: false
-    use_cache: true
+    use_cache: false
     shuffle: false
     num_samples: -1
     drop_last: false
@@ -42,9 +42,9 @@ model:
     tokens_in_batch: 512
     clean: false
     max_seq_length: 512
-    cache_ids: true
+    cache_ids: false
     cache_data_per_node: false
-    use_cache: true
+    use_cache: false
     shuffle: false
     num_samples: -1
     drop_last: false
