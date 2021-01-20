@@ -151,7 +151,7 @@ def split_text(
 
     def _valid_apostrophe(text, i):
         valid_phrases = ["Sant’"]
-        valid_list = ["articulo mortis’", " th’",  "cat-o’-nine-tails"]
+        valid_list = ["articulo mortis’", " th’",  "cat-o’-nine-tails", "’Celebrated Crimes’", "’Crimes Celebres’"]
         invalid_list = ["’Tours’"]
 
         ch = text[i]
@@ -174,8 +174,8 @@ def split_text(
                 if exception in text[i-20: i+20]:
                     valid = True
 
-        # if valid:
-        #     print('----->', text[i-20:i+20])
+        if valid:
+            print('----->', text[i-20:i+20])
         return valid
 
     def _find_quotes(text, quote='"', delimiter="~"):
@@ -186,8 +186,8 @@ def split_text(
         for i, ch in enumerate(text):
             if ch == quote and not _valid_apostrophe(text, i):
                 clean_transcript += f'{delimiter}{replace_id % 2}{quote}{delimiter}'
-                # print (i, replace_id, text[i -20: i +20])
-                # print(clean_transcript[-30:])
+                print (i, replace_id, text[i -20: i +20])
+                print(clean_transcript[-30:])
                 replace_id += 1
             else:
                 clean_transcript += ch
