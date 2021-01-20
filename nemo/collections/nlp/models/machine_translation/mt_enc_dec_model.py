@@ -12,12 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 import itertools
+import time
+from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
+import os
+from tempfile import TemporaryDirectory
+
+from youtokentome.youtokentome import BPE
 from nemo.collections.nlp.modules.common.lm_utils import get_transformer
 
 import omegaconf
 from omegaconf.omegaconf import OmegaConf
-from nemo.collections.nlp.modules.common.transformer.transformer_utils import get_nemo_transformer_model
+from nemo.collections.nlp.modules.common.transformer.transformer_utils import get_nemo_transformer
 import pickle
 import random
 from pathlib import Path
@@ -43,6 +50,7 @@ from nemo.collections.nlp.modules.common.transformer import BeamSearchSequenceGe
 from nemo.collections.nlp.modules.common.transformer.transformer import TransformerDecoderNM, TransformerEncoderNM
 from nemo.core.classes.common import typecheck
 from nemo.utils import logging, model_utils
+
 
 __all__ = ['MTEncDecModel']
 
@@ -81,9 +89,13 @@ class MTEncDecModel(EncDecNLPModel):
         #     pre_ln=cfg.encoder.pre_ln,
         # )
         encoder_cfg = OmegaConf.to_container(cfg.get('encoder'))
-        encoder_cfg['vocab_size'] = self.encoder_vocab_size
+        # encoder_cfg['vocab_size'] = self.encoder_vocab_size
         library = encoder_cfg.pop('library', 'nemo')
-        self.encoder = get_transformer(library=library, config_dict=encoder_cfg)
+        model_name = encoder_cfg.pop('model_name', None)
+        pretrained = encoder_cfg.pop('pretrained', False)
+        self.encoder = get_transformer(
+            library=library, model_name=model_name, pretrained=pretrained, config_dict=encoder_cfg
+        )
 
         # TODO: user get_decoder function with support for HF and Megatron
         self.decoder = TransformerDecoderNM(
@@ -361,3 +373,192 @@ class MTEncDecModel(EncDecNLPModel):
     @classmethod
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
+
+    def prepare_data(self) -> None:
+
+        # preprocess train dataset
+        self.preprocess_dataset(
+            encoder_tokenizer_library=self._cfg.encoder_tokenizer.get('tokenizer_name', 'yttm'),
+            encoder_tokenizer_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
+            encoder_vocab_size=self._cfg.encoder_tokenizer.get('vocab_size', 8192),
+            encoder_bpe_dropout=self._cfg.encoder_tokenizer.get('bpe_dropout', 0.0),
+            decoder_tokenizer_library=self._cfg.decoder_tokenizer.get('tokenizer_name', 'yttm'),
+            decoder_tokenizer_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
+            decoder_vocab_size=self._cfg.decoder_tokenizer.get('vocab_size', 8192),
+            decoder_bpe_dropout=self._cfg.decoder_tokenizer.get('bpe_dropout', 0.0),
+            use_shared_tokenizer=self._cfg.get('use_shared_tokenizer', True),
+            clean=self._cfg.train_ds.get('clean', False),
+            src_fname=self._cfg.train_ds.get('src_file_name'),
+            tgt_fname=self._cfg.train_ds.get('tgt_file_name'),
+            out_dir=self._cfg.get('data_preprocessing_out_dir'),
+            max_seq_length=self._cfg.encoder.get('max_sequence_length', 512),
+            min_seq_length=self._cfg.encoder.get('min_sequence_length', 1),
+            tokens_in_batch=self._cfg.train_ds.get('tokens_in_batch', 512),
+            mode='train',
+        )
+
+        # preprocess validation dataset
+        self.preprocess_dataset(
+            encoder_tokenizer_library=self._cfg.encoder_tokenizer.get('tokenizer_name', 'yttm'),
+            encoder_tokenizer_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
+            encoder_vocab_size=self._cfg.encoder_tokenizer.get('vocab_size', 8192),
+            encoder_bpe_dropout=self._cfg.encoder_tokenizer.get('bpe_dropout', 0.0),
+            decoder_tokenizer_library=self._cfg.decoder_tokenizer.get('tokenizer_name', 'yttm'),
+            decoder_tokenizer_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
+            decoder_vocab_size=self._cfg.decoder_tokenizer.get('vocab_size', 8192),
+            decoder_bpe_dropout=self._cfg.decoder_tokenizer.get('bpe_dropout', 0.0),
+            use_shared_tokenizer=self._cfg.get('use_shared_tokenizer', True),
+            clean=self._cfg.validation_ds.get('clean', False),
+            src_fname=self._cfg.validation_ds.get('src_file_name'),
+            tgt_fname=self._cfg.validation_ds.get('tgt_file_name'),
+            out_dir=self._cfg.get('data_preprocessing_out_dir'),
+            max_seq_length=self._cfg.encoder.get('max_sequence_length', 512),
+            min_seq_length=self._cfg.encoder.get('min_sequence_length', 1),
+            tokens_in_batch=self._cfg.validation_ds.get('tokens_in_batch', 512),
+            mode='validation',
+        )
+
+        # preprocess test dataset
+        self.preprocess_dataset(
+            encoder_tokenizer_library=self._cfg.encoder_tokenizer.get('tokenizer_name', 'yttm'),
+            encoder_tokenizer_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
+            encoder_vocab_size=self._cfg.encoder_tokenizer.get('vocab_size', 8192),
+            encoder_bpe_dropout=self._cfg.encoder_tokenizer.get('bpe_dropout', 0.0),
+            decoder_tokenizer_library=self._cfg.decoder_tokenizer.get('tokenizer_name', 'yttm'),
+            decoder_tokenizer_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
+            decoder_vocab_size=self._cfg.decoder_tokenizer.get('vocab_size', 8192),
+            decoder_bpe_dropout=self._cfg.decoder_tokenizer.get('bpe_dropout', 0.0),
+            use_shared_tokenizer=self._cfg.get('use_shared_tokenizer', True),
+            clean=self._cfg.test_ds.get('clean', False),
+            src_fname=self._cfg.test_ds.get('src_file_name'),
+            tgt_fname=self._cfg.test_ds.get('tgt_file_name'),
+            out_dir=self._cfg.get('data_preprocessing_out_dir'),
+            max_seq_length=self._cfg.encoder.get('max_sequence_length', 512),
+            min_seq_length=self._cfg.encoder.get('min_sequence_length', 1),
+            tokens_in_batch=self._cfg.test_ds.get('tokens_in_batch', 512),
+            mode='test',
+        )
+
+    def preprocess_dataset(
+        self,
+        encoder_tokenizer_library: str = None,
+        encoder_tokenizer_model_name: Optional[str] = None,
+        encoder_vocab_size: Optional[int] = None,
+        encoder_bpe_dropout: Optional[float] = 0.0,
+        decoder_tokenizer_library: str = None,
+        decoder_tokenizer_model_name: Optional[str] = None,
+        decoder_vocab_size: Optional[int] = None,
+        decoder_bpe_dropout: Optional[float] = 0.0,
+        use_shared_tokenizer: bool = False,
+        clean: bool = False,
+        src_fname: str = None,
+        tgt_fname: str = None,
+        out_dir: str = None,
+        max_seq_length: int = 512,
+        min_seq_length: int = 1,
+        tokens_in_batch: str = '8000,12000,16000,40000',
+        mode: str = None,
+    ) -> None:
+        encoder_tokenizer = None
+        decoder_tokenizer = None
+        if encoder_tokenizer_library == 'yttm':
+            encoder_tokenizer_bpe_model = None
+            if use_shared_tokenizer:
+                assert (
+                    encoder_vocab_size == decoder_vocab_size
+                ), "If using a shared tokenizer, then encoder vocab size and decoder vocab size should be the same."
+
+                encoder_tokenizer_bpe_model = os.path.join(
+                    out_dir, f'yttm_shared_tokenizer.{encoder_vocab_size}.BPE.model'
+                )
+                train_yttm_bpe(
+                    data=[src_fname, tgt_fname], vocab_size=encoder_vocab_size, model=encoder_tokenizer_bpe_model,
+                )
+                encoder_tokenizer_model = encoder_tokenizer_bpe_model
+            else:
+                encoder_bpe_model = os.path.join(out_dir, f'yttm_encoder_tokenizer.{encoder_vocab_size}.BPE.model')
+                train_yttm_bpe(data=[src_fname], vocab_size=encoder_vocab_size, model=encoder_bpe_model)
+                encoder_tokenizer_model = encoder_bpe_model
+            encoder_tokenizer = get_tokenizer(
+                tokenizer_name='yttm', tokenizer_model=encoder_tokenizer_model, bpe_dropout=encoder_bpe_dropout
+            )
+
+        if decoder_tokenizer_library == 'yttm':
+            decoder_tokenizer_bpe_model = None
+            if not use_shared_tokenizer:
+                decoder_bpe_model = os.path.join(out_dir, f'yttm_decoder_tokenizer.{decoder_vocab_size}.BPE.model')
+                train_yttm_bpe(data=[tgt_fname], vocab_size=decoder_vocab_size, model=decoder_bpe_model)
+                decoder_tokenizer_model = decoder_bpe_model
+                decoder_tokenizer = get_tokenizer(
+                    tokenizer_name='yttm', tokenizer_model=decoder_tokenizer_model, bpe_dropout=decoder_bpe_dropout
+                )
+
+        if use_shared_tokenizer:
+            decoder_tokenizer = encoder_tokenizer
+
+        tokens_in_batch = [int(item) for item in tokens_in_batch.split(',')]
+        for num_tokens in tokens_in_batch:
+            dataset = TranslationDataset(
+                dataset_src=str(Path(src_fname).expanduser()),
+                dataset_tgt=str(Path(tgt_fname).expanduser()),
+                tokens_in_batch=num_tokens,
+                clean=clean,
+                max_seq_length=max_seq_length,
+                min_seq_length=min_seq_length,
+                max_seq_length_diff=max_seq_length,
+                max_seq_length_ratio=max_seq_length,
+                cache_ids=False,
+                cache_data_per_node=False,
+                use_cache=False,
+            )
+            print('Batchifying ...')
+            dataset.batchify(encoder_tokenizer, decoder_tokenizer)
+            start = time.time()
+            pickle.dump(dataset, open(os.path.join(out_dir, f'{mode}_batches.tokens.{num_tokens}.pkl', 'wb')))
+            end = time.time()
+            print(f'Took {end - start} time to pickle')
+            start = time.time()
+            dataset = pickle.load(open(os.path.join(out_dir, f'{mode}_batches.tokens.{num_tokens}.pkl', 'rb')))
+            end = time.time()
+            print(f'Took {end - start} time to unpickle')
+
+
+def train_yttm_bpe(data: List[str], vocab_size: int, model: str):
+    """Train YTTM BPE model.
+
+    Args:
+        data (List[str]): list of paths of text files to train on
+        vocab_size (int): BPE vocab size
+        model (str): path to save learned BPE model
+    """
+    if len(data) > 1:
+        with TemporaryDirectory() as tmpdir:
+            concat_path = os.path.join(tmpdir, 'concat_dataset.txt')
+            with open(concat_path) as out_file:
+                for filepath in data:
+                    with open(filepath) as in_file:
+                        for line in in_file:
+                            out_file.write(line)
+    else:
+        BPE.train(data=data[0], vocab_size=vocab_size, model=model)
+
+
+# @dataclass
+# class PreprocessDatasetConfig:
+#     encoder_tokenizer_library: str = None
+#     encoder_tokenizer_model_name: Optional[str] = None
+#     encoder_vocab_size: Optional[int] = None
+#     encoder_bpe_dropout: Optional[float] = 0.0
+#     decoder_tokenizer_library: str = None
+#     decoder_tokenizer_model_name: Optional[str] = None
+#     decoder_vocab_size: Optional[int] = None
+#     decoder_bpe_dropout: Optional[float] = 0.0
+#     use_shared_tokenizer: bool = False
+#     clean: bool = False
+#     src_fname: str = None
+#     tgt_fname: str = None
+#     out_dir: str = None
+#     max_seq_length: int = 512
+#     min_seq_length: int = 1
+#     tokens_in_batch: str = '8000,12000,16000,40000'
+

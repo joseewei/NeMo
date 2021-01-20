@@ -3,6 +3,8 @@ model:
   len_pen: 0.6
   max_generation_delta: 5
   label_smoothing: 0.1
+  use_shared_tokenizer: False
+  data_preprocessing_out_dir: ???
 
   train_ds:
     src_file_name: ???

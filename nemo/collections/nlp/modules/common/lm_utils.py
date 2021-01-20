@@ -15,7 +15,7 @@
 # limitations under the License.
 from logging import config
 from nemo.collections.nlp.modules.common.decoder_module import DecoderModule
-from nemo.collections.nlp.modules.common.transformer.transformer_utils import get_nemo_transformer_model
+from nemo.collections.nlp.modules.common.transformer.transformer_utils import get_nemo_transformer
 from nemo.collections.nlp.modules.common.encoder_module import EncoderModule
 import os
 from typing import List, Optional, Union
@@ -109,7 +109,9 @@ def get_transformer(
     encoder: bool = True,
 ) -> Union[EncoderModule, DecoderModule]:
 
-    assert model_name is None or config_dict is None, 'Only one of model_name or config_dict should be used'
+    assert model_name is None or (
+        config_dict is None or config_dict == {}
+    ), 'Only one of model_name or config_dict should be used'
 
     model = None
 
@@ -117,7 +119,7 @@ def get_transformer(
         if model_name is not None:
             logging.error(f'NeMo transformers cannot be loaded from NGC yet.')
 
-        model = get_nemo_transformer_model(model_name, config_dict, encoder)
+        model = get_nemo_transformer(model_name, config_dict, encoder)
 
         if checkpoint_file is not None:
             if os.path.isfile(checkpoint_file):
@@ -134,8 +136,11 @@ def get_transformer(
                 else:
                     cfg = AutoConfig.from_pretrained(model_name)
                     model = AutoModel.from_config(cfg)
+            else:
+                logging.error(f'{model_name} not found in list of HuggingFace pretrained models')
         else:
             cfg = instantiate(config_dict)
             model = AutoModel.from_config(cfg)
+        model.hidden_size = model.config.hidden_size
 
     return model

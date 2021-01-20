@@ -20,7 +20,7 @@ from nemo.utils import logging
 from typing import Optional, Union
 
 
-def get_nemo_transformer_model(
+def get_nemo_transformer(
     pretrained_model_name: Optional[str] = None,
     config_dict: Optional[Union[dict, DictConfig]] = None,
     encoder: bool = True,

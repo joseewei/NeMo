@@ -17,7 +17,7 @@ from typing import Optional
 
 from pytorch_lightning import Trainer
 
-from nemo.collections.nlp.models.machine_translation.mt_enc_dec_config import AAYNBaseConfig
+from nemo.collections.nlp.models.machine_translation.mt_enc_dec_config import AAYNBaseConfig, MTEncDecModelConfig
 from nemo.collections.nlp.models.machine_translation.mt_enc_dec_model import MTEncDecModel
 from nemo.core.config import hydra_runner
 from nemo.core.config.modelPT import NemoConfig
@@ -89,7 +89,7 @@ Usage:
 
 @dataclass
 class MTEncDecConfig(NemoConfig):
-    model: AAYNBaseConfig = AAYNBaseConfig()
+    model: MTEncDecModelConfig = MTEncDecModelConfig()
     trainer: Optional[TrainerConfig] = TrainerConfig()
     exp_manager: Optional[ExpManagerConfig] = ExpManagerConfig(name='MTEncDec', files_to_copy=[])
 
@@ -97,8 +97,8 @@ class MTEncDecConfig(NemoConfig):
 @hydra_runner(config_path="conf", config_name="aayn_base")
 def main(cfg: MTEncDecConfig) -> None:
     # # merge default config with user specified config
-    default_cfg = MTEncDecConfig()
-    cfg = update_model_config(default_cfg, cfg)
+    # default_cfg = MTEncDecConfig()
+    # cfg = update_model_config(default_cfg, cfg)
     logging.info("\n\n************** Experiment configuration ***********")
     logging.info(f'Config: {cfg.pretty()}')
 
