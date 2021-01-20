@@ -498,32 +498,30 @@ class MTEncDecModel(EncDecNLPModel):
         if use_shared_tokenizer:
             decoder_tokenizer = encoder_tokenizer
 
-        tokens_in_batch = [int(item) for item in tokens_in_batch.split(',')]
-        for num_tokens in tokens_in_batch:
-            dataset = TranslationDataset(
-                dataset_src=str(Path(src_fname).expanduser()),
-                dataset_tgt=str(Path(tgt_fname).expanduser()),
-                tokens_in_batch=num_tokens,
-                clean=clean,
-                max_seq_length=max_seq_length,
-                min_seq_length=min_seq_length,
-                max_seq_length_diff=max_seq_length,
-                max_seq_length_ratio=max_seq_length,
-                cache_ids=False,
-                cache_data_per_node=False,
-                use_cache=False,
-            )
-            print('Batchifying ...')
-            dataset.batchify(encoder_tokenizer, decoder_tokenizer)
-            start = time.time()
-            cached_dataset_fname = self.get_cached_dataset_fname(src_fname, tgt_fname, tokens_in_batch)
-            pickle.dump(dataset, open(os.path.join(out_dir, cached_dataset_fname, 'wb')))
-            end = time.time()
-            print(f'Took {end - start} time to pickle')
-            start = time.time()
-            dataset = pickle.load(open(os.path.join(out_dir, cached_dataset_fname, 'rb')))
-            end = time.time()
-            print(f'Took {end - start} time to unpickle')
+        dataset = TranslationDataset(
+            dataset_src=str(Path(src_fname).expanduser()),
+            dataset_tgt=str(Path(tgt_fname).expanduser()),
+            tokens_in_batch=tokens_in_batch,
+            clean=clean,
+            max_seq_length=max_seq_length,
+            min_seq_length=min_seq_length,
+            max_seq_length_diff=max_seq_length,
+            max_seq_length_ratio=max_seq_length,
+            cache_ids=False,
+            cache_data_per_node=False,
+            use_cache=False,
+        )
+        print('Batchifying ...')
+        dataset.batchify(encoder_tokenizer, decoder_tokenizer)
+        start = time.time()
+        cached_dataset_fname = self.get_cached_dataset_fname(src_fname, tgt_fname, tokens_in_batch)
+        pickle.dump(dataset, open(os.path.join(out_dir, cached_dataset_fname, 'wb')))
+        end = time.time()
+        print(f'Took {end - start} time to pickle')
+        start = time.time()
+        dataset = pickle.load(open(os.path.join(out_dir, cached_dataset_fname, 'rb')))
+        end = time.time()
+        print(f'Took {end - start} time to unpickle')
 
 
 def train_yttm_bpe(data: List[str], vocab_size: int, model: str):
@@ -535,21 +533,22 @@ def train_yttm_bpe(data: List[str], vocab_size: int, model: str):
         model (str): path to save learned BPE model
     """
     if len(data) > 1:
-        out_file = TemporaryFile(mode='w+')
-        for filepath in data:
-            with open(filepath) as in_file:
-                for line in in_file:
-                    out_file.write(line)
-        BPE.train(data=out_file, vocab_size=vocab_size, model=model)
-        out_file.close()
+        # out_file = TemporaryFile(mode='w+')
+        # for filepath in data:
+        #     with open(filepath) as in_file:
+        #         for line in in_file:
+        #             out_file.write(line)
+        # BPE.train(data=out_file, vocab_size=vocab_size, model=model)
+        # out_file.close()
 
-        # with TemporaryDirectory() as tmpdir:
-        #     concat_path = os.path.join(tmpdir, 'concat_dataset.txt')
-        #     with open(concat_path) as out_file:
-        #         for filepath in data:
-        #             with open(filepath) as in_file:
-        #                 for line in in_file:
-        #                     out_file.write(line)
+        with TemporaryDirectory() as tmpdir:
+            concat_path = os.path.join(tmpdir, 'concat_dataset.txt')
+            with open(concat_path, 'w+') as out_file:
+                for filepath in data:
+                    with open(filepath) as in_file:
+                        for line in in_file:
+                            out_file.write(line)
+            BPE.train(data=concat_path, vocab_size=vocab_size, model=model)
     else:
         BPE.train(data=data[0], vocab_size=vocab_size, model=model)
 
