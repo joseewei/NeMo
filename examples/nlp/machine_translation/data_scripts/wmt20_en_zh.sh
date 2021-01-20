@@ -224,8 +224,13 @@ for t in wmt18 wmt19 wmt20; do
     python $script_dir/traditional_to_simplified.py ${OUTDIR}/parallel/$t-$rev_lang.src > ${OUTDIR}/parallel/$t-$rev_lang.sim.src
 done
 
+for t in wmt18 wmt19 wmt20; do
+    python $script_dir/segment_zh.py ${OUTDIR}/parallel/$t-$lang.sim.ref > ${OUTDIR}/parallel/$t-$lang.seg.ref
+    python $script_dir/segment_zh.py ${OUTDIR}/parallel/$t-$rev_lang.sim.src > ${OUTDIR}/parallel/$t-$rev_lang.seg.src
+done
+
 # Hacky symlink to get same prefix for En and Zh
-ln -s ${OUTDIR}/parallel/train.$lang.en $OUTDIR/parallel/train.$lang.seg.en
+ln -s ${OUTDIR}/parallel/train.$lang.en $OUTDIR/parallel/train.$lang.sim.en
 
 echo "Filtering data based on max length and length ratio ..."
 $moses_path/scripts/training/clean-corpus-n.perl \
