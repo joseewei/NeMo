@@ -93,12 +93,12 @@ def main(cfg: DictConfig) -> None:
             # setting up train and validation Pytorch DataLoaders
             # setup the data dir to get class weights statistics
             model.update_data_dir(data_dir=data_dir)
-            # then we're setting up loss, use model.dataset.class_balancing,
-            # if you want to add class weights to the CrossEntropyLoss
-            model.setup_loss(class_balancing=cfg.model.dataset.class_balancing)
             # finally, setup train and validation Pytorch DataLoaders
             model.setup_training_data()
             model.setup_validation_data()
+            # then we're setting up loss, use model.dataset.class_balancing,
+            # if you want to add class weights to the CrossEntropyLoss
+            model.setup_loss(class_balancing=cfg.model.dataset.class_balancing)
             logging.info(f'Using config file of the pretrained model')
         else:
             do_training = False
@@ -107,9 +107,11 @@ def main(cfg: DictConfig) -> None:
                 f'Using pretrained {cfg.pretrained_model} model weights and skipping finetuning.'
             )
 
+    evaluate = False
     if do_training:
         trainer.fit(model)
         if cfg.model.nemo_path:
+            evaluate = True
             model.save_to(cfg.model.nemo_path)
 
     """
@@ -120,15 +122,14 @@ def main(cfg: DictConfig) -> None:
     During evaluation/testing, it is currently advisable to construct a new Trainer with single GPU
     and no DDP to obtain accurate results
     """
-    logging.info(
-        'During evaluation/testing, it is currently advisable to construct a new Trainer with single GPU '
-        'and no DDP to obtain accurate results'
-    )
-    gpu = 1 if cfg.trainer.gpus != 0 else 0
-    trainer = pl.Trainer(gpus=gpu)
-    model.set_trainer(trainer)
-
-    if do_training:
+    if evaluate:
+        logging.info(
+            'During evaluation/testing, it is currently advisable to construct a new Trainer with single GPU '
+            'and no DDP to obtain accurate results'
+        )
+        gpu = 1 if cfg.trainer.gpus != 0 else 0
+        trainer = pl.Trainer(gpus=gpu)
+        model.set_trainer(trainer)
         # run evaluation on a dataset from file
         # only possible if model.dataset.data_dir is specified
         # change the path to the file you want to use for the final evaluation
@@ -142,7 +143,7 @@ def main(cfg: DictConfig) -> None:
 
     # run an inference on a few examples
     queries = ['we bought four shirts from the nvidia gear store in santa clara.', 'Nvidia is a company.']
-    results = model.add_predictions(queries)
+    results = model.add_predictions(queries, output_file='predictions.txt')
 
     for query, result in zip(queries, results):
         logging.info(f'Query : {query}')

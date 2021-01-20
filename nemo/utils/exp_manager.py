@@ -66,6 +66,8 @@ class CallbackParams:
     mode: Optional[str] = "auto"
     period: Optional[int] = 1
     prefix: Optional[str] = None  # If None, exp_manager will attempt to handle the filepath
+    postfix: str = ".nemo"
+    save_best_model: bool = False
 
 
 @dataclass
@@ -145,8 +147,16 @@ def exp_manager(trainer: 'pytorch_lightning.Trainer', cfg: Optional[Union[DictCo
         log_dir (Path): The final logging directory where logging files are saved. Usually the concatenation of
             exp_dir, name, and version.
     """
+    # Add rank information to logger
+    # Note: trainer.global_rank and trainer.is_global_zero are not set until trainer.fit, so have to hack around it
+    global_rank = trainer.node_rank * trainer.num_gpus + trainer.local_rank
+    logging.rank = global_rank
+
     if cfg is None:
         logging.error("exp_manager did not receive a cfg argument. It will be disabled.")
+        return
+    if trainer.fast_dev_run:
+        logging.info("Trainer was called with fast_dev_run. exp_manager will return without any functionality.")
         return
 
     # Ensure passed cfg is compliant with ExpManagerConfig
@@ -168,6 +178,7 @@ def exp_manager(trainer: 'pytorch_lightning.Trainer', cfg: Optional[Union[DictCo
         explicit_log_dir=cfg.explicit_log_dir,
         use_datetime_version=cfg.use_datetime_version,
     )
+
     if cfg.resume_if_exists:
         check_resume(trainer, log_dir, cfg.resume_past_end, cfg.resume_ignore_no_checkpoint)
 
@@ -184,11 +195,8 @@ def exp_manager(trainer: 'pytorch_lightning.Trainer', cfg: Optional[Union[DictCo
     trainer._default_root_dir = log_dir
 
     # Handle Loggers by creating file and handle DEBUG statements
-    # Note: trainer.global_rank and trainer.is_global_zero are not set until trainer.fit, so have to hack around it
-    global_rank = trainer.node_rank * trainer.num_gpus + trainer.local_rank
     log_file = log_dir / f'nemo_log_globalrank-{global_rank}_localrank-{trainer.local_rank}.txt'
     logging.add_file_handler(log_file)
-    logging.rank = global_rank
 
     # For some reason, LearningRateLogger requires trainer to have a logger. Safer to create logger on all ranks
     # not just global rank 0.
@@ -289,7 +297,6 @@ def check_resume(
     checkpoint_dir = Path(Path(log_dir) / "checkpoints")
     checkpoint = None
     end_checkpoints = list(checkpoint_dir.glob("*end.ckpt"))
-    end_checkpoints.extend(list(checkpoint_dir.glob("*.nemo")))
     last_checkpoints = list(checkpoint_dir.glob("*last.ckpt"))
     if not checkpoint_dir.exists():
         if resume_ignore_no_checkpoint:
@@ -362,10 +369,12 @@ def check_explicit_log_dir(
             "The pytorch lightning trainer that was passed to exp_manager contained a logger and explicit_log_dir: "
             f"{explicit_log_dir} was pass to exp_manager. Please remove the logger from the lightning trainer."
         )
-    if exp_dir or name or version:
+    # Checking only (explicit_log_dir) vs (exp_dir and version).
+    # The `name` will be used as the actual name of checkpoint/archive.
+    if exp_dir or version:
         logging.error(
             f"exp_manager received explicit_log_dir: {explicit_log_dir} and at least one of exp_dir: {exp_dir}, "
-            f"name: {name}, or version: {version}. Please note that exp_dir, name, and version will be ignored."
+            f"or version: {version}. Please note that exp_dir, name, and version will be ignored."
         )
     if is_global_rank_zero() and Path(explicit_log_dir).exists():
         logging.warning(f"Exp_manager is logging to {explicit_log_dir}, but it already exists.")
@@ -538,12 +547,26 @@ class NeMoModelCheckpoint(ModelCheckpoint):
     """ Light wrapper around Lightning's ModelCheckpoint to force a saved checkpoint on train_end
     """
 
+    def __init__(self, save_best_model=False, postfix=".nemo", **kwargs):
+        # Parse and store "extended" parameters: save_best model and postfix.
+        self.save_best_model = save_best_model
+        self.postfix = postfix
+        # Call the parent class constructor with the remaining kwargs.
+        super().__init__(**kwargs)
+
     @rank_zero_only
     def on_train_end(self, trainer, pl_module):
-        pl_module.save_to(save_path=os.path.join(self.dirpath, self.prefix + '.nemo'))
+        if trainer.fast_dev_run:
+            return None
+        # Load the best model and then re-save it
+        if self.save_best_model:
+            trainer.checkpoint_connector.restore(self.best_model_path, on_gpu=trainer.on_gpu)
+        pl_module.save_to(save_path=os.path.join(self.dirpath, self.prefix + self.postfix))
 
 
-def configure_checkpointing(trainer: 'pytorch_lightning.Trainer', log_dir: Path, name: str, params: Dict):
+def configure_checkpointing(
+    trainer: 'pytorch_lightning.Trainer', log_dir: Path, name: str, params: Dict,
+):
     """ Adds ModelCheckpoint to trainer. Raises CheckpointMisconfigurationError if trainer already has a ModelCheckpoint
     callback or if trainer.weights_save_path was passed to Trainer.
     """
@@ -558,10 +581,8 @@ def configure_checkpointing(trainer: 'pytorch_lightning.Trainer', log_dir: Path,
         raise CheckpointMisconfigurationError(
             "The pytorch lightning was passed weights_save_path. This variable is ignored by exp_manager"
         )
-    else:
-        logging.warning("trainer had a weights_save_path of cwd(). This was ignored.")
-    # Create the callback and attach it to trainer
 
+    # Create the callback and attach it to trainer
     if params.filepath is None:
         params.filepath = Path(log_dir / 'checkpoints' / f'--{{{params.monitor}:.2f}}-{{epoch}}')
     if params.prefix is None:

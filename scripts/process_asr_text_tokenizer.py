@@ -52,8 +52,16 @@ parser.add_argument(
     help='Type of the SentencePiece model. Can be `bpe`, `unigram`, `char` or `word`.'
     'Used only if --tokenizer == `spe`',
 )
+parser.add_argument(
+    '--spe_character_coverage',
+    type=float,
+    default=1.0,
+    help="Character coverage percentage for SentencePiece tokenization. For languages "
+    "with large vocabulary, should be close to 0.9995, otherwise kept as 1.0",
+)
+parser.add_argument('--no_lower_case', dest='lower_case', action='store_false')
 parser.add_argument("--log", action='store_true')
-parser.set_defaults(log=False)
+parser.set_defaults(log=False, lower_case=True)
 args = parser.parse_args()
 
 
@@ -94,7 +102,15 @@ def __build_document_from_manifests(
     return document_path
 
 
-def __process_data(text_path: str, dst_folder: str, vocab_size: int, tokenizer_type: str, spe_type: str):
+def __process_data(
+    text_path: str,
+    dst_folder: str,
+    vocab_size: int,
+    tokenizer_type: str,
+    spe_type: str,
+    spe_character_coverage: float,
+    lower_case: bool,
+):
     """
     Converts flac to wav and build manifests's json
     Args:
@@ -103,15 +119,18 @@ def __process_data(text_path: str, dst_folder: str, vocab_size: int, tokenizer_t
         vocab_size: vocabular size used in encoding the text
         tokenizer_type: type of tokenization to perform - wpe or spe
         spe_type: type of tokenization model used for spe.
+        spe_character_coverage: float value between 0 and 1 (as a percentage). For languages with a vast charset,
+            can be < 1.0, but for all other languages, it should be set as 1.0
+        lower_case: whether to tokenize with lower case character set only (for english)
 
     Returns:
     """
-    tokenizer_dir = os.path.join(dst_folder, 'tokenizer_{}_v{}').format(tokenizer_type, vocab_size)
-
-    if not os.path.exists(tokenizer_dir):
-        os.makedirs(tokenizer_dir)
-
     if tokenizer_type == 'spe':
+        tokenizer_dir = os.path.join(dst_folder, 'tokenizer_{}_{}_v{}').format(tokenizer_type, spe_type, vocab_size)
+
+        if not os.path.exists(tokenizer_dir):
+            os.makedirs(tokenizer_dir)
+
         if os.path.exists(os.path.join(tokenizer_dir, 'tokenizer.model')):
             logging.warning("Model file already exists, overriding old model file !")
             os.remove(os.path.join(tokenizer_dir, 'tokenizer.model'))
@@ -120,13 +139,19 @@ def __process_data(text_path: str, dst_folder: str, vocab_size: int, tokenizer_t
             data_file=text_path,
             vocab_size=vocab_size,
             sample_size=-1,
-            do_lower_case=True,
+            do_lower_case=lower_case,
             output_dir=tokenizer_dir,
             tokenizer_type=spe_type,
+            character_coverage=spe_character_coverage,
         )
 
     else:
-        tokenizer = tokenizers.BertWordPieceTokenizer(lowercase=True)
+        tokenizer_dir = os.path.join(dst_folder, 'tokenizer_{}_v{}').format(tokenizer_type, vocab_size)
+
+        if not os.path.exists(tokenizer_dir):
+            os.makedirs(tokenizer_dir)
+
+        tokenizer = tokenizers.BertWordPieceTokenizer(lowercase=lower_case)
 
         tokenizer.train(text_path, vocab_size=vocab_size)
         tokenizer.save_model(tokenizer_dir)
@@ -141,6 +166,8 @@ def main():
     vocab_size = args.vocab_size
     tokenizer = args.tokenizer
     spe_type = args.spe_type
+    spe_character_coverage = args.spe_character_coverage
+    lower_case = args.lower_case
 
     if not os.path.exists(data_root):
         os.makedirs(data_root)
@@ -152,7 +179,15 @@ def main():
         text_corpus_path = __build_document_from_manifests(data_root, manifests)
     else:
         text_corpus_path = data_file
-    tokenizer_path = __process_data(text_corpus_path, data_root, vocab_size, tokenizer, spe_type)
+    tokenizer_path = __process_data(
+        text_corpus_path,
+        data_root,
+        vocab_size,
+        tokenizer,
+        spe_type,
+        lower_case=lower_case,
+        spe_character_coverage=spe_character_coverage,
+    )
 
     print("Serialized tokenizer at location :", tokenizer_path)
     logging.info('Done!')

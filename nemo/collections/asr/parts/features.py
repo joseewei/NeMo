@@ -45,6 +45,7 @@ from torch_stft import STFT
 
 from nemo.collections.asr.parts.perturb import AudioAugmentor
 from nemo.collections.asr.parts.segment import AudioSegment
+from nemo.collections.common.parts.patch_utils import stft_patch
 from nemo.utils import logging
 
 CONSTANT = 1e-5
@@ -144,19 +145,16 @@ class FeaturizerFactory(object):
 
 # Create helper class to patch forward func for use with AMP
 class STFTPatch(STFT):
-    def __init__(self, *params, **kw_params):
-        super(STFTPatch, self).__init__(*params, **kw_params)
-
     def forward(self, input_data):
-        return super(STFTPatch, self).transform(input_data)[0]
+        return super().transform(input_data)[0]
 
 
-# Create helper class for STFT that yields num_frames = num_samples / hop_length
-class STFTExactPad(STFT):
+# Create helper class for STFT that yields num_frames = num_samples // hop_length
+class STFTExactPad(STFTPatch):
     """adapted from Prem Seetharaman's https://github.com/pseeth/pytorch-stft"""
 
     def __init__(self, *params, **kw_params):
-        super(STFTExactPad, self).__init__(*params, **kw_params)
+        super().__init__(*params, **kw_params)
         self.pad_amount = (self.filter_length - self.hop_length) // 2
 
     def inverse(self, magnitude, phase):
@@ -191,9 +189,6 @@ class STFTExactPad(STFT):
 
         return inverse_transform
 
-    def forward(self, input_data):
-        return super(STFTExactPad, self).transform(input_data)[0]
-
 
 class FilterbankFeatures(nn.Module):
     """Featurizer that converts wavs to Mel Spectrograms.
@@ -224,7 +219,7 @@ class FilterbankFeatures(nn.Module):
         pad_value=0,
         mag_power=2.0,
     ):
-        super(FilterbankFeatures, self).__init__()
+        super().__init__()
         self.log_zero_guard_value = log_zero_guard_value
         if (
             n_window_size is None
@@ -246,14 +241,13 @@ class FilterbankFeatures(nn.Module):
         self.stft_exact_pad = stft_exact_pad
         self.stft_conv = stft_conv
 
-        if stft_exact_pad:
-            logging.info("STFT using exact pad")
-            self.stft = STFTExactPad(self.n_fft, self.hop_length, self.win_length, window)
-
-        elif stft_conv:
+        if stft_conv:
             logging.info("STFT using conv")
-            self.stft = STFTPatch(self.n_fft, self.hop_length, self.win_length, window)
-
+            if stft_exact_pad:
+                logging.info("STFT using exact pad")
+                self.stft = STFTExactPad(self.n_fft, self.hop_length, self.win_length, window)
+            else:
+                self.stft = STFTPatch(self.n_fft, self.hop_length, self.win_length, window)
         else:
             logging.info("STFT using torch")
             torch_windows = {
@@ -266,13 +260,14 @@ class FilterbankFeatures(nn.Module):
             window_fn = torch_windows.get(window, None)
             window_tensor = window_fn(self.win_length, periodic=False) if window_fn else None
             self.register_buffer("window", window_tensor)
-            self.stft = lambda x: torch.stft(
+            self.stft = lambda x: stft_patch(
                 x,
                 n_fft=self.n_fft,
                 hop_length=self.hop_length,
                 win_length=self.win_length,
-                center=True,
+                center=False if stft_exact_pad else True,
                 window=self.window.to(dtype=torch.float),
+                return_complex=False,
             )
 
         self.normalize = normalize
@@ -285,7 +280,7 @@ class FilterbankFeatures(nn.Module):
         highfreq = highfreq or sample_rate / 2
 
         filterbanks = torch.tensor(
-            librosa.filters.mel(sample_rate, self.n_fft, n_mels=nfilt, fmin=lowfreq, fmax=highfreq), dtype=torch.float,
+            librosa.filters.mel(sample_rate, self.n_fft, n_mels=nfilt, fmin=lowfreq, fmax=highfreq), dtype=torch.float
         ).unsqueeze(0)
         self.register_buffer("fb", filterbanks)
 
@@ -307,6 +302,13 @@ class FilterbankFeatures(nn.Module):
         # log_zero_guard_value is the the small we want to use, we support
         # an actual number, or "tiny", or "eps"
         self.log_zero_guard_type = log_zero_guard_type
+        logging.debug(f"sr: {sample_rate}")
+        logging.debug(f"n_fft: {self.n_fft}")
+        logging.debug(f"win_length: {self.win_length}")
+        logging.debug(f"hop_length: {self.hop_length}")
+        logging.debug(f"n_mels: {nfilt}")
+        logging.debug(f"fmin: {lowfreq}")
+        logging.debug(f"fmax: {highfreq}")
 
     def log_zero_guard_value_fn(self, x):
         if isinstance(self.log_zero_guard_value, str):
@@ -333,6 +335,10 @@ class FilterbankFeatures(nn.Module):
     @torch.no_grad()
     def forward(self, x, seq_len):
         seq_len = self.get_seq_len(seq_len.float())
+
+        if self.stft_exact_pad and not self.stft_conv:
+            p = (self.n_fft - self.hop_length) // 2
+            x = torch.nn.functional.pad(x.unsqueeze(1), (p, p), "reflect").squeeze(1)
 
         # dither
         if self.dither > 0:
@@ -388,4 +394,5 @@ class FilterbankFeatures(nn.Module):
             pad_amt = x.size(-1) % pad_to
             if pad_amt != 0:
                 x = nn.functional.pad(x, (0, pad_to - pad_amt), value=self.pad_value)
+
         return x, seq_len

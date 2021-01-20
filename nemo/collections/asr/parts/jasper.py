@@ -19,27 +19,26 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-jasper_activations = {
-    "hardtanh": nn.Hardtanh,
-    "relu": nn.ReLU,
-    "selu": nn.SELU,
-}
+from nemo.collections.asr.parts.activations import Swish
+
+jasper_activations = {"hardtanh": nn.Hardtanh, "relu": nn.ReLU, "selu": nn.SELU, "swish": Swish}
 
 
-def init_weights(m, mode='xavier_uniform'):
+def init_weights(m, mode: Optional[str] = 'xavier_uniform'):
     if isinstance(m, MaskedConv1d):
         init_weights(m.conv, mode)
     if isinstance(m, (nn.Conv1d, nn.Linear)):
-        if mode == 'xavier_uniform':
-            nn.init.xavier_uniform_(m.weight, gain=1.0)
-        elif mode == 'xavier_normal':
-            nn.init.xavier_normal_(m.weight, gain=1.0)
-        elif mode == 'kaiming_uniform':
-            nn.init.kaiming_uniform_(m.weight, nonlinearity="relu")
-        elif mode == 'kaiming_normal':
-            nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
-        else:
-            raise ValueError("Unknown Initialization mode: {0}".format(mode))
+        if mode is not None:
+            if mode == 'xavier_uniform':
+                nn.init.xavier_uniform_(m.weight, gain=1.0)
+            elif mode == 'xavier_normal':
+                nn.init.xavier_normal_(m.weight, gain=1.0)
+            elif mode == 'kaiming_uniform':
+                nn.init.kaiming_uniform_(m.weight, nonlinearity="relu")
+            elif mode == 'kaiming_normal':
+                nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+            else:
+                raise ValueError("Unknown Initialization mode: {0}".format(mode))
     elif isinstance(m, nn.BatchNorm1d):
         if m.track_running_stats:
             m.running_mean.zero_()
@@ -255,11 +254,6 @@ class SqueezeExcite(nn.Module):
         y = torch.sigmoid(y)
 
         return x * y
-
-
-class Swish(nn.Module):
-    def forward(self, x):
-        return x * torch.sigmoid(x)
 
 
 class JasperBlock(nn.Module):
@@ -561,7 +555,3 @@ class JasperBlock(nn.Module):
             return xs + [out], lens
 
         return [out], lens
-
-
-# Register swish activation function
-jasper_activations['swish'] = Swish

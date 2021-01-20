@@ -22,7 +22,16 @@ import torch
 
 from nemo.core.classes import typecheck
 from nemo.core.neural_types import AxisKind, NeuralType
+from nemo.utils import logging
 from nemo.utils.export_utils import replace_for_export
+
+try:
+    import onnx_graphsurgeon as gs
+
+    ONNX_GRAPHSURGEON_AVAILABLE = True
+
+except (ImportError, ModuleNotFoundError):
+    ONNX_GRAPHSURGEON_AVAILABLE = False
 
 __all__ = ['ExportFormat', 'Exportable']
 
@@ -45,6 +54,14 @@ class Exportable(ABC):
     This Interface should be implemented by particular classes derived from nemo.core.NeuralModule or nemo.core.ModelPT.
     It gives these entities ability to be exported for deployment to formats such as ONNX.
     """
+
+    @staticmethod
+    def get_format(filename: str):
+        _, ext = os.path.splitext(filename)
+        try:
+            return _EXT_DICT[ext]
+        except KeyError:
+            raise ValueError(f"Export file {filename} extension does not correspond to any export format!")
 
     def export(
         self,
@@ -69,12 +86,7 @@ class Exportable(ABC):
             if set_eval:
                 self.eval()
 
-            filename, file_extension = os.path.splitext(output)
-            if file_extension not in _EXT_DICT.keys():
-                raise ValueError(f"Export file {output} extension does not correspond to any export format!")
-
-            format = _EXT_DICT[file_extension]
-
+            format = self.get_format(output)
             self._prepare_for_export()
 
             if input_example is not None:
@@ -155,11 +167,32 @@ class Exportable(ABC):
                     # Verify the model can be read, and is valid
                     onnx_model = onnx.load(output)
                     onnx.checker.check_model(onnx_model, full_check=True)
+
+                    if do_constant_folding:
+                        if not ONNX_GRAPHSURGEON_AVAILABLE:
+                            logging.info(
+                                f"onnx-graphsurgeon module is not instlled."
+                                "That may result in suboptimal optimization of exported ONNX graph (including unneeded DOUBLE initializers)."
+                                "Please follow the instructions available at:"
+                                "https://github.com/NVIDIA/TensorRT/tree/master/tools/onnx-graphsurgeon"
+                                "to install onnx-graphsurgeon from source to improve exported graph."
+                            )
+                        else:
+                            # This pass is to remove/recast certain constants that are generated as 'double'
+                            # Those constants break ONNX -> TRT conversion (TRT does not support 'double' as of 7.2)
+                            # Can probably be removed once TRT has automatic downcast for double.
+                            # However, it may still be useful even then as it seems to always make the graph shorter.
+                            graph = gs.import_onnx(onnx_model)
+                            onnx_model = gs.export_onnx(graph.fold_constants().cleanup())
+                            onnx.checker.check_model(onnx_model, full_check=True)
+                            onnx.save(onnx_model, output)
+
                     return onnx_model
                 else:
                     raise ValueError(f'Encountered unknown export format {format}.')
         finally:
             typecheck.set_typecheck_enabled(enabled=True)
+        return [output]  # Subclasses may create more than one file.
 
     @property
     def disabled_deployment_input_names(self):
