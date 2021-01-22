@@ -45,7 +45,7 @@ def set_up_test(data_dir, model):
 class TestPretrainedModelPerformance(TestCase):
     @pytest.mark.unit
     def test_punct_capit_with_bert(self):
-        data_dir = '/home/ebakhturina/data/jenkins/token_classification_punctuation'
+        data_dir = '/home/TestData/nlp/token_classification_punctuation/fisher'
         model = models.PunctuationCapitalizationModel.from_pretrained("Punctuation_Capitalization_with_BERT")
 
         metrics = set_up_test(data_dir, model)
@@ -57,7 +57,7 @@ class TestPretrainedModelPerformance(TestCase):
 
     @pytest.mark.unit
     def test_ner_model(self):
-        data_dir = '/home/ebakhturina/data/jenkins/token_classification_punctuation/gmb'
+        data_dir = '/home/TestData/nlp/token_classification_punctuation/gmb'
         model = models.TokenClassificationModel.from_pretrained("NERModel")
 
         metrics = set_up_test(data_dir, model)
