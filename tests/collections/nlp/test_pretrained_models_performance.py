@@ -52,14 +52,29 @@ class TestPretrainedModelPerformance(TestCase):
     @pytest.mark.unit
     def test_punct_capit_with_bert(self):
         data_dir = '/home/TestData/nlp/token_classification_punctuation/fisher'
-
+        data_dir = '/home/ebakhturina/data/jenkins/token_classification_punctuation'
         jenkins = os.path.exists(data_dir)
         if jenkins:
             model = models.PunctuationCapitalizationModel.from_pretrained("Punctuation_Capitalization_with_BERT")
 
             metrics = get_metrics(data_dir, model)
-            if Path("./lightning_logs").exists():
-                rmtree('./lightning_logs')
+
+            assert abs(metrics['punct_precision'] - 52.3024) < 0.001
+            assert abs(metrics['punct_recall'] - 58.9220) < 0.001
+            assert abs(metrics['punct_f1'] - 53.2976) < 0.001
+            assert int(model.punct_class_report.total_examples) == 128
+
+    @pytest.mark.unit
+    def test_punct_capit_with_distilbert(self):
+        data_dir = '/home/TestData/nlp/token_classification_punctuation/fisher'
+
+        data_dir = '/home/ebakhturina/data/jenkins/token_classification_punctuation'
+        jenkins = os.path.exists(data_dir)
+        if jenkins:
+            model = models.PunctuationCapitalizationModel.from_pretrained("Punctuation_Capitalization_with_DistilBERT")
+
+            metrics = get_metrics(data_dir, model)
+
             assert abs(metrics['punct_precision'] - 52.3024) < 0.001
             assert abs(metrics['punct_recall'] - 58.9220) < 0.001
             assert abs(metrics['punct_f1'] - 53.2976) < 0.001
@@ -74,8 +89,6 @@ class TestPretrainedModelPerformance(TestCase):
             model = models.TokenClassificationModel.from_pretrained("NERModel")
 
             metrics = get_metrics(data_dir, model)
-            if Path("./lightning_logs").exists():
-                rmtree('./lightning_logs')
 
             assert abs(metrics['precision'] - 96.0937) < 0.001
             assert abs(metrics['recall'] - 96.0146) < 0.001
