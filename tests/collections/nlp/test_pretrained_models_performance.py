@@ -19,13 +19,12 @@ from omegaconf import OmegaConf
 import nemo.collections.nlp.models as models
 
 
-def set_up_test(data_dir, model):
+def get_metrics(data_dir, model):
     trainer = pl.Trainer(gpus=[0])
 
     model.set_trainer(trainer)
     model.update_data_dir(data_dir)
 
-    # TODO update the pre-trained model with the new config to remove setup_train_data
     test_ds = OmegaConf.create(
         {
             'text_file': 'text_dev.txt',
@@ -48,7 +47,7 @@ class TestPretrainedModelPerformance(TestCase):
         data_dir = '/home/TestData/nlp/token_classification_punctuation/fisher'
         model = models.PunctuationCapitalizationModel.from_pretrained("Punctuation_Capitalization_with_BERT")
 
-        metrics = set_up_test(data_dir, model)
+        metrics = get_metrics(data_dir, model)
 
         assert abs(metrics['punct_precision'] - 52.3024) < 0.001
         assert abs(metrics['punct_recall'] - 58.9220) < 0.001
@@ -60,7 +59,7 @@ class TestPretrainedModelPerformance(TestCase):
         data_dir = '/home/TestData/nlp/token_classification_punctuation/gmb'
         model = models.TokenClassificationModel.from_pretrained("NERModel")
 
-        metrics = set_up_test(data_dir, model)
+        metrics = get_metrics(data_dir, model)
 
         assert abs(metrics['precision'] - 96.0937) < 0.001
         assert abs(metrics['recall'] - 96.0146) < 0.001
