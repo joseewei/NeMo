@@ -41,7 +41,11 @@ def get_metrics(data_dir, model):
     model._cfg.dataset.use_cache = False
     trainer.test(model)
     model.setup_test_data(test_data_config=test_ds)
-    return trainer.test(model)[0]
+    metrics = trainer.test(model)[0]
+
+    if Path("./lightning_logs").exists():
+        rmtree('./lightning_logs')
+    return metrics
 
 
 class TestPretrainedModelPerformance(TestCase):
