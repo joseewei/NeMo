@@ -10,14 +10,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+from pathlib import Path
+from shutil import rmtree
 from unittest import TestCase
 
 import pytest
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
-from shutil import rmtree
-from pathlib import Path
-import os
 
 import nemo.collections.nlp.models as models
 
@@ -61,7 +61,6 @@ class TestPretrainedModelPerformance(TestCase):
             assert abs(metrics['punct_f1'] - 53.2976) < 0.001
             assert int(model.punct_class_report.total_examples) == 128
 
-
     @pytest.mark.unit
     def test_ner_model(self):
         data_dir = '/home/TestData/nlp/token_classification_punctuation/gmb'
@@ -78,4 +77,3 @@ class TestPretrainedModelPerformance(TestCase):
             assert abs(metrics['recall'] - 96.0146) < 0.001
             assert abs(metrics['f1'] - 95.6076) < 0.001
             assert int(model.classification_report.total_examples) == 202
-
