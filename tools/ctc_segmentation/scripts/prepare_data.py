@@ -23,7 +23,7 @@ import regex
 import scipy.io.wavfile as wav
 from num2words import num2words
 
-from normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
+from .normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from nemo.collections import asr as nemo_asr
 
 parser = argparse.ArgumentParser(description="Prepares text and audio files for segmentation")
@@ -55,8 +55,14 @@ parser.add_argument(
     sentence split if eos sentence split resulted in sequence longer than --max_length. '
     'Use "|" as a separator between symbols, for example: ";|:|" ',
 )
-parser.add_argument('--split_quotes_by_speakers', type=str, default='false', choices=['true', 'false'],
-                    help='Carry quotes around characters phrases to distinguish narrator and characters if the reader impersonates')
+parser.add_argument(
+    '--split_quotes_by_speakers',
+    type=str,
+    default='false',
+    choices=['true', 'false'],
+    help='Carry quotes around characters phrases to distinguish narrator and characters if the reader impersonates',
+)
+
 
 def convert_audio(in_file: str, wav_file: str = None, sample_rate: int = 16000) -> str:
     """
@@ -106,7 +112,7 @@ def split_text(
     min_length=20,
     max_length=100,
     additional_split_symbols=None,
-    split_quotes_by_speakers='false'
+    split_quotes_by_speakers='false',
 ):
     """
     Breaks down the in_file into sentences. Each sentence will be on a separate line.
@@ -143,39 +149,53 @@ def split_text(
     transcript = re.sub(r' +', ' ', transcript)
 
     # one book specific
-    transcript = (transcript.replace("“Zarathustra”", "Zarathustra")
-                  .replace("d’ Alegre", "d’Alegre")
-                  .replace("Cæsar", "Cesar")
-                  .replace("‘", "’")
-                  .replace("Project Gutenberg™’s", "Project Gutenberg’s"))
+    transcript = (
+        transcript.replace("“Zarathustra”", "Zarathustra")
+        .replace("d’ Alegre", "d’Alegre")
+        .replace("Cæsar", "Cesar")
+        .replace("‘", "’")
+        .replace("Project Gutenberg™’s", "Project Gutenberg’s")
+    )
 
     def _valid_apostrophe(text, i):
         valid_phrases = ["Sant’"]
-        valid_list = ["articulo mortis’", " th’",  "cat-o’-nine-tails", "’Celebrated Crimes’", "’Crimes Celebres’"]
+        valid_list = ["articulo mortis’", " th’", "cat-o’-nine-tails", "’Celebrated Crimes’", "’Crimes Celebres’"]
         invalid_list = ["’Tours’"]
 
         ch = text[i]
-        case_1 = (ch == "'" or ch == "’") and len(text) > i + 1 and text[i + 1].isalpha() and i > 0 and text[i - 1].isalpha()
-        case_2 = (ch == "'" or ch == "’") and len(text) > i + 1 and text[i + 1] in [' ', ",", "."] and i > 0 and text[i - 1] == 's'
+        case_1 = (
+            (ch == "'" or ch == "’")
+            and len(text) > i + 1
+            and text[i + 1].isalpha()
+            and i > 0
+            and text[i - 1].isalpha()
+        )
+        case_2 = (
+            (ch == "'" or ch == "’")
+            and len(text) > i + 1
+            and text[i + 1] in [' ', ",", "."]
+            and i > 0
+            and text[i - 1] == 's'
+        )
 
         case_3 = False
         for phrase in valid_phrases:
-            if phrase in text[i-20: i+20]:
+            if phrase in text[i - 20 : i + 20]:
                 case_3 = True
 
         valid = case_1 or case_2 or case_3
 
         if valid:
             for exception in invalid_list:
-                if exception in text[i-20: i+20]:
+                if exception in text[i - 20 : i + 20]:
                     valid = False
         else:
             for exception in valid_list:
-                if exception in text[i-20: i+20]:
+                if exception in text[i - 20 : i + 20]:
                     valid = True
 
         if valid:
-            print('----->', text[i-20:i+20])
+            print('----->', text[i - 20 : i + 20])
         return valid
 
     def _find_quotes(text, quote='"', delimiter="~"):
@@ -186,13 +206,15 @@ def split_text(
         for i, ch in enumerate(text):
             if ch == quote and not _valid_apostrophe(text, i):
                 clean_transcript += f'{delimiter}{replace_id % 2}{quote}{delimiter}'
-                print (i, replace_id, text[i -20: i +20])
+                print(i, replace_id, text[i - 20 : i + 20])
                 print(clean_transcript[-30:])
                 replace_id += 1
             else:
                 clean_transcript += ch
         if (replace_id % 2) != 0:
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
         return clean_transcript, f'{delimiter}?{quote}{delimiter}'
 
     split_quotes_by_speakers = split_quotes_by_speakers == 'true'
@@ -214,9 +236,9 @@ def split_text(
     for qq in with_quotes:
         qq_idx = transcript.index(qq, last_idx)
         if last_idx < qq_idx:
-            sentences.append(transcript[last_idx: qq_idx])
+            sentences.append(transcript[last_idx:qq_idx])
 
-        sentences.append(transcript[qq_idx: qq_idx + len(qq)])
+        sentences.append(transcript[qq_idx : qq_idx + len(qq)])
         last_idx = qq_idx + len(qq)
     sentences.append(transcript[last_idx:])
     sentences = [s.strip() for s in sentences if s.strip()]
@@ -276,7 +298,7 @@ def split_text(
                 if sent.startswith(delim):
                     if i > 0:
                         sentences[i - 1] = sentences[i - 1] + delim
-                        sentences[i] = sentences[i][len(delim): ].strip()
+                        sentences[i] = sentences[i][len(delim) :].strip()
         return sentences
 
     if split_quotes_by_speakers:
@@ -300,7 +322,9 @@ def split_text(
                                         if delim.replace('1', '0') not in sent:
                                             sentences[i] = delim.replace('1', '0') + sentences[i]
                                     else:
-                                        import pdb; pdb.set_trace()
+                                        import pdb
+
+                                        pdb.set_trace()
                                         raise ValueError('Quotes do not match')
 
             # add delimiters from stack at the end of the phrase
@@ -314,7 +338,6 @@ def split_text(
 
         if len(delimiters_stack) != 0:
             raise ValueError('Quotes do not match')
-
 
         for i in range(len(sentences)):
             for delimiter in delimiters:
@@ -431,7 +454,7 @@ if __name__ == '__main__':
                 min_length=args.min_length,
                 max_length=args.max_length,
                 additional_split_symbols=args.additional_split_symbols,
-                split_quotes_by_speakers=args.split_quotes_by_speakers
+                split_quotes_by_speakers=args.split_quotes_by_speakers,
             )
         print(f'Processed text saved at {args.output_dir}')
 
