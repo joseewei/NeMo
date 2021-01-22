@@ -68,6 +68,7 @@ class EncDecNLPModel(NLPModel):
         self._decoder = decoder
 
     def setup_enc_dec_tokenizers(self, cfg: EncDecNLPModelConfig):
+
         if cfg.encoder_tokenizer.vocab_file is not None or cfg.decoder_tokenizer.vocab_file is not None:
             raise NotImplemented(
                 f'Vocab files are currently not supported. Please use tokenizer name and model instead'

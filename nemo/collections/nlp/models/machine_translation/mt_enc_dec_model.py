@@ -63,31 +63,14 @@ class MTEncDecModel(EncDecNLPModel):
     def __init__(self, cfg: MTEncDecModelConfig, trainer: Trainer = None):
         cfg = model_utils.convert_model_config_to_dict_config(cfg)
         cfg = model_utils.maybe_update_config_version(cfg)
-        self.setup_enc_dec_tokenizers(cfg)
-
         super().__init__(cfg=cfg, trainer=trainer)
 
+        # TODO: global_rank_0 (shared file system) or local_rank_0 (local file system)
+        self.preprocess_data()
+
+        self.setup_enc_dec_tokenizers(cfg)
+
         # TODO: use get_encoder function with support for HF and Megatron
-        # self.encoder = TransformerEncoderNM(
-        #     vocab_size=self.encoder_vocab_size,
-        #     hidden_size=cfg.encoder.hidden_size,
-        #     num_layers=cfg.encoder.num_layers,
-        #     inner_size=cfg.encoder.inner_size,
-        #     max_sequence_length=cfg.encoder.max_sequence_length
-        #     if hasattr(cfg.encoder, 'max_sequence_length')
-        #     else 512,
-        #     embedding_dropout=cfg.encoder.embedding_dropout if hasattr(cfg.encoder, 'embedding_dropout') else 0.0,
-        #     learn_positional_encodings=cfg.encoder.learn_positional_encodings
-        #     if hasattr(cfg.encoder, 'learn_positional_encodings')
-        #     else False,
-        #     num_attention_heads=cfg.encoder.num_attention_heads,
-        #     ffn_dropout=cfg.encoder.ffn_dropout,
-        #     attn_score_dropout=cfg.encoder.attn_score_dropout,
-        #     attn_layer_dropout=cfg.encoder.attn_layer_dropout,
-        #     hidden_act=cfg.encoder.hidden_act,
-        #     mask_future=cfg.encoder.mask_future,
-        #     pre_ln=cfg.encoder.pre_ln,
-        # )
         encoder_cfg = OmegaConf.to_container(cfg.get('encoder'))
         encoder_cfg['vocab_size'] = self.encoder_vocab_size
         library = encoder_cfg.pop('library', 'nemo')
@@ -374,18 +357,19 @@ class MTEncDecModel(EncDecNLPModel):
     def list_available_models(cls) -> Optional[Dict[str, str]]:
         pass
 
-    def prepare_data(self) -> None:
+    # add rank 0 only or local rank 0 only decorator
+    def preprocess_data(self) -> None:
 
         logging.info('Preprocessing datasets.')
 
         # preprocess train dataset
         self.preprocess_dataset(
             encoder_tokenizer_library=self._cfg.encoder_tokenizer.get('tokenizer_name', 'yttm'),
-            encoder_tokenizer_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
+            encoder_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
             encoder_vocab_size=self._cfg.encoder_tokenizer.get('vocab_size', 8192),
             encoder_bpe_dropout=self._cfg.encoder_tokenizer.get('bpe_dropout', 0.0),
             decoder_tokenizer_library=self._cfg.decoder_tokenizer.get('tokenizer_name', 'yttm'),
-            decoder_tokenizer_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
+            decoder_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
             decoder_vocab_size=self._cfg.decoder_tokenizer.get('vocab_size', 8192),
             decoder_bpe_dropout=self._cfg.decoder_tokenizer.get('bpe_dropout', 0.0),
             use_shared_tokenizer=self._cfg.get('use_shared_tokenizer', True),
@@ -401,11 +385,11 @@ class MTEncDecModel(EncDecNLPModel):
         # preprocess validation dataset
         self.preprocess_dataset(
             encoder_tokenizer_library=self._cfg.encoder_tokenizer.get('tokenizer_name', 'yttm'),
-            encoder_tokenizer_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
+            encoder_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
             encoder_vocab_size=self._cfg.encoder_tokenizer.get('vocab_size', 8192),
             encoder_bpe_dropout=self._cfg.encoder_tokenizer.get('bpe_dropout', 0.0),
             decoder_tokenizer_library=self._cfg.decoder_tokenizer.get('tokenizer_name', 'yttm'),
-            decoder_tokenizer_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
+            decoder_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
             decoder_vocab_size=self._cfg.decoder_tokenizer.get('vocab_size', 8192),
             decoder_bpe_dropout=self._cfg.decoder_tokenizer.get('bpe_dropout', 0.0),
             use_shared_tokenizer=self._cfg.get('use_shared_tokenizer', True),
@@ -421,11 +405,11 @@ class MTEncDecModel(EncDecNLPModel):
         # preprocess test dataset
         self.preprocess_dataset(
             encoder_tokenizer_library=self._cfg.encoder_tokenizer.get('tokenizer_name', 'yttm'),
-            encoder_tokenizer_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
+            encoder_model_name=self._cfg.encoder_tokenizer.get('model_name', None),
             encoder_vocab_size=self._cfg.encoder_tokenizer.get('vocab_size', 8192),
             encoder_bpe_dropout=self._cfg.encoder_tokenizer.get('bpe_dropout', 0.0),
             decoder_tokenizer_library=self._cfg.decoder_tokenizer.get('tokenizer_name', 'yttm'),
-            decoder_tokenizer_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
+            decoder_model_name=self._cfg.decoder_tokenizer.get('model_name', None),
             decoder_vocab_size=self._cfg.decoder_tokenizer.get('vocab_size', 8192),
             decoder_bpe_dropout=self._cfg.decoder_tokenizer.get('bpe_dropout', 0.0),
             use_shared_tokenizer=self._cfg.get('use_shared_tokenizer', True),
@@ -439,17 +423,25 @@ class MTEncDecModel(EncDecNLPModel):
         )
 
     def get_cached_dataset_path(self, out_dir: str, src_fname: str, tgt_fname: str, num_tokens: int) -> str:
+        src_fname = os.path.basename(src_fname)
+        tgt_fname = os.path.basename(tgt_fname)
         cached_dataset_path = os.path.join(out_dir, f'{src_fname}_{tgt_fname}_batches.tokens.{num_tokens}.pkl')
         return cached_dataset_path
+
+    def get_yttm_bpe_path(self, out_dir: str, src_fname: str, tgt_fname: str, vocab_size: int, kind: str):
+        src_fname = os.path.basename(src_fname)
+        tgt_fname = os.path.basename(tgt_fname)
+        yttm_bpe_path = os.path.join(out_dir, f'{src_fname}_{tgt_fname}_{kind}_yttm._BPE.{vocab_size}.model')
+        return yttm_bpe_path
 
     def preprocess_dataset(
         self,
         encoder_tokenizer_library: str = None,
-        encoder_tokenizer_model_name: Optional[str] = None,
+        encoder_model_name: Optional[str] = None,
         encoder_vocab_size: Optional[int] = None,
         encoder_bpe_dropout: Optional[float] = 0.0,
         decoder_tokenizer_library: str = None,
-        decoder_tokenizer_model_name: Optional[str] = None,
+        decoder_model_name: Optional[str] = None,
         decoder_vocab_size: Optional[int] = None,
         decoder_bpe_dropout: Optional[float] = 0.0,
         use_shared_tokenizer: bool = False,
@@ -461,38 +453,41 @@ class MTEncDecModel(EncDecNLPModel):
         min_seq_length: int = 1,
         tokens_in_batch: int = 8192,
     ) -> None:
+
         encoder_tokenizer = None
         decoder_tokenizer = None
+
+        # TODO: check if cached data exists
+
         if encoder_tokenizer_library == 'yttm':
-            encoder_tokenizer_bpe_model = None
             if use_shared_tokenizer:
                 assert (
                     encoder_vocab_size == decoder_vocab_size
                 ), "If using a shared tokenizer, then encoder vocab size and decoder vocab size should be the same."
 
-                encoder_tokenizer_bpe_model = os.path.join(
-                    out_dir, f'yttm_shared_tokenizer.{encoder_vocab_size}.BPE.model'
+                encoder_tokenizer_model = self.get_yttm_bpe_path(
+                    out_dir, src_fname, tgt_fname, vocab_size=encoder_vocab_size, kind='shared'
                 )
                 train_yttm_bpe(
-                    data=[src_fname, tgt_fname], vocab_size=encoder_vocab_size, model=encoder_tokenizer_bpe_model,
+                    data=[src_fname, tgt_fname], vocab_size=encoder_vocab_size, model=encoder_tokenizer_model,
                 )
-                encoder_tokenizer_model = encoder_tokenizer_bpe_model
             else:
-                encoder_bpe_model = os.path.join(out_dir, f'yttm_encoder_tokenizer.{encoder_vocab_size}.BPE.model')
-                train_yttm_bpe(data=[src_fname], vocab_size=encoder_vocab_size, model=encoder_bpe_model)
-                encoder_tokenizer_model = encoder_bpe_model
+                encoder_tokenizer_model = self.get_yttm_bpe_path(
+                    out_dir, src_fname, tgt_fname, encoder_vocab_size, kind='encoder'
+                )
+                train_yttm_bpe(data=[src_fname], vocab_size=encoder_vocab_size, model=encoder_tokenizer_model)
             encoder_tokenizer = get_tokenizer(
-                tokenizer_name='yttm', tokenizer_model=encoder_tokenizer_model, bpe_dropout=encoder_bpe_dropout
+                tokenizer_name='yttm', tokenizer_model=encoder_tokenizer_model, bpe_dropout=encoder_bpe_dropout,
             )
 
         if decoder_tokenizer_library == 'yttm':
-            decoder_tokenizer_bpe_model = None
             if not use_shared_tokenizer:
-                decoder_bpe_model = os.path.join(out_dir, f'yttm_decoder_tokenizer.{decoder_vocab_size}.BPE.model')
-                train_yttm_bpe(data=[tgt_fname], vocab_size=decoder_vocab_size, model=decoder_bpe_model)
-                decoder_tokenizer_model = decoder_bpe_model
+                decoder_tokenizer_model = self.get_yttm_bpe_path(
+                    out_dir, src_fname, tgt_fname, decoder_vocab_size, kind='decoder'
+                )
+                train_yttm_bpe(data=[tgt_fname], vocab_size=decoder_vocab_size, model=decoder_tokenizer_model)
                 decoder_tokenizer = get_tokenizer(
-                    tokenizer_name='yttm', tokenizer_model=decoder_tokenizer_model, bpe_dropout=decoder_bpe_dropout
+                    tokenizer_name='yttm', tokenizer_model=decoder_tokenizer_model, bpe_dropout=decoder_bpe_dropout,
                 )
 
         if use_shared_tokenizer:
@@ -522,6 +517,28 @@ class MTEncDecModel(EncDecNLPModel):
         dataset = pickle.load(open(cached_dataset_path, 'rb'))
         end = time.time()
         print(f'Took {end - start} time to unpickle')
+
+    def setup_enc_dec_tokenizers(self, cfg: MTEncDecModelConfig):
+
+        if cfg.encoder_tokenizer.vocab_file is not None or cfg.decoder_tokenizer.vocab_file is not None:
+            raise NotImplemented(
+                f'Vocab files are currently not supported. Please use tokenizer name and model instead'
+            )
+
+        if cfg.encoder_tokenizer.tokenizer_name != 'yttm' or cfg.decoder_tokenizer.tokenizer_name != 'yttm':
+            raise NotImplemented(f"Currently we only support yttm tokenizer.")
+        self.encoder_tokenizer = get_tokenizer(
+            tokenizer_name=cfg.encoder_tokenizer.tokenizer_name,
+            tokenizer_model=self.register_artifact("cfg.encoder_tokenizer.tokenizer_model", self.get_yttm_bpe_path()),
+            bpe_dropout=cfg.encoder_tokenizer.bpe_dropout if hasattr(cfg.encoder_tokenizer, 'bpe_dropout') else 0.0,
+        )
+        self.decoder_tokenizer = get_tokenizer(
+            tokenizer_name=cfg.decoder_tokenizer.tokenizer_name,
+            tokenizer_model=self.register_artifact(
+                "cfg.decoder_tokenizer.tokenizer_model", cfg.decoder_tokenizer.tokenizer_model
+            ),
+            bpe_dropout=cfg.decoder_tokenizer.bpe_dropout if hasattr(cfg.decoder_tokenizer, 'bpe_dropout') else 0.0,
+        )
 
 
 def train_yttm_bpe(data: List[str], vocab_size: int, model: str):
