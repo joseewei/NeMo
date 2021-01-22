@@ -52,7 +52,6 @@ class TestPretrainedModelPerformance(TestCase):
     @pytest.mark.unit
     def test_punct_capit_with_bert(self):
         data_dir = '/home/TestData/nlp/token_classification_punctuation/fisher'
-        data_dir = '/home/ebakhturina/data/jenkins/token_classification_punctuation'
         jenkins = os.path.exists(data_dir)
         if jenkins:
             model = models.PunctuationCapitalizationModel.from_pretrained("Punctuation_Capitalization_with_BERT")
@@ -67,8 +66,6 @@ class TestPretrainedModelPerformance(TestCase):
     @pytest.mark.unit
     def test_punct_capit_with_distilbert(self):
         data_dir = '/home/TestData/nlp/token_classification_punctuation/fisher'
-
-        data_dir = '/home/ebakhturina/data/jenkins/token_classification_punctuation'
         jenkins = os.path.exists(data_dir)
         if jenkins:
             model = models.PunctuationCapitalizationModel.from_pretrained("Punctuation_Capitalization_with_DistilBERT")
