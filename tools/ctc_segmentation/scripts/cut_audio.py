@@ -130,6 +130,7 @@ def process_alignment(alignment_file: str, args):
     segments = []
     ref_text_processed = []
     ref_text_no_preprocessing = []
+    ref_text_normalized = []
     with open(alignment_file, 'r') as f:
         for line in f:
             line = line.split('|')
@@ -139,6 +140,7 @@ def process_alignment(alignment_file: str, args):
                 continue
             ref_text_processed.append(line[1].strip())
             ref_text_no_preprocessing.append(line[2].strip())
+            ref_text_normalized.append(line[3].strip())
             line = line[0].split()
             segments.append((float(line[0]) + args.offset / 1000, float(line[1]) + args.offset / 1000, float(line[2])))
 
@@ -177,8 +179,9 @@ def process_alignment(alignment_file: str, args):
                 segment = signal[round(st * sampling_rate) : round(end * sampling_rate)]
                 duration = len(segment) / sampling_rate
                 if duration > 0:
-                    text_processed = ref_text_processed[i].strip()
-                    text_no_preprocessing = ref_text_no_preprocessing[i].strip()
+                    text_processed = ref_text_processed[i]
+                    text_no_preprocessing = ref_text_no_preprocessing[i]
+                    text_normalized = ref_text_normalized[i]
                     if score > args.threshold:
                         high_score_dur += duration
                         audio_filepath = os.path.join(fragments_dir, f'{base_name}_{i:04}.wav')
@@ -196,6 +199,7 @@ def process_alignment(alignment_file: str, args):
                         'duration': duration,
                         'text': text_processed,
                         'text_no_preprocessing': text_no_preprocessing,
+                        'text_normalized': text_normalized,
                         'score': round(score, 2),
                         'transcript': transcript.strip(),
                     }

@@ -21,9 +21,9 @@ from typing import List
 
 import regex
 import scipy.io.wavfile as wav
+from normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from num2words import num2words
 
-from .normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from nemo.collections import asr as nemo_asr
 
 NEMO_NORMALIZATION = True
@@ -74,6 +74,7 @@ parser.add_argument(
     help='Carry quotes around characters phrases to distinguish narrator and characters if the reader impersonates',
 )
 
+
 def convert_audio(in_file: str, wav_file: str = None, sample_rate: int = 16000) -> str:
     """
     Convert .mp3 to .wav and/or change sample rate if needed
@@ -123,7 +124,7 @@ def split_text(
     max_length=100,
     additional_split_symbols=None,
     split_quotes_by_speakers='false',
-    use_nemo_normalization=False
+    use_nemo_normalization=False,
 ):
     """
     Breaks down the in_file roughly into sentences. Each sentence will be on a separate line.
@@ -247,7 +248,6 @@ def split_text(
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
 
-
     # find phrases in quotes
     with_quotes = re.findall(r'“[A-Za-z ?]+.*?”', transcript)
     sentences = []
@@ -262,7 +262,6 @@ def split_text(
     sentences.append(transcript[last_idx:])
     sentences = [s.strip() for s in sentences if s.strip()]
 
-
     lower_case_unicode = ''
     upper_case_unicode = ''
     if language == 'ru':
@@ -275,7 +274,6 @@ def split_text(
     matches = re.findall(r'[a-z' + lower_case_unicode + ']\.\s[a-z' + lower_case_unicode + ']\.', transcript)
     for match in matches:
         transcript = transcript.replace(match, match.replace('. ', '.'))
-
 
     # find phrases in quotes
     with_quotes = re.finditer(r'“[A-Za-z ?]+.*?”', transcript)
@@ -290,7 +288,6 @@ def split_text(
         last_idx = m.end()
     sentences.append(transcript[last_idx:])
     sentences = [s.strip() for s in sentences if s.strip()]
-
 
     # Read and split transcript by utterance (roughly, sentences)
     split_pattern = f"(?<!\w\.\w.)(?<![A-Z{upper_case_unicode}][a-z{lower_case_unicode}]\.)(?<![A-Z{upper_case_unicode}]\.)(?<=\.|\?|\!|\.”|\?”\!”)\s"
@@ -327,7 +324,6 @@ def split_text(
 
     sentences = additional_split(sentences, additional_split_symbols, max_length)
 
-
     def _remove_delim_from_beginning(delimiters, sentences):
         for i, sent in enumerate(sentences):
             for delim in delimiters:
@@ -360,6 +356,7 @@ def split_text(
                                             sentences[i] = delim.replace('1', '0') + sentences[i]
                                     else:
                                         import pdb
+
                                         pdb.set_trace()
                                         raise ValueError('Quotes do not match')
 
@@ -380,7 +377,6 @@ def split_text(
                 for id in ['0', '1']:
                     delim = delimiter.replace('?', id)
                     sentences[i] = sentences[i].replace(delim, delim[2])
-
 
     # check to make sure there will be no utterances for segmentation with only OOV symbols
     no_space_voc = set(vocabulary)
@@ -404,19 +400,6 @@ def split_text(
     out_dir, out_file_name = os.path.split(out_file)
     with open(os.path.join(out_dir, out_file_name[:-4] + '_with_punct.txt'), "w") as f:
         f.write(sentences)
-
-    # substitute common abbreviations before applying lower case
-    if language == 'ru':
-        for k, v in RU_ABBREVIATIONS.items():
-            sentences = sentences.replace(k, v)
-
-    if do_lower_case:
-        sentences = sentences.lower()
-
-    if language == 'ru':
-        # replace Latin characters with Russian
-        for k, v in LATIN_TO_RU.items():
-            sentences = sentences.replace(k, v)
 
     if language == 'eng' and NEMO_NORMALIZATION and use_nemo_normalization:
         print('Using NeMo normalization tool...')
@@ -444,6 +427,22 @@ def split_text(
             f'--language argument.'
         )
         raise
+
+    with open(os.path.join(out_dir, out_file_name[:-4] + '_with_punct_normalized.txt'), "w") as f:
+        f.write(sentences)
+
+    # substitute common abbreviations before applying lower case
+    if language == 'ru':
+        for k, v in RU_ABBREVIATIONS.items():
+            sentences = sentences.replace(k, v)
+
+    if do_lower_case:
+        sentences = sentences.lower()
+
+    if language == 'ru':
+        # replace Latin characters with Russian
+        for k, v in LATIN_TO_RU.items():
+            sentences = sentences.replace(k, v)
 
     # remove all OOV symbols
     all_symbols = set(sentences)
