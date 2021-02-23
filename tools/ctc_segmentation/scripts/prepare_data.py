@@ -26,6 +26,12 @@ from num2words import num2words
 from .normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from nemo.collections import asr as nemo_asr
 
+NEMO_NORMALIZATION = True
+try:
+    from tools.text_normalization.normalize import normalize_numbers
+except ImportError:
+    NEMO_NORMALIZATION = False
+
 parser = argparse.ArgumentParser(description="Prepares text and audio files for segmentation")
 parser.add_argument("--in_text", type=str, default=None, help='Path to a text file or a directory with .txt files')
 parser.add_argument("--output_dir", type=str, required=True, help='Path to output directory')
@@ -56,13 +62,17 @@ parser.add_argument(
     'Use "|" as a separator between symbols, for example: ";|:|" ',
 )
 parser.add_argument(
+    '--use_nemo_normalization',
+    action='store_true',
+    help='Set to True to use NeMo Normalization tool to convert numbers from written to spoken format.',
+)
+parser.add_argument(
     '--split_quotes_by_speakers',
     type=str,
     default='false',
     choices=['true', 'false'],
     help='Carry quotes around characters phrases to distinguish narrator and characters if the reader impersonates',
 )
-
 
 def convert_audio(in_file: str, wav_file: str = None, sample_rate: int = 16000) -> str:
     """
@@ -109,14 +119,15 @@ def split_text(
     language='eng',
     remove_brackets=True,
     do_lower_case=True,
-    min_length=20,
+    min_length=0,
     max_length=100,
     additional_split_symbols=None,
     split_quotes_by_speakers='false',
+    use_nemo_normalization=False
 ):
     """
-    Breaks down the in_file into sentences. Each sentence will be on a separate line.
-    Also replaces numbers with a simple spoken equivalent based on NUMBERS_TO_<lang> map and removes punctuation
+    Breaks down the in_file roughly into sentences. Each sentence will be on a separate line.
+    Written form of the numbers will be converted to its spoken equivalent, OOV punctuation will be removed.
 
     Args:
         in_file: path to original transcript
@@ -124,11 +135,16 @@ def split_text(
         vocabulary: ASR model vocabulary
         language: text language
         remove_brackets: Set to True if square [] and curly {} brackets should be removed from text.
-            Text in square/curly brackets often contains unaudibale fragments like notes or translations
+            Text in square/curly brackets often contains inaudible fragments like notes or translations
         do_lower_case: flag that determines whether to apply lower case to the in_file text
-        min_length: Min number of chars of the text segment for alignment
+        min_length: Min number of chars of the text segment for alignment. Short segments will be combined to be
+            at least min_length (not recommended for multi speaker data).
         max_length: Max number of chars of the text segment for alignment
-        additional_split_symbols: Additional symbols to use for sentence split if eos sentence split resulted in sequence longer than --max_length
+        additional_split_symbols: Additional symbols to use for sentence split if eos sentence split resulted in
+            segments longer than --max_length
+        use_nemo_normalization: Set to True to use NeMo normalization tool to convert numbers from written to spoken
+            format. Normalization using num2words will be applied afterwards to make sure there are no numbers present
+            in the text, otherwise they will be replaced with a space and that could deteriorate segmentation results.
         split_quotes_by_speakers: Carry quotes around characters phrases to distinguish narrator and characters if the reader impersonates
     """
 
@@ -144,6 +160,7 @@ def split_text(
         .replace("\\", " ")
         .replace("--", " -- ")
         .replace(". . .", "...")
+        .replace("‘", "’")
     )
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
@@ -224,10 +241,12 @@ def split_text(
         delimiters = [delimiter1, delimiter2]
 
     transcript = re.sub(r'(\.+)', '. ', transcript)
+
     if remove_brackets:
         transcript = re.sub(r'(\[.*?\])', ' ', transcript)
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
+
 
     # find phrases in quotes
     with_quotes = re.findall(r'“[A-Za-z ?]+.*?”', transcript)
@@ -243,6 +262,7 @@ def split_text(
     sentences.append(transcript[last_idx:])
     sentences = [s.strip() for s in sentences if s.strip()]
 
+
     lower_case_unicode = ''
     upper_case_unicode = ''
     if language == 'ru':
@@ -255,6 +275,22 @@ def split_text(
     matches = re.findall(r'[a-z' + lower_case_unicode + ']\.\s[a-z' + lower_case_unicode + ']\.', transcript)
     for match in matches:
         transcript = transcript.replace(match, match.replace('. ', '.'))
+
+
+    # find phrases in quotes
+    with_quotes = re.finditer(r'“[A-Za-z ?]+.*?”', transcript)
+    sentences = []
+    last_idx = 0
+    for m in with_quotes:
+        match = m.group()
+        match_idx = m.start()
+        if last_idx < match_idx:
+            sentences.append(transcript[last_idx:match_idx])
+        sentences.append(match)
+        last_idx = m.end()
+    sentences.append(transcript[last_idx:])
+    sentences = [s.strip() for s in sentences if s.strip()]
+
 
     # Read and split transcript by utterance (roughly, sentences)
     split_pattern = f"(?<!\w\.\w.)(?<![A-Z{upper_case_unicode}][a-z{lower_case_unicode}]\.)(?<![A-Z{upper_case_unicode}]\.)(?<=\.|\?|\!|\.”|\?”\!”)\s"
@@ -291,6 +327,7 @@ def split_text(
 
     sentences = additional_split(sentences, additional_split_symbols, max_length)
 
+
     def _remove_delim_from_beginning(delimiters, sentences):
         for i, sent in enumerate(sentences):
             for delim in delimiters:
@@ -323,7 +360,6 @@ def split_text(
                                             sentences[i] = delim.replace('1', '0') + sentences[i]
                                     else:
                                         import pdb
-
                                         pdb.set_trace()
                                         raise ValueError('Quotes do not match')
 
@@ -344,6 +380,7 @@ def split_text(
                 for id in ['0', '1']:
                     delim = delimiter.replace('?', id)
                     sentences[i] = sentences[i].replace(delim, delim[2])
+
 
     # check to make sure there will be no utterances for segmentation with only OOV symbols
     no_space_voc = set(vocabulary)
@@ -381,7 +418,11 @@ def split_text(
         for k, v in LATIN_TO_RU.items():
             sentences = sentences.replace(k, v)
 
-    # replace numbers
+    if language == 'eng' and NEMO_NORMALIZATION and use_nemo_normalization:
+        print('Using NeMo normalization tool...')
+        sentences = normalize_numbers(sentences, verbose=False)
+
+    # replace numbers with num2words
     try:
         p = re.compile("\d+")
         new_text = ''
@@ -389,13 +430,11 @@ def split_text(
         for i, m in enumerate(p.finditer(sentences)):
             match = m.group()
             match_start = m.start()
-            match_len = len(match)
-
             if i == 0:
                 new_text = sentences[:match_start]
             else:
                 new_text += sentences[match_end:match_start]
-            match_end = match_start + match_len
+            match_end = m.end()
             new_text += sentences[match_start:match_end].replace(match, num2words(match, lang=language))
         new_text += sentences[match_end:]
         sentences = new_text
@@ -455,6 +494,7 @@ if __name__ == '__main__':
                 max_length=args.max_length,
                 additional_split_symbols=args.additional_split_symbols,
                 split_quotes_by_speakers=args.split_quotes_by_speakers,
+                use_nemo_normalization=args.use_nemo_normalization,
             )
         print(f'Processed text saved at {args.output_dir}')
 
