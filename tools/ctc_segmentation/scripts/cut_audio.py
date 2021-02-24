@@ -125,7 +125,7 @@ def process_alignment(alignment_file: str, args):
     """
     if not os.path.exists(alignment_file):
         raise ValueError(f'{alignment_file} not found')
-
+    print(f'Processing {alignment_file}')
     # read the segments, note the first line contains the path to the original audio
     segments = []
     ref_text_processed = []

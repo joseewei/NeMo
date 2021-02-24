@@ -105,12 +105,12 @@ def main(cfg: DictConfig) -> None:
         if model.prepare_test(trainer):
             model.setup_test_data()
             trainer.test(model)
-        else:
-            raise ValueError('Terminating evaluation')
+        # else:
+        #     raise ValueError('Terminating evaluation')
 
     # run an inference on a few examples
     queries = [
-        'we bought four shirts one pen and a mug from the nvidia gear store in santa clara',
+        'we bought four shirts one pen and a mug from the nvidia gear store in santa clara we bought four shirts one pen and a mug from the nvidia gear store in santa clara we bought four shirts one pen and a mug from the nvidia gear store in santa clara we bought four shirts one pen and a mug from the nvidia gear store in santa clara we bought four shirts one pen and a mug from the nvidia gear store in santa clara we bought four shirts one pen and a mug from the nvidia gear store in santa clarawe bought four shirts one pen and a mug from the nvidia gear store in santa clarawe bought four shirts one pen and a mug from the nvidia gear store in santa clara',
         'what can i do for you today',
         'how are you',
     ]
