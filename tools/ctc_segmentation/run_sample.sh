@@ -11,6 +11,7 @@ MAX_SEGMENT_LEN=100
 ADDITIONAL_SPLIT_SYMBOLS=''
 AUDIO_FORMAT='.mp3'
 USE_NEMO_NORMALIZATION='False'
+SKIP_DATA_PROCESSING='False'
 
 for ARG in "$@"
 do
@@ -36,6 +37,7 @@ echo "MAX_SEGMENT_LEN = $MAX_SEGMENT_LEN"
 echo "ADDITIONAL_SPLIT_SYMBOLS = $ADDITIONAL_SPLIT_SYMBOLS"
 echo "AUDIO_FORMAT = $AUDIO_FORMAT"
 echo "USE_NEMO_NORMALIZATION = $USE_NEMO_NORMALIZATION"
+echo "SKIP_DATA_PROCESSING = $SKIP_DATA_PROCESSING"
 
 if [[ -z $MODEL_NAME_OR_PATH ]] || [[ -z $DATA_DIR ]] || [[ -z $OUTPUT_DIR ]]; then
   echo "Usage: $(basename "$0")
@@ -53,28 +55,34 @@ if [[ -z $MODEL_NAME_OR_PATH ]] || [[ -z $DATA_DIR ]] || [[ -z $OUTPUT_DIR ]]; t
     Use '|' as a separator between symbols, for example: ';|:|' (Optional)]
   --AUDIO_FORMAT=[choose from ['.mp3', '.wav'], input audio files format
   --USE_NEMO_NORMALIZATION Set to 'True' to use NeMo Normalization tool to convert
-    numbers from written to spoken format. By default num2words package will be used. (Optional)"
+    numbers from written to spoken format. By default num2words package will be used. (Optional)
+  --SKIP_DATA_PROCESSING Set to 'True' to use skip step #1 - Running prepare_data.py script."
   exit 1
 fi
 
 NEMO_NORMALIZATION=""
-    if [[ ${USE_NEMO_NORMALIZATION,,} == "true" ]]; then
-      NEMO_NORMALIZATION="--use_nemo_normalization "
-    fi
+if [[ ${USE_NEMO_NORMALIZATION,,} == "true" ]]; then
+  NEMO_NORMALIZATION="--use_nemo_normalization "
+fi
 
-# STEP #1
-# Prepare text and audio data for segmentation
-python $SCRIPTS_DIR/prepare_data.py \
---in_text=$DATA_DIR/text \
---audio_dir=$DATA_DIR/audio \
---audio_format=$AUDIO_FORMAT \
---output_dir=$OUTPUT_DIR/processed/ \
---language=$LANGUAGE \
---cut_prefix=$CUT_PREFIX \
---model=$MODEL_NAME_OR_PATH \
---min_length=$MIN_SEGMENT_LEN \
---max_length=$MAX_SEGMENT_LEN \
---additional_split_symbols=$ADDITIONAL_SPLIT_SYMBOLS $NEMO_NORMALIZATION || exit
+PROCESSED_DATA_DIR=$DATA_DIR
+if [[ ${SKIP_DATA_PROCESSING,,} == "false" ]]; then
+  PROCESSED_DATA_DIR=$OUTPUT_DIR/processed/
+  # STEP #1
+  # Prepare text and audio data for segmentation
+  python $SCRIPTS_DIR/prepare_data.py \
+  --in_text=$DATA_DIR/text \
+  --audio_dir=$DATA_DIR/audio \
+  --audio_format=$AUDIO_FORMAT \
+  --output_dir=$OUTPUT_DIR/processed/ \
+  --language=$LANGUAGE \
+  --cut_prefix=$CUT_PREFIX \
+  --model=$MODEL_NAME_OR_PATH \
+  --min_length=$MIN_SEGMENT_LEN \
+  --max_length=$MAX_SEGMENT_LEN \
+  --additional_split_symbols=$ADDITIONAL_SPLIT_SYMBOLS $NEMO_NORMALIZATION || exit
+fi
+
 
 # STEP #2
 # Run CTC-segmenatation
@@ -85,7 +93,7 @@ for WINDOW in 8000 12000
 do
   python $SCRIPTS_DIR/run_ctc_segmentation.py \
   --output_dir=$OUTPUT_DIR \
-  --data=$OUTPUT_DIR/processed/ \
+  --data=$PROCESSED_DATA_DIR \
   --model=$MODEL_NAME_OR_PATH  \
   --window_len $WINDOW || exit
 done

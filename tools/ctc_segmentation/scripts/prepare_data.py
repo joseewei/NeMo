@@ -105,10 +105,6 @@ def process_audio(in_file: str, wav_file: str = None, cut_prefix: int = 0, sampl
         cut_prefix: number of seconds to cut from the beginning of the audio file
         sample_rate: target sampling rate
     """
-    from pydub.utils import mediainfo
-    sr = mediainfo(in_file)['sample_rate']
-    assert sr == '44100', f"{in_file} NOT 44100"
-
     wav_audio = convert_audio(str(in_file), wav_file, sample_rate)
 
     if cut_prefix > 0:
@@ -251,20 +247,7 @@ def split_text(
         transcript = re.sub(r'(\[.*?\])', ' ', transcript)
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
-
-    # find phrases in quotes
-    with_quotes = re.findall(r'“[A-Za-z ?]+.*?”', transcript)
-    sentences = []
-    last_idx = 0
-    for qq in with_quotes:
-        qq_idx = transcript.index(qq, last_idx)
-        if last_idx < qq_idx:
-            sentences.append(transcript[last_idx:qq_idx])
-
-        sentences.append(transcript[qq_idx : qq_idx + len(qq)])
-        last_idx = qq_idx + len(qq)
-    sentences.append(transcript[last_idx:])
-    sentences = [s.strip() for s in sentences if s.strip()]
+        transcript = re.sub(r'(\(.*?\))', ' ', transcript)
 
     lower_case_unicode = ''
     upper_case_unicode = ''
