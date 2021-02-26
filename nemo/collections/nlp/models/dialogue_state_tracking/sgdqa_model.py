@@ -64,6 +64,7 @@ class SGDQAModel(NLPModel):
             config_file=cfg.language_model.config_file,
             config_dict=OmegaConf.to_container(cfg.language_model.config) if cfg.language_model.config else None,
             checkpoint_file=cfg.language_model.lm_checkpoint,
+            vocab_file=cfg.tokenizer.vocab_file,
         )
 
         self.encoder = SGDEncoder(hidden_size=self.bert_model.config.hidden_size, dropout=self._cfg.encoder.dropout)
@@ -449,7 +450,11 @@ class SGDQAModel(NLPModel):
         example_id = get_str_example_id(dataloader.dataset, ids_to_service_names_dict, example_id_num)
 
         metrics = {}
-        prediction_dir = self.trainer.log_dir
+        try:
+            prediction_dir = self.trainer.log_dir if self.trainer.log_dir is not None else ""
+        except:
+            prediction_dir = ""
+
         if self.trainer.global_rank == 0:
             prediction_dir = os.path.join(
                 prediction_dir, 'predictions', 'pred_res_{}_{}'.format(split, self._cfg.dataset.task_name)

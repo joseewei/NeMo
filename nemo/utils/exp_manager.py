@@ -16,11 +16,13 @@ import os
 import subprocess
 import sys
 import time
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import copy, move
 from typing import Any, Dict, List, Optional, Union
 
+import torch
 from hydra.core.hydra_config import HydraConfig
 from hydra.utils import get_original_cwd
 from omegaconf import DictConfig, OmegaConf
@@ -30,7 +32,8 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 
 from nemo.constants import NEMO_ENV_VARNAME_VERSION
-from nemo.utils import logging
+from nemo.utils import app_state, logging
+from nemo.utils.app_state import AppState
 from nemo.utils.exceptions import NeMoBaseException
 from nemo.utils.get_rank import is_global_rank_zero
 from nemo.utils.lightning_logger_patch import add_filehandlers_to_pl_logger
@@ -68,6 +71,7 @@ class CallbackParams:
     prefix: Optional[str] = None  # If None, exp_manager will attempt to handle the filepath
     postfix: str = ".nemo"
     save_best_model: bool = False
+    always_save_nemo: bool = False
 
 
 @dataclass
@@ -189,6 +193,16 @@ def exp_manager(trainer: 'pytorch_lightning.Trainer', cfg: Optional[Union[DictCo
     cfg.name = name  # Used for configure_loggers so that the log_dir is properly set even if name is ""
     cfg.version = version
 
+    # update app_state with log_dir, exp_dir, etc
+    app_state = AppState()
+    app_state.log_dir = log_dir
+    app_state.exp_dir = exp_dir
+    app_state.name = name
+    app_state.version = version
+    app_state.checkpoint_name = checkpoint_name
+    app_state.create_checkpoint_callback = cfg.create_checkpoint_callback
+    app_state.checkpoint_callback_params = cfg.checkpoint_callback_params
+
     # Create the logging directory if it does not exist
     os.makedirs(log_dir, exist_ok=True)  # Cannot limit creation to global zero as all ranks write to own log file
     logging.info(f'Experiments will be logged at {log_dir}')
@@ -295,9 +309,10 @@ def check_resume(
         raise ValueError(f"Resuming requires the log_dir {log_dir} to be passed to exp_manager")
 
     checkpoint_dir = Path(Path(log_dir) / "checkpoints")
+
     checkpoint = None
-    end_checkpoints = list(checkpoint_dir.glob("*end.ckpt"))
-    last_checkpoints = list(checkpoint_dir.glob("*last.ckpt"))
+    end_checkpoints = list(checkpoint_dir.rglob("*end.ckpt"))
+    last_checkpoints = list(checkpoint_dir.rglob("*last.ckpt"))
     if not checkpoint_dir.exists():
         if resume_ignore_no_checkpoint:
             logging.warning(
@@ -309,9 +324,11 @@ def check_resume(
     elif len(end_checkpoints) > 0:
         if resume_past_end:
             if len(end_checkpoints) > 1:
-                raise ValueError(f"Multiple multiple checkpoints {end_checkpoints} that matches *end.ckpt.")
+                if 'mp_rank' in str(end_checkpoints[0]):
+                    checkpoint = end_checkpoints[0]
+                else:
+                    raise ValueError(f"Multiple checkpoints {end_checkpoints} that matches *end.ckpt.")
             logging.info(f"Resuming from {end_checkpoints[0]}")
-            checkpoint = end_checkpoints[0]
         else:
             raise ValueError(
                 f"Found {end_checkpoints[0]} indicating that the last training run has already completed."
@@ -323,7 +340,10 @@ def check_resume(
         else:
             raise NotFoundError(f"There were no checkpoints found in {checkpoint_dir}. Cannot resume.")
     elif len(last_checkpoints) > 1:
-        raise ValueError(f"Multiple multiple checkpoints {last_checkpoints} that matches *last.ckpt.")
+        if 'mp_rank' in str(last_checkpoints[0]):
+            checkpoint = last_checkpoints[0]
+        else:
+            raise ValueError(f"Multiple checkpoints {last_checkpoints} that matches *last.ckpt.")
     else:
         logging.info(f"Resuming from {last_checkpoints[0]}")
         checkpoint = last_checkpoints[0]
@@ -547,12 +567,44 @@ class NeMoModelCheckpoint(ModelCheckpoint):
     """ Light wrapper around Lightning's ModelCheckpoint to force a saved checkpoint on train_end
     """
 
-    def __init__(self, save_best_model=False, postfix=".nemo", **kwargs):
+    def __init__(self, always_save_nemo=False, save_best_model=False, postfix=".nemo", **kwargs):
         # Parse and store "extended" parameters: save_best model and postfix.
+        self.always_save_nemo = always_save_nemo
         self.save_best_model = save_best_model
         self.postfix = postfix
+        self.previous_best_path = ""
+
         # Call the parent class constructor with the remaining kwargs.
         super().__init__(**kwargs)
+
+    @rank_zero_only
+    def on_save_checkpoint(self, trainer, pl_module):
+        output = super().on_save_checkpoint(trainer, pl_module)
+
+        if not self.always_save_nemo:
+            return output
+
+        # Load the best model and then re-save it
+        if self.save_best_model:
+            if not os.path.exists(self.best_model_path):
+                return output
+
+            if self.best_model_path == self.previous_best_path:
+                return output
+
+            self.previous_model_path = self.best_model_path
+            old_state_dict = deepcopy(pl_module.state_dict())
+            checkpoint = torch.load(self.best_model_path, map_location='cpu')
+            if 'state_dict' in checkpoint:
+                checkpoint = checkpoint['state_dict']
+            # get a new instanace of the model
+            pl_module.load_state_dict(checkpoint, strict=True)
+            pl_module.save_to(save_path=os.path.join(self.dirpath, self.prefix + self.postfix))
+            pl_module.load_state_dict(old_state_dict, strict=True)
+        else:
+            pl_module.save_to(save_path=os.path.join(self.dirpath, self.prefix + self.postfix))
+
+        return output
 
     @rank_zero_only
     def on_train_end(self, trainer, pl_module):
