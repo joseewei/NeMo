@@ -13,7 +13,9 @@
 # limitations under the License.
 
 from typing import List
-
+from pangu import spacing
+import ipadic
+import MeCab
 from sacremoses import MosesDetokenizer, MosesTokenizer
 
 from nemo.collections.common.tokenizers.sentencepiece_detokenizer import SentencePieceDetokenizer
@@ -65,3 +67,47 @@ class EnJaTokenizer:
         text = self.moses_tokenizer.tokenize(text, escape=escape, return_str=True)
         text = self.sp_tokenize(text)
         return text if return_str else text.split()
+
+class JaMecabDetokenizer:
+    """
+    Deokenizer for Japanese
+    """
+    def __init__(self):
+        pass
+
+    def detokenize(self, tokens: List[str]) -> str:
+        """
+        Detokenizes a list of tokens
+        Args:
+            tokens: list of strings as tokens
+        Returns:
+            detokenized Japanese string
+        """
+        return spacing(''.join(tokens)).strip()
+
+class JaMecabTokenizer:
+    """
+    Tokenizer for Japanese
+    """
+    def __init__(self):
+        self.tagger = MeCab.Tagger(ipadic.MECAB_ARGS + " -Owakati")
+
+    def tokenize(self, text, escape=False, return_str=True) -> str:
+        """
+        Tokenizes a Japanese String
+        Args:
+            text: Japanese String
+        Returns:
+            Tokenized Japanese string
+        """
+        return self.tagger.parse(text).strip()
+
+class JaNormalizer:
+    """
+    Normalizer for Japanese
+    """
+    def __init__(self):
+        pass
+
+    def normalize(self, text):
+        return text

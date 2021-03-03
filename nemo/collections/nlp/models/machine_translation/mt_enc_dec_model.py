@@ -40,6 +40,7 @@ from nemo.collections.common.tokenizers import (
     EnJaTokenizer,
     Traditional2Simplified,
 )
+from nemo.collections.common.tokenizers.en_ja_tokenizers import JaMecabDetokenizer, JaMecabTokenizer, JaNormalizer
 from nemo.collections.nlp.data import TarredTranslationDataset, TranslationDataset
 from nemo.collections.nlp.models.enc_dec_nlp_model import EncDecNLPModel
 from nemo.collections.nlp.models.machine_translation.mt_enc_dec_config import MTEncDecModelConfig
@@ -246,17 +247,19 @@ class MTEncDecModel(EncDecNLPModel):
         ground_truths = list(itertools.chain(*[x['ground_truths'] for x in outputs]))
 
         detokenizer = self.get_detokenizer(self.src_language, self.tgt_language)
-
+        print(detokenizer)
         translations = [detokenizer.detokenize(sent.split()) for sent in translations]
         ground_truths = [detokenizer.detokenize(sent.split()) for sent in ground_truths]
 
         assert len(translations) == len(ground_truths)
 
-        if self.tgt_language in ['ja']:
+        if self.tgt_language in ['ja', 'ja-mecab']:
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="ja-mecab")
         elif self.tgt_language in ['zh']:
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="zh")
         else:
+            print(translations)
+            print(ground_truths)
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="13a")
 
         dataset_name = "Validation" if mode == 'val' else "Test"
@@ -364,6 +367,9 @@ class MTEncDecModel(EncDecNLPModel):
         elif source_lang == 'zh':
             normalizer = Traditional2Simplified()
             tokenizer = ChineseTokenizer()
+        elif source_lang == 'ja-mecab':
+            normalizer = JaNormalizer()
+            tokenizer = JaMecabTokenizer()
         else:
             tokenizer = MosesTokenizer(lang=source_lang)
             normalizer = MosesPunctNormalizer(lang=source_lang)
@@ -375,13 +381,13 @@ class MTEncDecModel(EncDecNLPModel):
         Returns a detokenizer for a specific target language.
         """
         if (source_lang == 'en' and target_lang == 'ja') or (source_lang == 'ja' and target_lang == 'en'):
-            detokenizer = EnJaDetokenizer(target_lang)
+            return EnJaDetokenizer(target_lang)
         elif target_lang == 'zh':
-            detokenizer = ChineseDetokenizer()
+            return ChineseDetokenizer()
+        elif target_lang == 'ja-mecab':
+            return JaMecabDetokenizer()
         else:
-            detokenizer = MosesDetokenizer(lang=target_lang)
-
-        return detokenizer
+            return MosesDetokenizer(lang=target_lang)
 
     @torch.no_grad()
     def translate(self, text: List[str], source_lang: str = None, target_lang: str = None) -> List[str]:
