@@ -247,7 +247,6 @@ class MTEncDecModel(EncDecNLPModel):
         ground_truths = list(itertools.chain(*[x['ground_truths'] for x in outputs]))
 
         detokenizer = self.get_detokenizer(self.src_language, self.tgt_language)
-        print(detokenizer)
         translations = [detokenizer.detokenize(sent.split()) for sent in translations]
         ground_truths = [detokenizer.detokenize(sent.split()) for sent in ground_truths]
 
@@ -258,8 +257,6 @@ class MTEncDecModel(EncDecNLPModel):
         elif self.tgt_language in ['zh']:
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="zh")
         else:
-            print(translations)
-            print(ground_truths)
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="13a")
 
         dataset_name = "Validation" if mode == 'val' else "Test"
