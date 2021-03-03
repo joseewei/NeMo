@@ -11,27 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import List
 from pangu import spacing
 import ipadic
 import MeCab
-from sacremoses import MosesDetokenizer, MosesTokenizer
-
-from nemo.collections.common.tokenizers.sentencepiece_detokenizer import SentencePieceDetokenizer
-from nemo.collections.common.tokenizers.sentencepiece_tokenizer import SentencePieceTokenizer
+from sacremoses import MosesDetokenizer, MosesPunctNormalizer, MosesTokenizer
 
 
-class EnJaDetokenizer:
+class EnJaProcessor:
     """
-    Deokenizer for Japanese & English that undoes `EnJaTokenizer` tokenization.
+    Tokenizer, Detokenizer and Normalizer utilities for Japanese & English
     Args:
         lang_id: One of ['en', 'ja'].
     """
 
     def __init__(self, lang_id: str):
+        self.lang_id = lang_id
+        self.moses_tokenizer = MosesTokenizer(lang=lang_id)
         self.moses_detokenizer = MosesDetokenizer(lang=lang_id)
-        self.sp_detokenizer = SentencePieceDetokenizer()
+        self.normalizer = MosesPunctNormalizer(
+            lang=lang_id, pre_replace_unicode_punct=True, post_remove_control_chars=True
+        )
 
     def detokenize(self, tokens: List[str]) -> str:
         """
@@ -41,73 +41,38 @@ class EnJaDetokenizer:
         Returns:
             detokenized Japanese or English string
         """
-        text = self.sp_detokenizer.detokenize(tokens)
-        return self.moses_detokenizer.detokenize(text)
+        return self.moses_detokenizer.detokenize(tokens)
 
-
-class EnJaTokenizer:
-    """
-    Tokenizer for Japanese & English that does Moses tokenization followed by SentencePiece
-    Args:
-        sp_tokenizer_model_path: String path to a sentencepiece model
-        lang_id: One of ['en', 'ja'].
-    """
-
-    def __init__(self, sp_tokenizer_model_path: str, lang_id: str):
-        self.moses_tokenizer = MosesTokenizer(lang=lang_id)
-        self.sp_tokenizer = SentencePieceTokenizer(model_path=sp_tokenizer_model_path)
-
-    def sp_tokenize(self, text: str) -> str:
-        return ' '.join(self.sp_tokenizer.text_to_tokens(text))
-
-    def tokenize(self, text, escape=False, return_str=False):
+    def tokenize(self, text):
         """
-        Tokenizes text using Moses -> Sentencepiece.
+        Tokenizes text using Moses.
         """
-        text = self.moses_tokenizer.tokenize(text, escape=escape, return_str=True)
-        text = self.sp_tokenize(text)
-        return text if return_str else text.split()
+        return self.moses_tokenizer.tokenize(text)
 
-class JaMecabDetokenizer:
-    """
-    Deokenizer for Japanese
-    """
-    def __init__(self):
-        pass
+    def normalize(self, text):
+        # Normalization doesn't handle Japanese periods correctly;
+        # '。'becomes '.'.
+        if self.lang_id == 'en':
+            return self.normalizer.normalize(text)
+        else:
+            return text
 
-    def detokenize(self, tokens: List[str]) -> str:
-        """
-        Detokenizes a list of tokens
-        Args:
-            tokens: list of strings as tokens
-        Returns:
-            detokenized Japanese string
-        """
-        return spacing(''.join(tokens)).strip()
 
-class JaMecabTokenizer:
+class JaMecabProcessor:
     """
-    Tokenizer for Japanese
+    Tokenizer, Detokenizer and Normalizer utilities for Japanese
     """
     def __init__(self):
         self.tagger = MeCab.Tagger(ipadic.MECAB_ARGS + " -Owakati")
-
-    def tokenize(self, text, escape=False, return_str=True) -> str:
+    
+    def tokenize(self, text):
         """
-        Tokenizes a Japanese String
-        Args:
-            text: Japanese String
-        Returns:
-            Tokenized Japanese string
+        Tokenizes text using MeCab.
         """
         return self.tagger.parse(text).strip()
-
-class JaNormalizer:
-    """
-    Normalizer for Japanese
-    """
-    def __init__(self):
-        pass
-
-    def normalize(self, text):
+    
+    def detokenize(self, tokens):
+        return spacing(''.join(tokens)).strip()
+    
+    def normalize(sef, text):
         return text
