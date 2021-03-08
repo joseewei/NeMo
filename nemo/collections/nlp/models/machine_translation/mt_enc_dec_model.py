@@ -253,7 +253,6 @@ class MTEncDecModel(EncDecNLPModel):
             translations = [zh_detokenizer.detokenize(sent) for sent in translations]
             ground_truths = [zh_detokenizer.detokenize(sent) for sent in ground_truths]
         elif self.tgt_language in ['ja-mecab']:
-            print('Detokenizing with Pangu')
             ja_mecab_detokenizer = JaMecabDetokenizer()
             translations = [ja_mecab_detokenizer.detokenize(sent.split()) for sent in translations]
             ground_truths = [ja_mecab_detokenizer.detokenize(sent.split()) for sent in ground_truths]
@@ -263,7 +262,6 @@ class MTEncDecModel(EncDecNLPModel):
 
         assert len(translations) == len(ground_truths)
         if self.tgt_language in ['ja', 'ja-mecab']:
-            print('Using ja-meacb BLEU')
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="ja-mecab")
         elif self.tgt_language in ['zh']:
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="zh")
