@@ -45,3 +45,7 @@ class PanguJiebaDetokenizer:
 
         detokenize = lambda s: spacing(RE_WS_IN_FW.sub(r'\1', s)).strip()
         return detokenize(' '.join(text))
+
+class JaMecabDetokenizer:
+    def detokenize(self, text):
+        return spacing(''.join(text).strip())

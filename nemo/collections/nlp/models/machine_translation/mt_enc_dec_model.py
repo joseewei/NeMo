@@ -35,7 +35,7 @@ from torch.nn.parallel.distributed import DistributedDataParallel
 from nemo.collections.common.losses import SmoothedCrossEntropyLoss
 from nemo.collections.common.metrics import GlobalAverageLossMetric
 from nemo.collections.common.parts import transformer_weights_init
-from nemo.collections.common.tokenizers.pangu_jieba_detokenizer import PanguJiebaDetokenizer
+from nemo.collections.common.tokenizers.pangu_jieba_detokenizer import PanguJiebaDetokenizer, JaMecabDetokenizer
 from nemo.collections.common.tokenizers.sentencepiece_detokenizer import SentencePieceDetokenizer
 from nemo.collections.nlp.data import TarredTranslationDataset, TranslationDataset
 from nemo.collections.nlp.models.enc_dec_nlp_model import EncDecNLPModel
@@ -248,15 +248,22 @@ class MTEncDecModel(EncDecNLPModel):
             translations = [sp_detokenizer.detokenize(sent.split()) for sent in translations]
             ground_truths = [sp_detokenizer.detokenize(sent.split()) for sent in ground_truths]
 
-        if not self.tgt_language in ['zh']:
-            translations = [detokenizer.detokenize(sent.split()) for sent in translations]
-            ground_truths = [detokenizer.detokenize(sent.split()) for sent in ground_truths]
-        else:
+        if self.tgt_language in ['zh']:
             zh_detokenizer = PanguJiebaDetokenizer()
             translations = [zh_detokenizer.detokenize(sent) for sent in translations]
             ground_truths = [zh_detokenizer.detokenize(sent) for sent in ground_truths]
+        elif self.tgt_language in ['ja-mecab']:
+            print('Detokenizing with Pangu')
+            ja_mecab_detokenizer = JaMecabDetokenizer()
+            translations = [ja_mecab_detokenizer.detokenize(sent.split()) for sent in translations]
+            ground_truths = [ja_mecab_detokenizer.detokenize(sent.split()) for sent in ground_truths]
+        else:
+            translations = [detokenizer.detokenize(sent.split()) for sent in translations]
+            ground_truths = [detokenizer.detokenize(sent.split()) for sent in ground_truths]
+
         assert len(translations) == len(ground_truths)
-        if self.tgt_language in ['ja']:
+        if self.tgt_language in ['ja', 'ja-mecab']:
+            print('Using ja-meacb BLEU')
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="ja-mecab")
         elif self.tgt_language in ['zh']:
             sacre_bleu = corpus_bleu(translations, [ground_truths], tokenize="zh")
