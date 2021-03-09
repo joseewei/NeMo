@@ -104,13 +104,8 @@ def main(cfg: DictConfig) -> None:
         elif model.prepare_test(trainer):
             model.setup_test_data(cfg.model.test_ds)
             trainer.test(model)
-<<<<<<< HEAD
-        # else:
-        #     raise ValueError('Terminating evaluation')
-=======
         else:
             logging.error('Skipping the evaluation. The trainer is not setup properly.')
->>>>>>> main
 
     # run an inference on a few examples
     queries = [
@@ -118,6 +113,7 @@ def main(cfg: DictConfig) -> None:
         'what can i do for you today',
         'how are you',
     ]
+
     inference_results = model.add_punctuation_capitalization(queries, batch_size=len(queries), max_seq_length=512)
 
     for query, result in zip(queries, inference_results):

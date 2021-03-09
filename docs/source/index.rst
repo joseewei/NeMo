@@ -12,6 +12,7 @@ NVIDIA NeMo Developer Guide
    nlp/intro
    tts/intro
    common/intro
+   tools/intro
    api-docs/nemo
 
 
