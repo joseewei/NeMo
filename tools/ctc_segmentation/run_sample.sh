@@ -60,48 +60,48 @@ if [[ -z $MODEL_NAME_OR_PATH ]] || [[ -z $DATA_DIR ]] || [[ -z $OUTPUT_DIR ]]; t
   exit 1
 fi
 
-#NEMO_NORMALIZATION=""
-#if [[ ${USE_NEMO_NORMALIZATION,,} == "true" ]]; then
-#  NEMO_NORMALIZATION="--use_nemo_normalization "
-#fi
-#
-#PROCESSED_DATA_DIR=$DATA_DIR
-#if [[ ${SKIP_DATA_PROCESSING,,} == "false" ]]; then
-#  PROCESSED_DATA_DIR=$OUTPUT_DIR/processed/
-#  # STEP #1
-#  # Prepare text and audio data for segmentation
-#  python $SCRIPTS_DIR/prepare_data.py \
-#  --in_text=$DATA_DIR/text \
-#  --audio_dir=$DATA_DIR/audio \
-#  --audio_format=$AUDIO_FORMAT \
-#  --output_dir=$OUTPUT_DIR/processed/ \
-#  --language=$LANGUAGE \
-#  --cut_prefix=$CUT_PREFIX \
-#  --model=$MODEL_NAME_OR_PATH \
-#  --min_length=$MIN_SEGMENT_LEN \
-#  --max_length=$MAX_SEGMENT_LEN \
-#  --additional_split_symbols=$ADDITIONAL_SPLIT_SYMBOLS $NEMO_NORMALIZATION || exit
-#fi
-#
-#
-## STEP #2
-## Run CTC-segmenatation
-## one might want to perform alignment with various window sizes
-## note if the alignment with the initial window size isn't found, the window size will be double to re-attempt
-## alignment
-#for WINDOW in 8000 12000
-#do
-#  python $SCRIPTS_DIR/run_ctc_segmentation.py \
-#  --output_dir=$OUTPUT_DIR \
-#  --data=$PROCESSED_DATA_DIR \
-#  --model=$MODEL_NAME_OR_PATH  \
-#  --window_len $WINDOW || exit
-#done
-#
-## STEP #3 (Optional)
-## Verify aligned segments only if multiple WINDOWs used in the Step #2)
-#python $SCRIPTS_DIR/verify_segments.py \
-#--base_dir=$OUTPUT_DIR  || exit
+NEMO_NORMALIZATION=""
+if [[ ${USE_NEMO_NORMALIZATION,,} == "true" ]]; then
+  NEMO_NORMALIZATION="--use_nemo_normalization "
+fi
+
+PROCESSED_DATA_DIR=$DATA_DIR
+if [[ ${SKIP_DATA_PROCESSING,,} == "false" ]]; then
+  PROCESSED_DATA_DIR=$OUTPUT_DIR/processed/
+  # STEP #1
+  # Prepare text and audio data for segmentation
+  python $SCRIPTS_DIR/prepare_data.py \
+  --in_text=$DATA_DIR/text \
+  --audio_dir=$DATA_DIR/audio \
+  --audio_format=$AUDIO_FORMAT \
+  --output_dir=$OUTPUT_DIR/processed/ \
+  --language=$LANGUAGE \
+  --cut_prefix=$CUT_PREFIX \
+  --model=$MODEL_NAME_OR_PATH \
+  --min_length=$MIN_SEGMENT_LEN \
+  --max_length=$MAX_SEGMENT_LEN \
+  --additional_split_symbols=$ADDITIONAL_SPLIT_SYMBOLS $NEMO_NORMALIZATION || exit
+fi
+
+
+# STEP #2
+# Run CTC-segmenatation
+# one might want to perform alignment with various window sizes
+# note if the alignment with the initial window size isn't found, the window size will be double to re-attempt
+# alignment
+for WINDOW in 8000 12000
+do
+  python $SCRIPTS_DIR/run_ctc_segmentation.py \
+  --output_dir=$OUTPUT_DIR \
+  --data=$PROCESSED_DATA_DIR \
+  --model=$MODEL_NAME_OR_PATH  \
+  --window_len $WINDOW || exit
+done
+
+# STEP #3 (Optional)
+# Verify aligned segments only if multiple WINDOWs used in the Step #2)
+python $SCRIPTS_DIR/verify_segments.py \
+--base_dir=$OUTPUT_DIR  || exit
 
 # STEP #4
 # Cut the original audio files based on the alignments

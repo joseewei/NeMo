@@ -231,6 +231,7 @@ def split_text(
             else:
                 clean_transcript += ch
         if (replace_id % 2) != 0:
+            import pdb; pdb.set_trace()
         return clean_transcript, f'{delimiter}?{quote}{delimiter}'
 
     split_quotes_by_speakers = split_quotes_by_speakers == 'true'

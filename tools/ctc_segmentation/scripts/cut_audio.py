@@ -41,7 +41,7 @@ parser.add_argument(
     help='Path to model checkpoint or pre-trained CTC-based ASR model name',
 )
 parser.add_argument('--offset', type=int, default=0, help='Offset in seconds')
-parser.add_argument("--batch_size", type=int, default=64, help='Batch size for inference')
+parser.add_argument("--batch_size", type=int, default=512, help='Batch size for inference')
 
 
 def add_transcript_to_manifest(
@@ -212,12 +212,12 @@ def process_alignment(alignment_file: str, args):
         asr_model,
         args.batch_size,
     )
-    add_transcript_to_manifest(
-        os.path.join(tmp_dir, low_score_manifest),
-        os.path.join(manifests_dir, low_score_manifest),
-        asr_model,
-        args.batch_size,
-    )
+    # add_transcript_to_manifest(
+    #     os.path.join(tmp_dir, low_score_manifest),
+    #     os.path.join(manifests_dir, low_score_manifest),
+    #     asr_model,
+    #     args.batch_size,
+    # )
     print(f'High score files duration: {round(high_score_dur)}s or ~{round(high_score_dur/60)}min at {manifests_dir}')
     print(
         f'Low score files duration: {round(low_score_dur)}s or ~{round(low_score_dur/60)}min saved at {manifests_dir}'
@@ -285,7 +285,6 @@ if __name__ == '__main__':
             f'Provide path to the pretrained checkpoint or choose from {nemo_asr.models.EncDecCTCModel.list_available_models()}'
         )
 
-    citrinet =
     alignment_files = Path(args.alignment)
     if os.path.isdir(args.alignment):
         alignment_files = alignment_files.glob("*.txt")
