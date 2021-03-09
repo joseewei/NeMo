@@ -162,6 +162,7 @@ def split_text(
         .replace("--", " -- ")
         .replace(". . .", "...")
         .replace("‘", "’")
+        .replace("’", "'")
     )
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
@@ -230,9 +231,6 @@ def split_text(
             else:
                 clean_transcript += ch
         if (replace_id % 2) != 0:
-            import pdb
-
-            pdb.set_trace()
         return clean_transcript, f'{delimiter}?{quote}{delimiter}'
 
     split_quotes_by_speakers = split_quotes_by_speakers == 'true'
@@ -247,7 +245,7 @@ def split_text(
         transcript = re.sub(r'(\[.*?\])', ' ', transcript)
         # remove text in curly brackets
         transcript = re.sub(r'(\{.*?\})', ' ', transcript)
-        transcript = re.sub(r'(\(.*?\))', ' ', transcript)
+        # transcript = re.sub(r'(\(.*?\))', ' ', transcript)
 
     lower_case_unicode = ''
     upper_case_unicode = ''

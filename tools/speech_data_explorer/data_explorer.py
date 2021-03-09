@@ -131,11 +131,11 @@ def load_data(data_filename, disable_caching):
                 alphabet.add(char)
             num_hours += item['duration']
 
-            if 'pred_text' in item:
+            if 'transcript' in item:
                 metrics_available = True
-                pred = item['pred_text'].split()
+                pred = item['transcript'].split()
                 word_dist = editdistance.eval(orig, pred)
-                char_dist = editdistance.eval(item['text'], item['pred_text'])
+                char_dist = editdistance.eval(item['text'], item['transcript'])
                 wer_dist += word_dist
                 cer_dist += char_dist
                 wer_count += num_words
@@ -161,7 +161,7 @@ def load_data(data_filename, disable_caching):
                 }
             )
             if metrics_available:
-                data[-1]['pred_text'] = item['pred_text']
+                data[-1]['transcript'] = item['transcript']
                 data[-1]['WER'] = round(word_dist / num_words * 100.0, 2)
                 data[-1]['CER'] = round(char_dist / num_chars * 100.0, 2)
                 data[-1]['WMR'] = round(num_matches / len(orig) * 100.0, 2)
@@ -600,7 +600,7 @@ def show_diff(idx, data):
         orig_words = orig_words.replace('  ', ' ')
     orig_words = orig_words.replace(' ', '\n') + '\n'
 
-    pred_words = data[idx[0]]['pred_text']
+    pred_words = data[idx[0]]['transcript']
     while '  ' in pred_words:
         pred_words = pred_words.replace('  ', ' ')
     pred_words = pred_words.replace(' ', '\n') + '\n'
