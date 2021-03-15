@@ -131,11 +131,12 @@ def load_data(data_filename, disable_caching):
                 alphabet.add(char)
             num_hours += item['duration']
 
+            transcript = 'transcript_QN' if 'transcript_QN' in item else 'transcript'
             if 'transcript' in item:
                 metrics_available = True
-                pred = item['transcript'].split()
+                pred = item[transcript].split()
                 word_dist = editdistance.eval(orig, pred)
-                char_dist = editdistance.eval(item['text'], item['transcript'])
+                char_dist = editdistance.eval(item['text'], item[transcript])
                 wer_dist += word_dist
                 cer_dist += char_dist
                 wer_count += num_words
@@ -198,11 +199,11 @@ def load_data(data_filename, disable_caching):
 
 
 # plot histogram of specified field in data list
-def plot_histogram(data, key, label):
+def plot_histogram(data, key, label, log_y=True):
     fig = px.histogram(
         data_frame=[item[key] for item in data],
         nbins=50,
-        log_y=True,
+        log_y=log_y,
         labels={'value': label},
         opacity=0.5,
         color_discrete_sequence=['green'],
@@ -251,11 +252,11 @@ print('Starting server...')
 app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 
-figure_duration = plot_histogram(data, 'duration', 'Duration (sec)')
-figure_num_words = plot_histogram(data, 'num_words', '#words')
-figure_num_chars = plot_histogram(data, 'num_chars', '#chars')
-figure_word_rate = plot_histogram(data, 'word_rate', '#words/sec')
-figure_char_rate = plot_histogram(data, 'char_rate', '#chars/sec')
+figure_duration = plot_histogram(data, 'duration', 'Duration (sec)', log_y=False)
+figure_num_words = plot_histogram(data, 'num_words', '#words', log_y=False)
+figure_num_chars = plot_histogram(data, 'num_chars', '#chars', log_y=False)
+figure_word_rate = plot_histogram(data, 'word_rate', '#words/sec', log_y=False)
+figure_char_rate = plot_histogram(data, 'char_rate', '#chars/sec', log_y=False)
 
 if metrics_available:
     figure_wer = plot_histogram(data, 'WER', '#utterances')

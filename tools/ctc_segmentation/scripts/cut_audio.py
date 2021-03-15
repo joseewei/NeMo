@@ -41,7 +41,7 @@ parser.add_argument(
     help='Path to model checkpoint or pre-trained CTC-based ASR model name',
 )
 parser.add_argument('--offset', type=int, default=0, help='Offset in seconds')
-parser.add_argument("--batch_size", type=int, default=512, help='Batch size for inference')
+parser.add_argument("--batch_size", type=int, default=256, help='Batch size for inference')
 
 
 def add_transcript_to_manifest(
@@ -62,8 +62,8 @@ def add_transcript_to_manifest(
             for i, line in enumerate(f):
                 info = json.loads(line)
                 info[f'transcript_{model_name}'] = transcripts[i].strip()
-                info[f'WER_{model_name}'] = round(word_error_rate([info['transcript']], [info['text']]) * 100, 2)
-                info[f'CER_{model_name}'] = round(word_error_rate([info['transcript']], [info['text']], use_cer=True) * 100, 2)
+                info[f'WER_{model_name}'] = round(word_error_rate([info[f'transcript_{model_name}']], [info['text']]) * 100, 2)
+                info[f'CER_{model_name}'] = round(word_error_rate([info[f'transcript_{model_name}']], [info['text']], use_cer=True) * 100, 2)
                 json.dump(info, f_updated, ensure_ascii=False)
                 f_updated.write('\n')
 
@@ -212,12 +212,12 @@ def process_alignment(alignment_file: str, args):
         asr_model,
         args.batch_size,
     )
-    # add_transcript_to_manifest(
-    #     os.path.join(tmp_dir, low_score_manifest),
-    #     os.path.join(manifests_dir, low_score_manifest),
-    #     asr_model,
-    #     args.batch_size,
-    # )
+    add_transcript_to_manifest(
+        os.path.join(tmp_dir, low_score_manifest),
+        os.path.join(manifests_dir, low_score_manifest),
+        asr_model,
+        args.batch_size,
+    )
     print(f'High score files duration: {round(high_score_dur)}s or ~{round(high_score_dur/60)}min at {manifests_dir}')
     print(
         f'Low score files duration: {round(low_score_dur)}s or ~{round(low_score_dur/60)}min saved at {manifests_dir}'
