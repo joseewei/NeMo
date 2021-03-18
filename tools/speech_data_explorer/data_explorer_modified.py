@@ -132,7 +132,7 @@ def load_data(data_filename, disable_caching):
             num_hours += item['duration']
 
             transcript = 'transcript_QN' if 'transcript_QN' in item else 'transcript'
-            if 'transcript' in item:
+            if transcript in item:
                 metrics_available = True
                 pred = item[transcript].split()
                 word_dist = editdistance.eval(orig, pred)
@@ -162,7 +162,7 @@ def load_data(data_filename, disable_caching):
                 }
             )
             if metrics_available:
-                data[-1]['transcript'] = item['transcript']
+                data[-1]['transcript'] = item['transcript_QN'] if 'transcript_QN' in item else item['transcript']
                 data[-1]['WER'] = round(word_dist / num_words * 100.0, 2)
                 data[-1]['CER'] = round(char_dist / num_chars * 100.0, 2)
                 data[-1]['WMR'] = round(num_matches / len(orig) * 100.0, 2)
@@ -601,7 +601,7 @@ def show_diff(idx, data):
         orig_words = orig_words.replace('  ', ' ')
     orig_words = orig_words.replace(' ', '\n') + '\n'
 
-    pred_words = data[idx[0]]['transcript']
+    pred_words = data[idx[0]]['transcript_QN'] if 'transcript_QN' in data[idx[0]] else data[idx[0]]['transcript']
     while '  ' in pred_words:
         pred_words = pred_words.replace('  ', ' ')
     pred_words = pred_words.replace(' ', '\n') + '\n'

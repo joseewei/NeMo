@@ -212,12 +212,12 @@ def process_alignment(alignment_file: str, args):
         asr_model,
         args.batch_size,
     )
-    add_transcript_to_manifest(
-        os.path.join(tmp_dir, low_score_manifest),
-        os.path.join(manifests_dir, low_score_manifest),
-        asr_model,
-        args.batch_size,
-    )
+    # add_transcript_to_manifest(
+    #     os.path.join(tmp_dir, low_score_manifest),
+    #     os.path.join(manifests_dir, low_score_manifest),
+    #     asr_model,
+    #     args.batch_size,
+    # )
     print(f'High score files duration: {round(high_score_dur)}s or ~{round(high_score_dur/60)}min at {manifests_dir}')
     print(
         f'Low score files duration: {round(low_score_dur)}s or ~{round(low_score_dur/60)}min saved at {manifests_dir}'

@@ -163,6 +163,15 @@ def split_text(
         .replace(". . .", "...")
         .replace("‘", "'")
         .replace("’", "'")
+        .replace("&c.", "et cetera")
+        .replace('•', ' ')
+        .replace('^', ' ')
+        .replace('is ninety-eight°', 'is ninety-eight degrees')
+        .replace('>', ' ')
+        .replace('*', ' ')
+        .replace('■', ' ')
+        .replace('/', ' ')
+        .replace('––––', '...')
     )
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
@@ -292,7 +301,7 @@ def split_text(
         def _split(sentences, symbol, max_length):
             result = []
             for s in sentences:
-                if len(s) <= max_length:
+                if len(s.split(' ')) <= max_length:
                     result.append(s)
                 else:
                     result.extend(s.split(symbol))
@@ -374,7 +383,7 @@ def split_text(
         sentences_comb.append(sentences[0])
         # combines short sentence
         for i in range(1, len(sentences)):
-            if len(sentences_comb[-1]) < min_length or len(sentences[i]) < min_length:
+            if len(sentences_comb[-1].split(' ')) < min_length or len(sentences[i].split(' ')) < min_length:
                 sentences_comb[-1] += ' ' + sentences[i].strip()
             else:
                 sentences_comb.append(sentences[i].strip())

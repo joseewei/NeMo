@@ -48,7 +48,7 @@ class TranscriptionConfig:
 
     # General configs
     output_filename: str = "speech_to_text_transcriptions.txt"
-    batch_size: int = 32
+    batch_size: int = 3
     cuda: Optional[bool] = None  # will switch to cuda if available, defaults to cpu otherwise
     amp: bool = False
     audio_type: str = "wav"
