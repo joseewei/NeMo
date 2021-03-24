@@ -39,19 +39,23 @@ class EnJaProcessor:
         Returns:
             detokenized Japanese or English string
         """
-        return self.moses_detokenizer.detokenize(tokens)
+        if self.lang_id == 'ja':
+            return self.moses_detokenizer.detokenize(tokens)
+        else:
+            return ' '.join(tokens)
 
     def tokenize(self, text) -> str:
         """
         Tokenizes text using Moses. Returns a string of tokens.
         """
-        tokens = self.moses_tokenizer.tokenize(text)
-        return ' '.join(tokens)
+        # tokens = self.moses_tokenizer.tokenize(text)
+        # return ' '.join(tokens)
+        return text
 
     def normalize(self, text) -> str:
         # Normalization doesn't handle Japanese periods correctly;
         # '。'becomes '.'.
-        if self.lang_id == 'en':
-            return self.normalizer.normalize(text)
-        else:
-            return text
+        #if self.lang_id == 'en':
+        #    return self.normalizer.normalize(text)
+        #else:
+        return text

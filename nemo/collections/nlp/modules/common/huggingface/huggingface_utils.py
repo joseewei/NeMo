@@ -106,7 +106,7 @@ def get_huggingface_lm_model(
         raise ValueError(f"Use HuffingFace API directly in NeMo for {pretrained_model_name}")
 
 
-def get_huggingface_pretrained_lm_models_list(include_external: bool = False,) -> List[str]:
+def get_huggingface_pretrained_lm_models_list(include_external: bool = True,) -> List[str]:
     """
     Returns the list of pretrained HuggingFace language models
     
