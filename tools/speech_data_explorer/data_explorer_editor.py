@@ -745,6 +745,10 @@ def plot_signal(idx, data):
         figs.update_yaxes(title_text='Amplitude', row=2, col=1)
         figs.update_xaxes(title_text='Time, s', row=1, col=1)
         figs.update_yaxes(title_text='Frequency, kHz', row=1, col=1)
+        figs.update_layout(font=dict(
+            size=20,
+            color="Black"
+        ))
     except Exception:
         pass
 
