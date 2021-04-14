@@ -25,6 +25,7 @@ from nemo.collections.nlp.modules.common.transformer.transformer_encoders import
 from nemo.collections.nlp.modules.common.transformer.transformer_modules import TransformerEmbedding
 from nemo.core.classes.common import typecheck
 from nemo.core.classes.exportable import Exportable
+from nemo.utils import logging
 
 # @dataclass
 # class TransformerConfig:
@@ -60,6 +61,8 @@ class NeMoTransformerConfig:
     model_name: Optional[str] = None
     pretrained: bool = False
 
+    # streaming nmt arguments
+    wait_k: int = -1
 
 @dataclass
 class NeMoTransformerEncoderConfig(NeMoTransformerConfig):
@@ -84,11 +87,17 @@ class TransformerEncoderNM(EncoderModule, Exportable):
         hidden_act: str = 'relu',
         mask_future: bool = False,
         pre_ln: bool = False,
+        wait_k: int = -1
     ):
         super().__init__()
 
         self._vocab_size = vocab_size
         self._hidden_size = hidden_size
+        if wait_k < 1 and wait_k != -1:
+            raise ValueError(f"wait_k must be >= 1 or -1. Found {wait_k}")
+        if wait_k != -1 and not mask_future:
+            logging.warning(f'''Found wait_k: {wait_k} != -1 but mask_future=False. Overriding to True''')
+            mask_future = True
 
         self._embedding = TransformerEmbedding(
             vocab_size=self._vocab_size,
@@ -151,6 +160,7 @@ class TransformerDecoderNM(DecoderModule, Exportable):
         attn_layer_dropout: float = 0.0,
         hidden_act: str = 'relu',
         pre_ln: bool = False,
+        wait_k: int = -1
     ):
         super().__init__()
 

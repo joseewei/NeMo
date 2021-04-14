@@ -163,7 +163,11 @@ class TransformerDecoder(nn.Module):
                 or the last layer only
         """
         decoder_attn_mask = form_attention_mask(decoder_mask, diagonal=self.diagonal)
-        encoder_attn_mask = form_attention_mask(encoder_mask)
+        if False:
+            encoder_attn_mask = form_streaming_attention_mask(encoder_mask, self.diag, self.wait_k)
+        else:
+            encoder_attn_mask = form_attention_mask(encoder_mask)
+
         memory_states = self._get_memory_states(decoder_states, decoder_mems_list, 0)
         cached_mems_list = [memory_states]
 

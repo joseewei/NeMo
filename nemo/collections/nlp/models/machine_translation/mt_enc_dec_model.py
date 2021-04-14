@@ -131,6 +131,11 @@ class MTEncDecModel(EncDecNLPModel):
         # tie weights of embedding and softmax matrices
         self.log_softmax.mlp.layer0.weight = self.decoder.embedding.token_embedding.weight
 
+        if cfg.get("tie_encoder_decoder_embeddings", False):
+            if self.decoder_tokenizer.model_path != self.encoder_tokenizer.model_path:
+                raise ValueError("Must have shared tokenizers to tie encoder and decoder embeddings.")
+            self.encoder.embedding.token_embedding.weight = self.decoder.embedding.token_embedding.weight
+
         # TODO: encoder and decoder with different hidden size?
         std_init_range = 1 / self.encoder.hidden_size ** 0.5
 

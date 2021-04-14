@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 from omegaconf.omegaconf import MISSING
 
-from nemo.collections.common.parts import form_attention_mask
+from nemo.collections.common.parts import form_attention_mask, form_streaming_attention_mask
 from nemo.collections.nlp.modules.common.transformer.transformer_modules import MultiHeadAttention, PositionWiseFF
 
 __all__ = ["TransformerEncoder"]
@@ -114,6 +114,7 @@ class TransformerEncoder(nn.Module):
         ffn_dropout: float = 0.0,
         hidden_act: str = "relu",
         pre_ln: bool = False,
+        wait_k: int = -1
     ):
         super().__init__()
 
@@ -129,6 +130,7 @@ class TransformerEncoder(nn.Module):
         )
         self.layers = nn.ModuleList([copy.deepcopy(layer) for _ in range(num_layers)])
         self.diag = 0 if mask_future else None
+        self.wait_k = wait_k
 
     def _get_memory_states(self, encoder_states, encoder_mems_list=None, i=0):
         if encoder_mems_list is not None:
@@ -149,7 +151,10 @@ class TransformerEncoder(nn.Module):
                 or the last layer only
         """
 
-        encoder_attn_mask = form_attention_mask(encoder_mask, self.diag)
+        if self.wait_k != -1:
+            encoder_attn_mask = form_streaming_attention_mask(encoder_mask, self.diag, self.wait_k)
+        else:
+            encoder_attn_mask = form_attention_mask(encoder_mask, self.diag)
 
         memory_states = self._get_memory_states(encoder_states, encoder_mems_list, 0)
         cached_mems_list = [memory_states]

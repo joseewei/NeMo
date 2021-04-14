@@ -79,6 +79,7 @@ def get_nemo_transformer(
             mask_future=cfg.get('mask_future', False),
             pre_ln=cfg.get('pre_ln', False),
             num_token_types=cfg.get('num_token_types', 2),
+            wait_k=cfg.get('wait_k', -1)
         )
     else:
         model = TransformerDecoderNM(
@@ -96,6 +97,7 @@ def get_nemo_transformer(
             hidden_act=cfg.get('hidden_act', 'relu'),
             pre_ln=cfg.get('pre_ln', False),
             num_token_types=cfg.get('num_token_types', 2),
+            wait_k=cfg.get('wait_k', -1)
         )
 
     return model
