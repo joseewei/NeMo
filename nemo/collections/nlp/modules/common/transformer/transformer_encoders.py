@@ -150,7 +150,6 @@ class TransformerEncoder(nn.Module):
             return_mems: bool, whether to return outputs of all encoder layers
                 or the last layer only
         """
-        print(f'Creating encoder attention mask with diag {self.diag}')
         encoder_attn_mask = form_attention_mask(encoder_mask, self.diag)
 
         memory_states = self._get_memory_states(encoder_states, encoder_mems_list, 0)
