@@ -63,11 +63,11 @@ def form_streaming_cross_attention_mask(encoder_mask, decoder_mask, wait_k):
         attention_mask: mask of size B x 1 x M x L with 0s corresponding to
             tokens we plan to attend to and -10000 otherwise
     """
-    print('Creating Streaming Cross-Attention Mask ...')
+    print('Using streaming attention mask ...')
     attn_shape = (1, decoder_mask.shape[1], encoder_mask.shape[1])
     streaming_mask = torch.tril(torch.ones(attn_shape, dtype=torch.bool, device=decoder_mask.device), wait_k - 1)
-    streaming_mask = streaming_mask & encoder_mask.unsqueeze(1)
-    streaming_mask = streaming_mask & decoder_mask.unsqueeze(2)
+    streaming_mask = streaming_mask & encoder_mask.unsqueeze(1).to(dtype=bool)
+    streaming_mask = streaming_mask & decoder_mask.unsqueeze(2).to(dtype=bool)
     streaming_mask = (1 - streaming_mask.to(torch.float)) * NEG_INF
     return streaming_mask.unsqueeze(1)
 

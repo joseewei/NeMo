@@ -95,9 +95,6 @@ class TransformerEncoderNM(EncoderModule, Exportable):
         self._hidden_size = hidden_size
         if wait_k < 1 and wait_k != -1:
             raise ValueError(f"wait_k must be >= 1 or -1. Found {wait_k}")
-        if wait_k != -1 and not mask_future:
-            logging.warning(f'''Found wait_k: {wait_k} != -1 but mask_future=False. Overriding to True''')
-            mask_future = True
 
         self._embedding = TransformerEmbedding(
             vocab_size=self._vocab_size,

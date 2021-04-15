@@ -10,7 +10,6 @@ model:
   preproc_out_dir: null # path to store data preprocessing outputs
   src_language: 'en'
   tgt_language: 'de'
-  wait_k: -1
 
   train_ds:
     src_file_name: null
