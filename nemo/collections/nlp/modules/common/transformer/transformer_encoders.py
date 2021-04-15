@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 from omegaconf.omegaconf import MISSING
 
-from nemo.collections.common.parts import form_attention_mask, form_streaming_attention_mask
+from nemo.collections.common.parts import form_attention_mask
 from nemo.collections.nlp.modules.common.transformer.transformer_modules import MultiHeadAttention, PositionWiseFF
 
 __all__ = ["TransformerEncoder"]
@@ -150,11 +150,8 @@ class TransformerEncoder(nn.Module):
             return_mems: bool, whether to return outputs of all encoder layers
                 or the last layer only
         """
-
-        if self.wait_k != -1:
-            encoder_attn_mask = form_streaming_attention_mask(encoder_mask, self.diag, self.wait_k)
-        else:
-            encoder_attn_mask = form_attention_mask(encoder_mask, self.diag)
+        print(f'Creating encoder attention mask with diag {self.diag}')
+        encoder_attn_mask = form_attention_mask(encoder_mask, self.diag)
 
         memory_states = self._get_memory_states(encoder_states, encoder_mems_list, 0)
         cached_mems_list = [memory_states]

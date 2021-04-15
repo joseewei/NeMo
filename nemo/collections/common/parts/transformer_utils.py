@@ -15,7 +15,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['NEG_INF', 'form_attention_mask', 'transformer_weights_init', 'mask_padded_tokens', 'form_streaming_attention_mask']
+__all__ = ['NEG_INF', 'form_attention_mask', 'transformer_weights_init', 'mask_padded_tokens', 'form_streaming_cross_attention_mask']
 
 NEG_INF = -10000.0
 
@@ -48,33 +48,28 @@ def form_attention_mask(input_mask, diagonal=None):
     return attention_mask.unsqueeze(1)
 
 
-def form_streaming_attention_mask(input_mask, diagonal=None, wait_k=-1):
+def form_streaming_cross_attention_mask(encoder_mask, decoder_mask, wait_k):
     """
     Build attention mask with optional masking of future tokens we forbid
     to attend to (e.g. as it is in Transformer decoder).
 
     Args:
-        input_mask: binary mask of size B x L with 1s corresponding to valid
-            tokens and 0s corresponding to padding tokens
-        diagonal: diagonal where triangular future mask starts
-            None -- do not mask anything
-            0 -- regular translation or language modeling future masking
-            1 -- query stream masking as in XLNet architecture
+        encoder_mask: binary mask of size B x L with 1s corresponding to valid
+            tokens and 0s corresponding to padding tokens in the encoder
+        decoder_mask: binary mask of size B x M with 1s corresponding to valid
+            tokens and 0s corresponding to padding tokens in the decoder
         wait_k: number of tokens to wait for before translating in streaming NMT
     Returns:
-        attention_mask: mask of size B x 1 x L x L with 0s corresponding to
+        attention_mask: mask of size B x 1 x M x L with 0s corresponding to
             tokens we plan to attend to and -10000 otherwise
     """
-
-    if input_mask is None:
-        return None
-    attn_shape = (1, input_mask.shape[1], input_mask.shape[1])
-    attn_mask = input_mask.to(dtype=bool).unsqueeze(1)
-    if diagonal is not None:
-        future_mask = torch.tril(torch.ones(attn_shape, dtype=torch.bool, device=input_mask.device), wait_k - 1)
-        attn_mask = attn_mask & future_mask
-    attention_mask = (1 - attn_mask.to(torch.float)) * NEG_INF
-    return attention_mask.unsqueeze(1)
+    print('Creating Streaming Cross-Attention Mask ...')
+    attn_shape = (1, decoder_mask.shape[1], encoder_mask.shape[1])
+    streaming_mask = torch.tril(torch.ones(attn_shape, dtype=torch.bool, device=decoder_mask.device), wait_k - 1)
+    streaming_mask = streaming_mask & encoder_mask.unsqueeze(1)
+    streaming_mask = streaming_mask & decoder_mask.unsqueeze(2)
+    streaming_mask = (1 - streaming_mask.to(torch.float)) * NEG_INF
+    return streaming_mask.unsqueeze(1)
 
 
 def transformer_weights_init(module, std_init_range=0.02, xavier=True):

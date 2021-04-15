@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 from omegaconf.omegaconf import MISSING
 
-from nemo.collections.common.parts import form_attention_mask, form_streaming_attention_mask
+from nemo.collections.common.parts import form_attention_mask, form_streaming_cross_attention_mask
 from nemo.collections.nlp.modules.common.transformer.transformer_modules import MultiHeadAttention, PositionWiseFF
 
 __all__ = ["TransformerDecoder"]
@@ -166,7 +166,7 @@ class TransformerDecoder(nn.Module):
         """
         decoder_attn_mask = form_attention_mask(decoder_mask, diagonal=self.diagonal)
         if self.wait_k != -1:
-            encoder_attn_mask = form_streaming_attention_mask(encoder_mask, self.diag, self.wait_k)
+            encoder_attn_mask = form_streaming_cross_attention_mask(encoder_mask, decoder_mask, self.wait_k)
         else:
             encoder_attn_mask = form_attention_mask(encoder_mask)
 
