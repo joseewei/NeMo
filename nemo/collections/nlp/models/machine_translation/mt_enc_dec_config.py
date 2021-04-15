@@ -59,6 +59,7 @@ class MTEncDecModelConfig(EncDecNLPModelConfig):
     find_unused_parameters: Optional[bool] = True
     shared_tokenizer: Optional[bool] = True
     preproc_out_dir: Optional[str] = None
+    wait_k: Optional[int] = -1
 
     # network architecture configuration
     encoder_tokenizer: Any = MISSING
