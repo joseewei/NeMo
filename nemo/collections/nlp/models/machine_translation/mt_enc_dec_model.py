@@ -337,10 +337,8 @@ class MTEncDecModel(EncDecNLPModel):
                         raise FileNotFoundError("Could not find tarred dataset in config or metadata.")
                 else:
                     tar_files = cfg.get('tar_files')
-                    if metadata.get('tar_files') is not None:
-                        raise ValueError(
-                            'Tar files specified in config and in metadata file. Tar files should only be specified once.'
-                        )
+                    logging.info(f'Loading from tarred dataset {tar_files}')
+
             dataset = TarredTranslationDataset(
                 text_tar_filepaths=tar_files,
                 metadata_path=metadata_file,

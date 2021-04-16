@@ -129,7 +129,12 @@ class TransformerEncoder(nn.Module):
             pre_ln,
         )
         self.layers = nn.ModuleList([copy.deepcopy(layer) for _ in range(num_layers)])
-        self.diag = 0 if (mask_future or wait_k != -1) else None
+        if wait_k != -1:
+            self.diag = wait_k - 1
+        elif mask_future:
+            self.diag = 0
+        else:
+            self.diag = None
         self.wait_k = wait_k
 
     def _get_memory_states(self, encoder_states, encoder_mems_list=None, i=0):
