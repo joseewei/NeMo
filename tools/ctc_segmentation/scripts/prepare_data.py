@@ -167,6 +167,7 @@ def split_text(
         .replace('■', ' ')
         .replace('/', ' ')
         .replace('––––', '...')
+        .replace('|', ' ')
     )
     # remove extra space
     transcript = re.sub(r' +', ' ', transcript)
