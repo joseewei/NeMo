@@ -25,12 +25,7 @@ from normalization_helpers import LATIN_TO_RU, RU_ABBREVIATIONS
 from num2words import num2words
 
 from nemo.collections import asr as nemo_asr
-
-NEMO_NORMALIZATION = True
-try:
-    from tools.text_normalization.normalize import normalize_numbers
-except ImportError:
-    NEMO_NORMALIZATION = False
+from tools.text_normalization.normalize import normalize_numbers
 
 parser = argparse.ArgumentParser(description="Prepares text and audio files for segmentation")
 parser.add_argument("--in_text", type=str, default=None, help='Path to a text file or a directory with .txt files')
@@ -298,20 +293,21 @@ def split_text(
 
         split_on_symbols = split_on_symbols.split('|')
 
-        def _split(sentences, symbol, max_length):
+        def _split(sentences, delimiter, max_length):
             result = []
             for s in sentences:
-                if len(s.split(' ')) <= max_length:
+                if len(s) <= max_length:
                     result.append(s)
                 else:
-                    result.extend(s.split(symbol))
+                    split_sent = s.split(delimiter)
+                    result.extend([s + delimiter for s in split_sent[:-1]] + [split_sent[-1]])
             return result
 
         another_sent_split = []
         for sent in sentences:
             split_sent = [sent]
-            for sym in split_on_symbols:
-                split_sent = _split(split_sent, sym, max_length)
+            for delimiter in split_on_symbols:
+                split_sent = _split(split_sent, delimiter + ' ', max_length)
             another_sent_split.extend(split_sent)
 
         sentences = [s.strip() for s in another_sent_split if s.strip()]
@@ -383,22 +379,24 @@ def split_text(
         sentences_comb.append(sentences[0])
         # combines short sentence
         for i in range(1, len(sentences)):
-            if len(sentences_comb[-1].split(' ')) < min_length or len(sentences[i].split(' ')) < min_length:
+            if len(sentences_comb[-1]) < min_length or len(sentences[i]) < min_length:
                 sentences_comb[-1] += ' ' + sentences[i].strip()
             else:
                 sentences_comb.append(sentences[i].strip())
-        sentences = "\n".join([s.strip() for s in sentences_comb if s.strip()])
-    else:
-        sentences = "\n".join([s.strip() for s in sentences if s.strip()])
+        sentences = sentences_comb
+
+    sentences = [s.strip() for s in sentences if s.strip()]
 
     # save split text with original punctuation and case
     out_dir, out_file_name = os.path.split(out_file)
     with open(os.path.join(out_dir, out_file_name[:-4] + '_with_punct.txt'), "w") as f:
-        f.write(sentences)
+        f.write("\n".join(sentences))
 
-    if language == 'eng' and NEMO_NORMALIZATION and use_nemo_normalization:
+    if language == 'eng' and use_nemo_normalization:
         print('Using NeMo normalization tool...')
-        sentences = normalize_numbers(sentences, verbose=False)
+        sentences_norm = [normalize_numbers(s, verbose=False) for s in sentences]
+        assert len(sentences_norm) == len(sentences)
+        sentences = "\n".join(sentences_norm)
 
     # replace numbers with num2words
     try:

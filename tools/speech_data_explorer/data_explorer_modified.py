@@ -163,6 +163,10 @@ def load_data(data_filename, disable_caching):
             )
             if metrics_available:
                 data[-1]['transcript'] = item['transcript_QN'] if 'transcript_QN' in item else item['transcript']
+                data[-1]['transcript_QN'] = item['transcript_QN'] if 'transcript_QN' in item else item['transcript']
+                data[-1]['WER_QN'] = item['WER_QN'] if 'WER_QN' in item else item['WER']
+                data[-1]['CER_QN'] = item['CER_QN'] if 'CER_QN' in item else item['CER']
+
                 data[-1]['WER'] = round(word_dist / num_words * 100.0, 2)
                 data[-1]['CER'] = round(char_dist / num_chars * 100.0, 2)
                 data[-1]['WMR'] = round(num_matches / len(orig) * 100.0, 2)
