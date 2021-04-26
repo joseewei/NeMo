@@ -87,7 +87,7 @@ def convert_audio(in_file: str, wav_file: str = None, sample_rate: int = 16000) 
     if wav_file is None:
         wav_file = in_file.replace(os.path.splitext(in_file)[-1], f"_{sample_rate}.wav")
 
-    os.system(f'ffmpeg -i {in_file} -ac 1 -af aresample=resampler=soxr -ar {sample_rate} {wav_file} -y')
+    os.system(f'ffmpeg -i {in_file} -acodec pcm_s16le -ac 1 -af aresample=resampler=soxr -ar {sample_rate} {wav_file} -y')
     return wav_file
 
 
