@@ -219,14 +219,14 @@ class MTEncDecModel(EncDecNLPModel):
                     global_step=self.global_step,
                 )
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         """
         Lightning calls this inside the validation loop with the data from the validation dataloader
         passed in as `batch`.
         """
-        return self.eval_step(batch, batch_idx, 'val')
+        return self.eval_step(batch, batch_idx, 'val', dataloader_idx=0)
 
-    def eval_epoch_end(self, outputs, mode):
+    def multi_eval_epoch_end(self, outputs, mode, dataloader_idx=0):
         eval_loss = self.eval_loss.compute()
         translations = list(itertools.chain(*[x['translations'] for x in outputs]))
         ground_truths = list(itertools.chain(*[x['ground_truths'] for x in outputs]))
@@ -267,7 +267,7 @@ class MTEncDecModel(EncDecNLPModel):
         ans = {f"{mode}_loss": eval_loss, f"{mode}_sacreBLEU": sb_score}
         return ans
 
-    def validation_epoch_end(self, outputs):
+    def multi_validation_epoch_end(self, outputs, dataloader_idx=0):
         """
         Called at the end of validation to aggregate outputs.
         :param outputs: list of individual outputs of each validation step.
