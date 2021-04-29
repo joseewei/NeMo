@@ -128,6 +128,7 @@ class MTEncDecModel(EncDecNLPModel):
         library = encoder_cfg_dict.pop('library', 'nemo')
         model_name = encoder_cfg_dict.pop('model_name', None)
         pretrained = encoder_cfg_dict.pop('pretrained', False)
+        checkpoint_file = encoder_cfg_dict.pop('checkpoint_file', None)
         self.encoder = get_transformer(
             library=library,
             model_name=model_name,
@@ -135,6 +136,7 @@ class MTEncDecModel(EncDecNLPModel):
             config_dict=encoder_cfg_dict,
             encoder=True,
             pre_ln_final_layer_norm=encoder_cfg_dict.get('pre_ln_final_layer_norm', False),
+            checkpoint_file=checkpoint_file,
         )
 
         # decoder from NeMo, Megatron-LM, or HuggingFace
