@@ -51,10 +51,14 @@ class TextNormalizationModel(NLPModel):
         self._tokenizer_decoder = self._setup_tokenizer(cfg.tokenizer_decoder)
         super().__init__(cfg=cfg, trainer=trainer)
         self.teacher_forcing = True
+
+        self.context_embedding = nn.Embedding(
+            self._tokenizer_context.vocab_size, cfg.context.embedding_size, padding_idx=self._tokenizer_context.pad_id
+        )
         self.context_encoder = EncoderRNN(
             input_size=cfg.context.embedding_size,
             hidden_size=cfg.context.hidden_size,
-            num_layer=cfg.context.num_layers,
+            num_layers=cfg.context.num_layers,
             dropout=cfg.context.dropout,
         )
         self.tagger_decoder = nn.GRU(
@@ -62,14 +66,25 @@ class TextNormalizationModel(NLPModel):
             hidden_size=cfg.tagger.hidden_size,
             num_layers=cfg.tagger.num_layers,
             dropout=cfg.tagger.dropout,
-            batch_first=True,
         )
+        self.context_project = nn.Linear(cfg.context.hidden_size, cfg.tagger.embedding_size)
+        self.tagger_output_project = nn.Linear(cfg.tagger.hidden_size, cfg.tagger.num_classes)
+
         self.seq_encoder = EncoderRNN(
-            input_size=cfg.context.embedding_size, hidden_size=cfg.context.hidden_size, num_layers=1
+            input_size=cfg.seq_encoder.embedding_size,
+            hidden_size=cfg.seq_encoder.hidden_size,
+            num_layers=cfg.seq_encoder.num_layers,
+            dropout=cfg.seq_encoder.dropout,
         )
         self.seq_decoder = EncoderRNN(
-            input_size=cfg.context.embedding_size, hidden_size=cfg.context.hidden_size, num_layers=1
+            input_size=cfg.seq_decoder.embedding_size,
+            hidden_size=cfg.seq_decoder.hidden_size,
+            num_layers=cfg.seq_decoder.num_layers,
+            dropout=cfg.seq_decoder.dropout,
         )
+
+        self.seq2seq_loss = CrossEntropyLoss(logits_ndim=3)
+        self.tagger_loss = CrossEntropyLoss(logits_ndim=3)
 
     # @typecheck()
     def forward(
@@ -85,10 +100,16 @@ class TextNormalizationModel(NLPModel):
         r_context_ids,
     ):
         batch_size = len(context_ids)
+        context_embedding = self.context_embedding(context_ids)
+        context_output, context_hidden = self.context_encoder(
+            input_seqs=context_embedding, input_lengths=len_context.cpu()
+        )
 
-        # context_outputs, context_hidden = self.encoder_sent(input_seqs=context_ids, input_lens=len_context, hidden=None)
-        # max_seq_length = context_ids.shape[1]
-        # tagger_hidden = self.tagger_output_emb(context_hidden[0] + context_hidden[1]).unsqueeze(0)
+        context_output = self.context_project(context_output[:, :, self._cfg.context.hidden_size :])
+        context_output = nn.functional.relu(context_output)
+        tagger_output, _ = self.tagger_decoder(context_output)
+        tagger_logits = self.tagger_output_project(tagger_output)
+
         # all_tagger_outputs = torch.zeros((batch_size, max_seq_length, self._cfg.tagger.num_classes), device=self._device)
         # for i in range(max_seq_length):
         #     context_in = self.tagger_output_emb(context_outputs[i]).unsqueeze(0)
@@ -112,7 +133,7 @@ class TextNormalizationModel(NLPModel):
         #     all_decoder_outputs[:, 0, :] = decoder_output
         #     topv, topi = decoder_output.topk(1)
         #     decoder_input = topi.squeeze().detach()  # detach from history as input
-        # return all_tagger_outputs, all_decoder_outputs
+        return tagger_logits
 
     def _setup_tokenizer(self, cfg: DictConfig):
         """Instantiates tokenizer based on config and registers tokenizer artifacts.
@@ -145,37 +166,42 @@ class TextNormalizationModel(NLPModel):
 
     def training_step(self, batch, batch_idx):
         (
-            sent_ids,
+            context_ids,
             tag_ids,
-            sent_lens,
-            unnormalized_ids,
-            char_lens_input,
-            normalized_ids,
-            char_lens_output,
+            len_context,
+            input_ids,
+            len_input,
+            output_ids,
+            len_output,
             l_context_ids,
             r_context_ids,
         ) = batch
-        # bs, max_seq_length = sent_ids.shape
-        # _, max_target_length = normalized_ids.shape
-        self.forward(
-            sent_ids,
+        bs, max_context_length = context_ids.shape
+        tagger_logits = self.forward(
+            context_ids,
             tag_ids,
-            sent_lens,
-            unnormalized_ids,
-            char_lens_input,
-            normalized_ids,
-            char_lens_output,
+            len_context,
+            input_ids,
+            len_input,
+            output_ids,
+            len_output,
             l_context_ids,
             r_context_ids,
         )
-        # tagger_loss_mask = torch.arange(max_seq_length).to(self._device).expand(bs, max_seq_length) < sent_lens.unsqueeze(1)
+        tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
+            bs, max_context_length
+        ) < len_context.unsqueeze(1)
+        tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
         # decoder_loss_mask = torch.arange(max_target_length).to(self._device).expand(bs, max_target_length) < sent_lens.unsqueeze(1)
-        # tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
+
         # decoder_loss = self.seq2seq_loss(logits=decoder_logits, labels=normalized_ids, loss_mask=decoder_loss_mask)
         # train_loss = tagger_loss + decoder_loss
 
-        # tensorboard_logs = {} #{'train_loss': train_loss, 'lr': self._optimizer.param_groups[0]['lr']}
-        # return {'loss': train_loss, 'log': tensorboard_logs}
+        loss = tagger_loss
+        lr = self._optimizer.param_groups[0]['lr']
+        self.log('train_loss', loss)
+        self.log('lr', lr, prog_bar=True)
+        return {'loss': loss, 'lr': lr}
 
     def validation_step(self, batch, batch_idx):
         if self.trainer.testing:
@@ -184,17 +210,17 @@ class TextNormalizationModel(NLPModel):
             prefix = 'val'
 
         (
-            sent_ids,
+            context_ids,
             tag_ids,
-            sent_lens,
-            unnormalized_ids,
-            char_lens_input,
-            normalized_ids,
-            char_lens_output,
+            len_context,
+            input_ids,
+            len_input,
+            output_ids,
+            len_output,
             l_context_ids,
             r_context_ids,
         ) = batch
-        bs, max_seq_length = sent_ids.shape
+        bs, max_seq_length = context_ids.shape
         # _, max_target_length = normalized_ids.shape
         # tagger_logits, decoder_logits = self.forward(sent_ids, tag_ids, sent_lens, unnormalized_ids, char_lens_input, normalized_ids, char_lens_output, l_context_ids, r_context_ids)
         # tagger_loss_mask = torch.arange(max_seq_length).to(self._device).expand(bs, max_seq_length) < sent_lens.unsqueeze(1)

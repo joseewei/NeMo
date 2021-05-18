@@ -79,7 +79,7 @@ class EncoderRNN(nn.Module):
             last hidden state of RNN(i.e. last output for GRU) (num_layers, batch, 2 * hidden_size)
         '''
         packed = torch.nn.utils.rnn.pack_padded_sequence(
-            input=input_seqs, lengths=input_lengths, batch_first=True, enforce_sorted=True
+            input=input_seqs, lengths=input_lengths, batch_first=True, enforce_sorted=False
         )
         # outputs (seq_len, batch, 2* hidden_size)
         # hidden (num_layers * 2, batch, hidden_size)
@@ -123,7 +123,7 @@ class DynamicEncoder(nn.Module):
         sort_idx = torch.LongTensor(sort_idx).cuda()
         input_seqs = input_seqs[:, sort_idx, :]
         packed = torch.nn.utils.rnn.pack_padded_sequence(
-            input_seqs, input_lengths, batch_first=True, enforce_sorted=False
+            input_seqs, input_lengths, batch_first=True, enforce_sorted=True
         )
 
         # outputs (seq_len, batch, 2* hidden_size)
