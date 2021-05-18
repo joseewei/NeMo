@@ -78,14 +78,40 @@ model:
       unk_token: '[UNK]'
 
 
-  token_classifier:
+  # token_classifier:
+  #   num_layers: 1
+  #   dropout: 0.0
+  #   num_classes: 2
+  #   activation: relu
+  #   log_softmax: false
+  #   use_transformer_init: true
+
+
+  context:
+    embedding_size: 256
     num_layers: 1
     dropout: 0.0
-    num_classes: 2
-    activation: relu
-    log_softmax: false
-    use_transformer_init: true
+    hidden_size: 256 # context encoder units
 
+
+  tagger:
+    embedding_size: 64 # output embedding size
+    dropout: 0.0
+    num_layers: 1
+    hidden_size: 64 # tagging decoder units
+
+
+  seq_encoder:
+    embedding_size: 256 # seq2seq input embedding size
+    num_layers: 1
+    hidden_size: 256 # seq2seq encoder units
+    attention_size: 256 # attention mechanism size??
+
+  seq_decoder:
+    embedding_size: 512 # seq2seq output embedding size
+    num_layers: 1
+    hidden_size: 512 # seq2seq decoder units
+  
 
   optim:
     name: adamw

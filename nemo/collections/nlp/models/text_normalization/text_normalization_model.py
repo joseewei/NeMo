@@ -19,6 +19,7 @@ from typing import Dict, Optional
 import torch
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import Trainer
+from torch import nn
 from torch.utils.data import DataLoader
 
 from nemo.collections.common.losses import CrossEntropyLoss
@@ -50,7 +51,25 @@ class TextNormalizationModel(NLPModel):
         self._tokenizer_decoder = self._setup_tokenizer(cfg.tokenizer_decoder)
         super().__init__(cfg=cfg, trainer=trainer)
         self.teacher_forcing = True
-        self.model = TokenClassifier(hidden_size=5, num_classes=2)
+        self.context_encoder = EncoderRNN(
+            input_size=cfg.context.embedding_size,
+            hidden_size=cfg.context.hidden_size,
+            num_layer=cfg.context.num_layers,
+            dropout=cfg.context.dropout,
+        )
+        self.tagger_decoder = nn.GRU(
+            input_size=cfg.tagger.embedding_size,
+            hidden_size=cfg.tagger.hidden_size,
+            num_layers=cfg.tagger.num_layers,
+            dropout=cfg.tagger.dropout,
+            batch_first=True,
+        )
+        self.seq_encoder = EncoderRNN(
+            input_size=cfg.context.embedding_size, hidden_size=cfg.context.hidden_size, num_layers=1
+        )
+        self.seq_decoder = EncoderRNN(
+            input_size=cfg.context.embedding_size, hidden_size=cfg.context.hidden_size, num_layers=1
+        )
 
     # @typecheck()
     def forward(
