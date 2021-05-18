@@ -1,0 +1,117 @@
+name: &name TextNormalization
+
+pretrained_model: null # pretrained QAModel model from list_available_models()
+do_training: true # training mode, for testing change to false
+trainer:
+  gpus: 1 # the number of gpus, 0 for CPU, or list with gpu indices
+  num_nodes: 1
+  max_epochs: 1 # the number of training epochs
+  max_steps: null # precedence over max_epochs
+  accumulate_grad_batches: 1 # accumulates grads every k batches
+  precision: 16 # 16 to use AMP
+  amp_level: O1 # O1 or O2 if using AMP
+  accelerator: ddp
+  gradient_clip_val: 0.0
+  val_check_interval: 1.0 # check once per epoch .25 for 4 times per epoch
+  checkpoint_callback: false # provided by exp_manager
+  logger: false # provided by exp_manager
+  # num_sanity_val_steps: 0
+  log_every_n_steps: 1  # Interval of logging.
+
+model:
+  nemo_path: null # exported .nemo path
+  dataset:
+    num_workers:  2
+    pin_memory: false
+    drop_last: false
+    use_cache: false
+
+  train_ds:
+    file: /home/yzhang/data/nlp/text_norm/dataset/train.txt # .json file
+    batch_size: 8 # per GPU
+    shuffle: true
+    num_samples: -1
+    # Default values for the following params are retrieved from dataset config section, but you may override them
+    num_workers: ${model.dataset.num_workers}
+    drop_last: ${model.dataset.drop_last}
+    pin_memory: ${model.dataset.pin_memory}
+
+  validation_ds:
+    file: /home/yzhang/data/nlp/text_norm/dataset/train.txt # .json file
+    batch_size: 8 # per GPU
+    shuffle: false
+    num_samples: -1    
+    # Default values for the following params are retrieved from dataset config section, but you may override them
+    num_workers: ${model.dataset.num_workers}
+    drop_last: ${model.dataset.drop_last}
+    pin_memory: ${model.dataset.pin_memory}
+
+   
+  tokenizer_context:
+    tokenizer_name: word # tokenizer that inherits from TokenizerSpec
+    vocab_file: /home/yzhang/data/nlp/text_norm/dataset/vocab_word.txt # path to vocab file
+    tokenizer_model: null # only used if tokenizer is sentencepiece
+    special_tokens:
+      pad_token: '[PAD]'
+      bos_token: '[BOS]'
+      eos_token: '[EOS]'
+      unk_token: '[UNK]'
+   
+  tokenizer_encoder:
+    tokenizer_name: char # tokenizer that inherits from TokenizerSpec
+    vocab_file: /home/yzhang/data/nlp/text_norm/dataset/vocab_char.txt # path to vocab file
+    tokenizer_model: null # only used if tokenizer is sentencepiece
+    special_tokens:
+      pad_token: '[PAD]'
+      bos_token: '[BOS]'
+      eos_token: '[EOS]'
+      unk_token: '[UNK]'
+
+  tokenizer_decoder:
+    tokenizer_name: word # tokenizer that inherits from TokenizerSpec
+    vocab_file: /home/yzhang/data/nlp/text_norm/dataset/vocab_word.txt # path to vocab file
+    tokenizer_model: null # only used if tokenizer is sentencepiece
+    special_tokens:
+      pad_token: '[PAD]'
+      bos_token: '[BOS]'
+      eos_token: '[EOS]'
+      unk_token: '[UNK]'
+
+
+  token_classifier:
+    num_layers: 1
+    dropout: 0.0
+    num_classes: 2
+    activation: relu
+    log_softmax: false
+    use_transformer_init: true
+
+
+  optim:
+    name: adamw
+    lr: 3e-5
+    weight_decay: 0.0
+    sched:
+      name: SquareRootAnnealing
+
+      # pytorch lightning args
+      monitor: val_loss
+      reduce_on_plateau: false
+
+      # scheduler config override
+      warmup_steps: null
+      warmup_ratio: 0.0
+      last_epoch: -1
+
+exp_manager:
+  exp_dir: null # where to store logs and checkpoints
+  name: *name # name of experiment
+  create_tensorboard_logger: True
+  create_checkpoint_callback: True
+
+hydra:
+  run:
+    dir: .
+  job_logging:
+    root:
+      handlers: null
