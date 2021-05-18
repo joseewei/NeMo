@@ -31,11 +31,15 @@ class EncoderDecoder(nn.Module):
         self.trg_embed = trg_embed
         self.generator = generator
 
-    def forward(self, src, trg, src_lengths, trg_lengths):
+    def forward(self, src, trg, src_lengths, trg_lengths, decoder_init_hidden: Optional[torch.Tensor] = None):
         """Take in and process masked src and target sequences."""
 
         encoder_outputs, encoder_hidden = self.encode(src, src_lengths)
-        decoder_output, decoder_hidden = self.decode(encoder_outputs, encoder_hidden, src_lengths, trg, trg_lengths)
+        if decoder_init_hidden is None:
+            decoder_init_hidden = encoder_hidden
+        decoder_output, decoder_hidden = self.decode(
+            encoder_outputs, decoder_init_hidden, src_lengths, trg, trg_lengths
+        )
         pre_output = self.generator.proj(decoder_output)
         return pre_output
 
@@ -257,13 +261,13 @@ class DecoderAttentionRNN(nn.Module):
         decoder_states = torch.cat(decoder_states, dim=1)  # (B, T, 2*H)
         return decoder_states, hidden
 
-    def init_hidden(self, encoder_hidden):
+    def init_hidden(self, hidden):
         """Returns the initial decoder state,
         conditioned on the final encoder state."""
-        if encoder_hidden is None:
+        if hidden is None:
             return None  # start with zeros
 
-        return torch.tanh(self.bridge(encoder_hidden))
+        return torch.tanh(self.bridge(hidden))
 
 
 class Generator(nn.Module):

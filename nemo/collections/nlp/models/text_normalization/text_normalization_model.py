@@ -121,13 +121,26 @@ class TextNormalizationModel(NLPModel):
             input_seqs=context_embedding, input_lengths=len_context.cpu()
         )
 
-        context_output = self.context_project(context_output[:, :, self._cfg.context.hidden_size :])
-        context_output = nn.functional.relu(context_output)
-        tagger_output, _ = self.tagger_decoder(context_output)
+        context_to_tagger = self.context_project(context_output[:, :, self._cfg.context.hidden_size :])
+        context_to_tagger = nn.functional.relu(context_to_tagger)
+        tagger_output, _ = self.tagger_decoder(context_to_tagger)
         tagger_logits = self.tagger_output_project(tagger_output)
 
+        left_context = context_output[:, :, : self._cfg.context.hidden_size].view(-1, self._cfg.context.hidden_size)
+        right_context = context_output[:, :, self._cfg.context.hidden_size :].view(-1, self._cfg.context.hidden_size)
+        context_lr = torch.cat(
+            [
+                left_context[torch.arange(batch_size).to(self._device) * batch_size + l_context_ids],
+                right_context[torch.arange(batch_size).to(self._device) * batch_size + r_context_ids],
+            ],
+            dim=-1,
+        ).unsqueeze(0)
         seq_logits = self.seq2seq(
-            src=input_ids, trg=output_ids, src_lengths=len_input.cpu(), trg_lengths=len_output.cpu()
+            src=input_ids,
+            trg=output_ids,
+            src_lengths=len_input.cpu(),
+            trg_lengths=len_output.cpu(),
+            decoder_init_hidden=context_lr,
         )
 
         # all_decoder_outputs = torch.zeros((batch_size, max_target_length, self._tokenizer_sent.vocab_size), device=self._device)
