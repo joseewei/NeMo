@@ -26,7 +26,12 @@ from nemo.collections.common.losses import CrossEntropyLoss
 from nemo.collections.nlp.data import TextNormalizationDataset
 from nemo.collections.nlp.metrics.classification_report import ClassificationReport
 from nemo.collections.nlp.models.nlp_model import NLPModel
-from nemo.collections.nlp.models.text_normalization.modules import EncoderRNN
+from nemo.collections.nlp.models.text_normalization.modules import (
+    DecoderAttentionRNN,
+    EncoderDecoder,
+    EncoderRNN,
+    Generator,
+)
 from nemo.collections.nlp.modules.common import TokenClassifier
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
 from nemo.collections.nlp.parts.utils_funcs import tensor2list
@@ -67,21 +72,27 @@ class TextNormalizationModel(NLPModel):
             hidden_size=cfg.tagger.hidden_size,
             num_layers=cfg.tagger.num_layers,
             dropout=cfg.tagger.dropout,
+            batch_first=True,
         )
         self.context_project = nn.Linear(cfg.context.hidden_size, cfg.tagger.embedding_size)
         self.tagger_output_project = nn.Linear(cfg.tagger.hidden_size, cfg.tagger.num_classes)
 
-        self.seq_encoder = EncoderRNN(
-            input_size=cfg.seq_encoder.embedding_size,
-            hidden_size=cfg.seq_encoder.hidden_size,
-            num_layers=cfg.seq_encoder.num_layers,
-            dropout=cfg.seq_encoder.dropout,
-        )
-        self.seq_decoder = EncoderRNN(
-            input_size=cfg.seq_decoder.embedding_size,
-            hidden_size=cfg.seq_decoder.hidden_size,
-            num_layers=cfg.seq_decoder.num_layers,
-            dropout=cfg.seq_decoder.dropout,
+        self.seq2seq = EncoderDecoder(
+            EncoderRNN(
+                input_size=cfg.seq_encoder.embedding_size,
+                hidden_size=cfg.seq_encoder.hidden_size,
+                num_layers=cfg.seq_encoder.num_layers,
+                dropout=cfg.seq_encoder.dropout,
+            ),
+            DecoderAttentionRNN(
+                embed_size=cfg.seq_decoder.embedding_size,
+                hidden_size=cfg.seq_decoder.hidden_size,
+                num_layers=cfg.seq_decoder.num_layers,
+                dropout=cfg.seq_decoder.dropout,
+            ),
+            nn.Embedding(self._tokenizer_encoder.vocab_size, cfg.seq_encoder.embedding_size),
+            nn.Embedding(self._tokenizer_decoder.vocab_size, cfg.seq_decoder.embedding_size),
+            Generator(cfg.seq_decoder.hidden_size, vocab_size=self._tokenizer_decoder.vocab_size),
         )
 
         self.seq2seq_loss = CrossEntropyLoss(logits_ndim=3)
@@ -115,15 +126,9 @@ class TextNormalizationModel(NLPModel):
         tagger_output, _ = self.tagger_decoder(context_output)
         tagger_logits = self.tagger_output_project(tagger_output)
 
-        # all_tagger_outputs = torch.zeros((batch_size, max_seq_length, self._cfg.tagger.num_classes), device=self._device)
-        # for i in range(max_seq_length):
-        #     context_in = self.tagger_output_emb(context_outputs[i]).unsqueeze(0)
-        #     tagger_outputs, tagger_hidden = self.tagger(input=context_in, hidden=tagger_hidden)  # tagger outputs [B, H]
-        #     logits = self.tagger_output_layer(tagger_outputs)
-        #     all_tagger_outputs[:, i, :] = logits
-
-        # seq_enc_outputs, seq_enc_hidden = self.seq2seq_encoder(input_seqs=input_ids, input_lens=len_input, hidden=None)
-        # max_target_length = output_ids.shape[1]
+        seq_logits = self.seq2seq(
+            src=input_ids, trg=output_ids, src_lengths=len_input.cpu(), trg_lengths=len_output.cpu()
+        )
 
         # all_decoder_outputs = torch.zeros((batch_size, max_target_length, self._tokenizer_sent.vocab_size), device=self._device)
         # decoder_hidden = context_hidden.view(1, batch_size, -1)
@@ -138,7 +143,7 @@ class TextNormalizationModel(NLPModel):
         #     all_decoder_outputs[:, 0, :] = decoder_output
         #     topv, topi = decoder_output.topk(1)
         #     decoder_input = topi.squeeze().detach()  # detach from history as input
-        return tagger_logits
+        return tagger_logits, seq_logits
 
     def _setup_tokenizer(self, cfg: DictConfig):
         """Instantiates tokenizer based on config and registers tokenizer artifacts.
@@ -182,7 +187,8 @@ class TextNormalizationModel(NLPModel):
             r_context_ids,
         ) = batch
         bs, max_context_length = context_ids.shape
-        tagger_logits = self.forward(
+        _, max_target_length = output_ids.shape
+        tagger_logits, seq_logits = self.forward(
             context_ids,
             tag_ids,
             len_context,
@@ -197,12 +203,11 @@ class TextNormalizationModel(NLPModel):
             bs, max_context_length
         ) < len_context.unsqueeze(1)
         tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
-        # decoder_loss_mask = torch.arange(max_target_length).to(self._device).expand(bs, max_target_length) < sent_lens.unsqueeze(1)
-
-        # decoder_loss = self.seq2seq_loss(logits=decoder_logits, labels=normalized_ids, loss_mask=decoder_loss_mask)
-        # train_loss = tagger_loss + decoder_loss
-
-        loss = tagger_loss
+        seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(
+            bs, max_target_length
+        ) < len_output.unsqueeze(1)
+        seq_loss = self.seq2seq_loss(logits=seq_logits, labels=output_ids, loss_mask=seq_loss_mask)
+        loss = tagger_loss + seq_loss
         lr = self._optimizer.param_groups[0]['lr']
         self.log('train_loss', loss)
         self.log('lr', lr, prog_bar=True)
@@ -227,7 +232,8 @@ class TextNormalizationModel(NLPModel):
         ) = batch
 
         bs, max_context_length = context_ids.shape
-        tagger_logits = self.forward(
+        _, max_target_length = output_ids.shape
+        tagger_logits, seq_logits = self.forward(
             context_ids,
             tag_ids,
             len_context,
@@ -244,20 +250,17 @@ class TextNormalizationModel(NLPModel):
         tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
         tagger_logits = tagger_logits[tagger_loss_mask]
         tag_ids = torch.masked_select(tag_ids, tagger_loss_mask)
-        preds = torch.argmax(tagger_logits, axis=-1)
+        tag_preds = torch.argmax(tagger_logits, axis=-1)
 
-        tp, fn, fp, _ = self.classification_report(preds, tag_ids)
+        tp, fn, fp, _ = self.classification_report(tag_preds, tag_ids)
 
-        return {'val_loss': tagger_loss, 'tp': tp, 'fn': fn, 'fp': fp}
+        seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(
+            bs, max_target_length
+        ) < len_output.unsqueeze(1)
+        seq_loss = self.seq2seq_loss(logits=seq_logits, labels=output_ids, loss_mask=seq_loss_mask)
+        loss = tagger_loss + seq_loss
 
-        # tagger_loss_mask = torch.arange(max_seq_length).to(self._device).expand(bs, max_seq_length) < sent_lens.unsqueeze(1)
-        # decoder_loss_mask = torch.arange(max_target_length).to(self._device).expand(bs, max_target_length) < sent_lens.unsqueeze(1)
-        # tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
-        # decoder_loss = self.seq2seq_loss(logits=decoder_logits, labels=normalized_ids, loss_mask=decoder_loss_mask)
-        # train_loss = tagger_loss + decoder_loss
-
-        # tensorboard_logs = {} #{'train_loss': train_loss, 'lr': self._optimizer.param_groups[0]['lr']}
-        # return {'val_loss': train_loss, 'log': tensorboard_logs}
+        return {'val_loss': loss, 'tp': tp, 'fn': fn, 'fp': fp}
 
     def validation_epoch_end(self, outputs):
         """
@@ -280,18 +283,6 @@ class TextNormalizationModel(NLPModel):
 
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)
-
-    # def validation_epoch_end(self, outputs):
-    #     if self.trainer.testing:
-    #         prefix = 'test'
-    #     else:
-    #         prefix = 'val'
-
-    #     avg_loss = torch.stack([x[f'{prefix}_loss'] for x in outputs]).mean()
-    #     self.log(f'{prefix}_loss', avg_loss)
-
-    # def test_epoch_end(self, outputs):
-    #     return self.validation_epoch_end(outputs)
 
     def setup_training_data(self, train_data_config: Optional[DictConfig]):
         if not train_data_config or not train_data_config.file:

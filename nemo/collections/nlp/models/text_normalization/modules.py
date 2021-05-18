@@ -203,7 +203,7 @@ class DecoderAttentionRNN(nn.Module):
         # Define layers
         self.dropout = nn.Dropout(dropout)
         # to initialize from the final encoder state
-        self.bridgeDecoderAttentionRNN = nn.Linear(hidden_size, hidden_size, bias=True) if bridge else None
+        self.bridge = nn.Linear(hidden_size, hidden_size, bias=True) if bridge else None
 
         self.attn = Attn(hidden_size)
         self.gru = nn.GRU(hidden_size + embed_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
