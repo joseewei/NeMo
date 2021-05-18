@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader
 
 from nemo.collections.common.losses import CrossEntropyLoss
 from nemo.collections.nlp.data import TextNormalizationDataset
+from nemo.collections.nlp.metrics.classification_report import ClassificationReport
 from nemo.collections.nlp.models.nlp_model import NLPModel
 from nemo.collections.nlp.models.text_normalization.modules import EncoderRNN
 from nemo.collections.nlp.modules.common import TokenClassifier
@@ -85,6 +86,10 @@ class TextNormalizationModel(NLPModel):
 
         self.seq2seq_loss = CrossEntropyLoss(logits_ndim=3)
         self.tagger_loss = CrossEntropyLoss(logits_ndim=3)
+
+        self.classification_report = ClassificationReport(
+            num_classes=cfg.tagger.num_classes, mode='micro', dist_sync_on_step=True
+        )
 
     # @typecheck()
     def forward(
@@ -220,9 +225,31 @@ class TextNormalizationModel(NLPModel):
             l_context_ids,
             r_context_ids,
         ) = batch
-        bs, max_seq_length = context_ids.shape
-        # _, max_target_length = normalized_ids.shape
-        # tagger_logits, decoder_logits = self.forward(sent_ids, tag_ids, sent_lens, unnormalized_ids, char_lens_input, normalized_ids, char_lens_output, l_context_ids, r_context_ids)
+
+        bs, max_context_length = context_ids.shape
+        tagger_logits = self.forward(
+            context_ids,
+            tag_ids,
+            len_context,
+            input_ids,
+            len_input,
+            output_ids,
+            len_output,
+            l_context_ids,
+            r_context_ids,
+        )
+        tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
+            bs, max_context_length
+        ) < len_context.unsqueeze(1)
+        tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
+        tagger_logits = tagger_logits[tagger_loss_mask]
+        tag_ids = torch.masked_select(tag_ids, tagger_loss_mask)
+        preds = torch.argmax(tagger_logits, axis=-1)
+
+        tp, fn, fp, _ = self.classification_report(preds, tag_ids)
+
+        return {'val_loss': tagger_loss, 'tp': tp, 'fn': fn, 'fp': fp}
+
         # tagger_loss_mask = torch.arange(max_seq_length).to(self._device).expand(bs, max_seq_length) < sent_lens.unsqueeze(1)
         # decoder_loss_mask = torch.arange(max_target_length).to(self._device).expand(bs, max_target_length) < sent_lens.unsqueeze(1)
         # tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
@@ -231,6 +258,25 @@ class TextNormalizationModel(NLPModel):
 
         # tensorboard_logs = {} #{'train_loss': train_loss, 'lr': self._optimizer.param_groups[0]['lr']}
         # return {'val_loss': train_loss, 'log': tensorboard_logs}
+
+    def validation_epoch_end(self, outputs):
+        """
+        Called at the end of validation to aggregate outputs.
+        outputs: list of individual outputs of each validation step.
+        """
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+
+        # calculate metrics and classification report
+        precision, recall, f1, report = self.classification_report.compute()
+
+        logging.info(report)
+
+        self.log('val_loss', avg_loss, prog_bar=True)
+        self.log('precision', precision)
+        self.log('f1', f1)
+        self.log('recall', recall)
+
+        self.classification_report.reset()
 
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)
