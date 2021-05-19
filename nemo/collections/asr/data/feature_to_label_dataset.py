@@ -11,9 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from nemo.collections.asr.data import feature_to_label
 
-from nemo.collections.nlp.data.machine_translation.machine_translation_dataset import (
-    ConcatTranslationDataset,
-    TarredTranslationDataset,
-    TranslationDataset,
-)
+
+def get_feature_seq_speakerlabel_dataset(
+    feature_loader, config: dict
+) -> feature_to_label.FeatureToSeqSpeakerLabelDataset:
+    """
+    Instantiates a FeatureSeqSpeakerLabelDataset.
+    Args:
+        config: Config of the FeatureToSeqSpeakerLabelDataset.
+
+    Returns:
+        An instance of FeatureToSeqSpeakerLabelDataset.
+    """
+    dataset = feature_to_label.FeatureToSeqSpeakerLabelDataset(
+        manifest_filepath=config['manifest_filepath'], labels=config['labels'], feature_loader=feature_loader,
+    )
+    return dataset
