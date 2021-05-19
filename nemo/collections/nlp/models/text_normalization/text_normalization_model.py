@@ -89,8 +89,8 @@ class TextNormalizationModel(NLPModel):
                 num_layers=cfg.seq_decoder.num_layers,
                 dropout=cfg.seq_decoder.dropout,
             ),
-            nn.Embedding(self._tokenizer_encoder.vocab_size, cfg.seq_encoder.embedding_size),
-            nn.Embedding(self._tokenizer_decoder.vocab_size, cfg.seq_decoder.embedding_size),
+            nn.Embedding(self._tokenizer_encoder.vocab_size, cfg.seq_encoder.embedding_size, padding_idx=self._tokenizer_encoder.pad_id),
+            nn.Embedding(self._tokenizer_decoder.vocab_size, cfg.seq_decoder.embedding_size, padding_idx=self._tokenizer_decoder.pad_id),
             Generator(cfg.seq_decoder.hidden_size, vocab_size=self._tokenizer_decoder.vocab_size),
         )
 
