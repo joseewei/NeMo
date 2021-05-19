@@ -25,6 +25,7 @@ from nemo.collections.asr.parts.submodules.jasper import (
     MaskedConv1d,
     StatsPoolLayer,
     init_weights,
+    AttentivePoolingLayer,
     jasper_activations,
 )
 from nemo.core.classes.common import typecheck
@@ -387,6 +388,7 @@ class SpeakerDecoder(NeuralModule, Exportable):
         super().__init__()
         self.angular = angular
         self.emb_id = 2
+        self.pool_mode = pool_mode
         if self.angular:
             bias = False
         else:
@@ -401,7 +403,10 @@ class SpeakerDecoder(NeuralModule, Exportable):
 
         self.input_feat_in = feat_in
         self._num_classes = num_classes
-        self._pooling = StatsPoolLayer(feat_in=feat_in, pool_mode=pool_mode)
+        if self.pool_mode == 'xvector' or self.pool_mode == 'tap':
+            self._pooling = StatsPoolLayer(feat_in=feat_in, pool_mode=pool_mode)
+        elif self.pool_mode == 'ecapa':
+            self._pooling = AttentivePoolingLayer(input_channels=feat_in, attention_channels=128, global_context=True)
         self._feat_in = self._pooling.feat_in
 
         shapes = [self._feat_in]

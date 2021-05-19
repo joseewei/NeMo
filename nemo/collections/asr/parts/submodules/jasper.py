@@ -165,48 +165,66 @@ def get_asymtric_padding(kernel_size, stride, dilation, future_context):
 class StatsPoolLayer(nn.Module):
     def __init__(self, feat_in, pool_mode='xvector'):
         super().__init__()
-        self.feat_in = 0
-        if pool_mode == 'gram':
-            gram = True
-            super_vector = False
-        elif pool_mode == 'superVector':
-            gram = True
-            super_vector = True
+        self.pool_mode = pool_mode
+        self.feat_in = feat_in
+        if self.pool_mode == 'xvector':
+            self.feat_in += feat_in
+        elif self.pool_mode == 'tap':
+            self.feat_in = feat_in
         else:
-            gram = False
-            super_vector = False
-
-        if gram:
-            self.feat_in += feat_in ** 2
-        else:
-            self.feat_in += 2 * feat_in
-
-        if super_vector and gram:
-            self.feat_in += 2 * feat_in
-
-        self.gram = gram
-        self.super = super_vector
+            raise ValueError("pool mode for stats must be either tap or xvector based")
 
     def forward(self, encoder_output):
-
         mean = encoder_output.mean(dim=-1)  # Time Axis
-        std = encoder_output.std(dim=-1)
-
-        pooled = torch.cat([mean, std], dim=-1)
-
-        if self.gram:
-            time_len = encoder_output.shape[-1]
-            # encoder_output = encoder_output
-            cov = encoder_output.bmm(encoder_output.transpose(2, 1))  # cov matrix
-            cov = cov.view(cov.shape[0], -1) / time_len
-
-        if self.gram and not self.super:
-            return cov
-
-        if self.super and self.gram:
-            pooled = torch.cat([pooled, cov], dim=-1)
-
+        if self.pool_mode == 'xvector':
+            std = encoder_output.std(dim=-1)
+            pooled = torch.cat([mean, std], dim=-1)
+        else:
+            pooled = mean
         return pooled
+
+
+class AttentivePoolingLayer(nn.Module):
+    def __init__(self, input_channels, attention_channels, global_context=True, init_mode='xavier_uniform'):
+        super().__init__()
+        self.global_context = global_context
+        self.feat_in = 2 * input_channels
+        self.attention = nn.Sequential(
+            nn.Conv1d(3 * input_channels, attention_channels, kernel_size=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(attention_channels),
+            nn.Conv1d(attention_channels, input_channels, kernel_size=1),
+            nn.Softmax(dim=2),
+        )
+        self.bn5 = nn.BatchNorm1d(2 * input_channels)
+
+        self.apply(lambda x: init_weights(x, mode=init_mode))
+
+    def forward(self, x):
+        t = x.shape[-1]
+
+        if self.global_context:
+            global_x = torch.cat(
+                (
+                    x,
+                    torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
+                    torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t),
+                ),
+                dim=1,
+            )
+        else:
+            global_x = x
+
+        w = self.attention(global_x)
+
+        mu = torch.sum(x * w, dim=2)
+        sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
+
+        x = torch.cat((mu, sg), 1)
+
+        x = self.bn5(x)
+
+        return x
 
 
 class MaskedConv1d(nn.Module):
