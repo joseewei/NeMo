@@ -31,8 +31,6 @@ from nemo.utils import logging
 __all__ = ['TextNormalizationDataset']
 
 
-EOS_TYPE = "EOS"
-BOS_TYPE = "BOS"
 PUNCT_TYPE = "PUNCT"
 PLAIN_TYPE = "PLAIN"
 Instance = namedtuple('Instance', 'token_type un_normalized normalized')

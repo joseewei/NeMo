@@ -32,7 +32,6 @@ from nemo.collections.nlp.models.text_normalization.modules import (
     EncoderRNN,
     Generator,
 )
-from nemo.collections.nlp.modules.common import TokenClassifier
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
 from nemo.collections.nlp.parts.utils_funcs import tensor2list
 from nemo.core.classes.common import PretrainedModelInfo, typecheck
@@ -182,9 +181,9 @@ class TextNormalizationModel(NLPModel):
             tokenizer_model=self.register_artifact(config_path='tokenizer.tokenizer_model', src=cfg.tokenizer_model),
         )
 
-        if vocab_file is None:
-            # when there is no vocab file we try to get the vocab from the tokenizer and register it
-            self._register_vocab_from_tokenizer(vocab_file_config_path='tokenizer.vocab_file', cfg=cfg)
+        # if vocab_file is None:
+        #     # when there is no vocab file we try to get the vocab from the tokenizer and register it
+        #     self._register_vocab_from_tokenizer(vocab_file_config_path='tokenizer.vocab_file', cfg=cfg)
         return tokenizer
 
     def training_step(self, batch, batch_idx):

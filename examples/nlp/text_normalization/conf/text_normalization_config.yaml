@@ -24,7 +24,7 @@ model:
     num_workers:  2
     pin_memory: false
     drop_last: false
-    use_cache: false
+    use_cache: true
 
   train_ds:
     file: /home/yzhang/data/nlp/text_norm/dataset/train.txt # .json file
@@ -48,55 +48,33 @@ model:
 
    
   tokenizer_context:
-    tokenizer_name: word # tokenizer that inherits from TokenizerSpec
-    vocab_file: /home/yzhang/data/nlp/text_norm/dataset/vocab_word.txt # path to vocab file
-    tokenizer_model: null # only used if tokenizer is sentencepiece
-    special_tokens:
-      pad_token: '[PAD]'
-      bos_token: '[BOS]'
-      eos_token: '[EOS]'
-      unk_token: '[UNK]'
-   
+    tokenizer_name: sentencepiece # tokenizer that inherits from TokenizerSpec
+    vocab_file: null
+    tokenizer_model: /home/yzhang/data/nlp/text_norm/dataset/tmp/context_tok/tokenizer.model # only used if tokenizer is sentencepiece
+    special_tokens: null
+
   tokenizer_encoder:
-    tokenizer_name: char # tokenizer that inherits from TokenizerSpec
-    vocab_file: /home/yzhang/data/nlp/text_norm/dataset/vocab_char.txt # path to vocab file
-    tokenizer_model: null # only used if tokenizer is sentencepiece
-    special_tokens:
-      pad_token: '[PAD]'
-      bos_token: '[BOS]'
-      eos_token: '[EOS]'
-      unk_token: '[UNK]'
+    tokenizer_name: sentencepiece # tokenizer that inherits from TokenizerSpec
+    vocab_file: null
+    tokenizer_model: /home/yzhang/data/nlp/text_norm/dataset/tmp/input_tok/tokenizer.model # only used if tokenizer is sentencepiece
+    special_tokens: null
 
   tokenizer_decoder:
-    tokenizer_name: word # tokenizer that inherits from TokenizerSpec
-    vocab_file: /home/yzhang/data/nlp/text_norm/dataset/vocab_word.txt # path to vocab file
-    tokenizer_model: null # only used if tokenizer is sentencepiece
-    special_tokens:
-      pad_token: '[PAD]'
-      bos_token: '[BOS]'
-      eos_token: '[EOS]'
-      unk_token: '[UNK]'
-
-
-  # token_classifier:
-  #   num_layers: 1
-  #   dropout: 0.0
-  #   num_classes: 2
-  #   activation: relu
-  #   log_softmax: false
-  #   use_transformer_init: true
-
+    tokenizer_name: sentencepiece # tokenizer that inherits from TokenizerSpec
+    vocab_file: null
+    tokenizer_model: /home/yzhang/data/nlp/text_norm/dataset/tmp/target_tok/tokenizer.model # only used if tokenizer is sentencepiece
+    special_tokens: null
 
   context:
     embedding_size: 256
     num_layers: 1
-    dropout: 0.0
+    dropout: 0.1
     hidden_size: 256 # context encoder units
 
 
   tagger:
     embedding_size: 64 # output embedding size
-    dropout: 0.0
+    dropout: 0.1
     num_layers: 1
     hidden_size: 64 # tagging decoder units
     num_classes: 4
@@ -105,14 +83,14 @@ model:
   seq_encoder:
     embedding_size: 256 # seq2seq input embedding size
     num_layers: 1
-    dropout: 0.0
+    dropout: 0.1
     hidden_size: 256 # seq2seq encoder units
     attention_size: 256 # attention mechanism size??
 
   seq_decoder:
     embedding_size: 512 # seq2seq output embedding size
     num_layers: 1
-    dropout: 0.0
+    dropout: 0.1
     hidden_size: 512 # seq2seq decoder units
   
 

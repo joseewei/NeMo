@@ -86,7 +86,7 @@ def get_tokenizer(
 
     if tokenizer_name == 'sentencepiece':
         return nemo.collections.common.tokenizers.sentencepiece_tokenizer.SentencePieceTokenizer(
-            model_path=tokenizer_model, special_tokens=special_tokens, legacy=True
+            model_path=tokenizer_model, special_tokens=special_tokens, legacy=False
         )
     elif tokenizer_name == 'yttm':
         return YouTokenToMeTokenizer(model_path=tokenizer_model, bpe_dropout=bpe_dropout)
