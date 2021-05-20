@@ -60,6 +60,7 @@ class TextNormalizationModel(NLPModel):
         self.context_embedding = nn.Embedding(
             self._tokenizer_context.vocab_size, cfg.context.embedding_size, padding_idx=self._tokenizer_context.pad_id
         )
+        self.context_embedding.weight.data.normal_(0, 0.1)
         self.context_encoder = EncoderRNN(
             input_size=cfg.context.embedding_size,
             hidden_size=cfg.context.hidden_size,
@@ -116,7 +117,7 @@ class TextNormalizationModel(NLPModel):
     ):
         batch_size = len(context_ids)
         context_embedding = self.context_embedding(context_ids)
-        context_output, context_hidden = self.context_encoder(
+        context_output, _ = self.context_encoder(
             input_seqs=context_embedding, input_lengths=len_context.cpu()
         )
 

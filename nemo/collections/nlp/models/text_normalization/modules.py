@@ -24,16 +24,22 @@ class EncoderDecoder(nn.Module):
     """
 
     def __init__(self, encoder, decoder, src_embed, trg_embed, generator):
-        super(EncoderDecoder, self).__init__()
+        super().__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.src_embed = src_embed
         self.trg_embed = trg_embed
         self.generator = generator
 
-    def forward(self, src, trg, src_lengths, trg_lengths, decoder_init_hidden: Optional[torch.Tensor] = None):
-        """Take in and process masked src and target sequences."""
-
+    def forward(self, src: torch.Tensor, trg: torch.Tensor, src_lengths: torch.Tensor, trg_lengths: torch.Tensor, decoder_init_hidden: Optional[torch.Tensor] = None):
+        """
+        Args: 
+            src: input embedding. padded part should be masked out (B, T)
+            tgt: output embedding. padded part should be masked out (B, T)
+            src_lengths: input length, (B)
+            target_lengths: output length, (B)
+            decoder_init_hidden: initial hidden state for decoder, (1, B, Hd)
+        """
         encoder_outputs, encoder_hidden = self.encode(src, src_lengths)
         if decoder_init_hidden is None:
             decoder_init_hidden = encoder_hidden
@@ -57,11 +63,12 @@ class EncoderRNN(nn.Module):
     Args:
         input_size: size of embedded input
         hidden_size: hidden size of encoded input after send through encoder
+        num_layers: number of layers
         dropout: dropout rate
     """
 
     def __init__(self, input_size: int, hidden_size: int, num_layers: int, dropout: float):
-        super(EncoderRNN, self).__init__()
+        super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -70,30 +77,28 @@ class EncoderRNN(nn.Module):
     def forward(self, input_seqs, input_lengths, hidden: Optional[torch.Tensor] = None):
         '''
         Applies a bidirectional GRU to sequence of embeddings input_seqs.
-        The input mini-batch input_seqs needs to be sorted by length.
-        input_seqs should have dimensions [time, batch, dim].
 
         Args:
-            input_seqs: shape (B, T, E) sorted decreasingly by lengths(for packing)
-            input_lengths: list of sequence length (B, 1)
-            hidden: initial state of GRU, can be left out
+            input_seqs: embedded input (B, T, D)
+            input_lengths: list of sequence length (B)
+            hidden: optional, initial hidden state of GRU
         
         Returns:
-            GRU outputs in shape (batch, seq_len, 2 * hidden_size)
-            last hidden state of RNN(i.e. last output for GRU) (num_layers, batch, 2 * hidden_size)
+            GRU output (B, T, 2*H)
+            last hidden state of RNN (num_layers, B, 2*H)
         '''
         packed = torch.nn.utils.rnn.pack_padded_sequence(
             input=input_seqs, lengths=input_lengths, batch_first=True, enforce_sorted=False
         )
-        # outputs (seq_len, batch, 2* hidden_size)
-        # hidden (num_layers * 2, batch, hidden_size)
+        # outputs (T, B, 2*H)
+        # hidden (num_layers * 2, B, H)
         outputs, hidden = self.gru(packed, hidden)
         outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
         outputs = outputs.transpose(0, 1).contiguous()  # (B, T, 2*H)
 
         fwd_h_final = hidden[0 : hidden.size(0) : 2]
         bwd_h_final = hidden[1 : hidden.size(0) : 2]
-        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)  # [num_layers, batch, 2*hidden_size]
+        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)   # (num_layers, B, 2*)
         return outputs, hidden
 
 
@@ -130,15 +135,15 @@ class DynamicEncoder(nn.Module):
             input_seqs, input_lengths, batch_first=True, enforce_sorted=True
         )
 
-        # outputs (seq_len, batch, 2* hidden_size)
-        # hidden (num_layers * 2, batch, hidden_size)
+        # outputs (T, B, 2*H)
+        # hidden (num_layers * 2, B, H)
 
         outputs, hidden = self.gru(packed, hidden)
         outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)
 
         fwd_h_final = hidden[0 : hidden.size(0) : 2]
         bwd_h_final = hidden[1 : hidden.size(0) : 2]
-        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)  # [num_layers, batch, 2*hidden_size]
+        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)   # (num_layers, B, 2*)
 
         outputs = outputs[:, unsort_idx, :]
         hidden = hidden[:, unsort_idx, :]
@@ -151,10 +156,15 @@ class DynamicEncoder(nn.Module):
 class Attn(nn.Module):
     """
     concat attention
+
+    Args:
+        hidden_size: attention hidden size
     """
 
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size: int):
         super(Attn, self).__init__()
+
+        import ipdb; ipdb.set_trace()
 
         self.attn = nn.Linear(hidden_size * 2, hidden_size)
         self.v = nn.Parameter(torch.rand(hidden_size))
