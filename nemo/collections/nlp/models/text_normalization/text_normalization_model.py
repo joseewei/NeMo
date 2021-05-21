@@ -27,6 +27,7 @@ from nemo.collections.nlp.data import TextNormalizationDataset
 from nemo.collections.nlp.metrics.classification_report import ClassificationReport
 from nemo.collections.nlp.models.nlp_model import NLPModel
 from nemo.collections.nlp.models.text_normalization.modules import (
+    Attention,
     DecoderAttentionRNN,
     EncoderDecoder,
     EncoderRNN,
@@ -85,13 +86,26 @@ class TextNormalizationModel(NLPModel):
                 dropout=cfg.seq_encoder.dropout,
             ),
             DecoderAttentionRNN(
+                attention=Attention(
+                    attention_hidden_size=cfg.seq_decoder.attention_size,
+                    encoder_hidden_size=cfg.seq_encoder.hidden_size,
+                    decoder_hidden_size=cfg.seq_decoder.hidden_size,
+                ),
                 embed_size=cfg.seq_decoder.embedding_size,
                 hidden_size=cfg.seq_decoder.hidden_size,
                 num_layers=cfg.seq_decoder.num_layers,
                 dropout=cfg.seq_decoder.dropout,
             ),
-            nn.Embedding(self._tokenizer_encoder.vocab_size, cfg.seq_encoder.embedding_size, padding_idx=self._tokenizer_encoder.pad_id),
-            nn.Embedding(self._tokenizer_decoder.vocab_size, cfg.seq_decoder.embedding_size, padding_idx=self._tokenizer_decoder.pad_id),
+            nn.Embedding(
+                self._tokenizer_encoder.vocab_size,
+                cfg.seq_encoder.embedding_size,
+                padding_idx=self._tokenizer_encoder.pad_id,
+            ),
+            nn.Embedding(
+                self._tokenizer_decoder.vocab_size,
+                cfg.seq_decoder.embedding_size,
+                padding_idx=self._tokenizer_decoder.pad_id,
+            ),
             Generator(cfg.seq_decoder.hidden_size, vocab_size=self._tokenizer_decoder.vocab_size),
         )
 
@@ -117,9 +131,7 @@ class TextNormalizationModel(NLPModel):
     ):
         batch_size = len(context_ids)
         context_embedding = self.context_embedding(context_ids)
-        context_output, _ = self.context_encoder(
-            input_seqs=context_embedding, input_lengths=len_context.cpu()
-        )
+        context_output, _ = self.context_encoder(input_seqs=context_embedding, input_lengths=len_context)
 
         context_to_tagger = self.context_project(context_output[:, :, self._cfg.context.hidden_size :])
         context_to_tagger = nn.functional.relu(context_to_tagger)
@@ -138,8 +150,8 @@ class TextNormalizationModel(NLPModel):
         seq_logits = self.seq2seq(
             src=input_ids,
             trg=output_ids,
-            src_lengths=len_input.cpu(),
-            trg_lengths=len_output.cpu(),
+            src_lengths=len_input,
+            trg_lengths=len_output,
             decoder_init_hidden=context_lr,
         )
 

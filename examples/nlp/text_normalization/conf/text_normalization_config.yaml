@@ -85,13 +85,13 @@ model:
     num_layers: 1
     dropout: 0.1
     hidden_size: 256 # seq2seq encoder units
-    attention_size: 256 # attention mechanism size??
 
   seq_decoder:
     embedding_size: 512 # seq2seq output embedding size
     num_layers: 1
     dropout: 0.1
     hidden_size: 512 # seq2seq decoder units
+    attention_size: 256 # attention mechanism size
   
 
   optim:

@@ -31,7 +31,14 @@ class EncoderDecoder(nn.Module):
         self.trg_embed = trg_embed
         self.generator = generator
 
-    def forward(self, src: torch.Tensor, trg: torch.Tensor, src_lengths: torch.Tensor, trg_lengths: torch.Tensor, decoder_init_hidden: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        src: torch.Tensor,
+        trg: torch.Tensor,
+        src_lengths: torch.Tensor,
+        trg_lengths: torch.Tensor,
+        decoder_init_hidden: Optional[torch.Tensor] = None,
+    ):
         """
         Args: 
             src: input embedding. padded part should be masked out (B, T)
@@ -88,7 +95,7 @@ class EncoderRNN(nn.Module):
             last hidden state of RNN (num_layers, B, 2*H)
         '''
         packed = torch.nn.utils.rnn.pack_padded_sequence(
-            input=input_seqs, lengths=input_lengths, batch_first=True, enforce_sorted=False
+            input=input_seqs, lengths=input_lengths.cpu(), batch_first=True, enforce_sorted=False
         )
         # outputs (T, B, 2*H)
         # hidden (num_layers * 2, B, H)
@@ -98,7 +105,7 @@ class EncoderRNN(nn.Module):
 
         fwd_h_final = hidden[0 : hidden.size(0) : 2]
         bwd_h_final = hidden[1 : hidden.size(0) : 2]
-        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)   # (num_layers, B, 2*)
+        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)  # (num_layers, B, 2*)
         return outputs, hidden
 
 
@@ -143,7 +150,7 @@ class DynamicEncoder(nn.Module):
 
         fwd_h_final = hidden[0 : hidden.size(0) : 2]
         bwd_h_final = hidden[1 : hidden.size(0) : 2]
-        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)   # (num_layers, B, 2*)
+        hidden = torch.cat([fwd_h_final, bwd_h_final], dim=2)  # (num_layers, B, 2*)
 
         outputs = outputs[:, unsort_idx, :]
         hidden = hidden[:, unsort_idx, :]
@@ -153,51 +160,51 @@ class DynamicEncoder(nn.Module):
         return outputs, hidden
 
 
-class Attn(nn.Module):
+class Attention(nn.Module):
     """
     concat attention
 
     Args:
-        hidden_size: attention hidden size
+        attention_hidden_size: attention hidden size
+        encoder_hidden_size: encoder hidden size
+        decoder_hidden_size: decoder hidden size
     """
 
-    def __init__(self, hidden_size: int):
-        super(Attn, self).__init__()
+    def __init__(self, attention_hidden_size: int, encoder_hidden_size: int, decoder_hidden_size: int):
+        super(Attention, self).__init__()
 
-        import ipdb; ipdb.set_trace()
-
-        self.attn = nn.Linear(hidden_size * 2, hidden_size)
-        self.v = nn.Parameter(torch.rand(hidden_size))
+        self.attn = nn.Linear(2 * encoder_hidden_size + decoder_hidden_size, attention_hidden_size)
+        self.v = nn.Parameter(torch.rand(attention_hidden_size))
         stdv = 1.0 / math.sqrt(self.v.size(0))
         self.v.data.normal_(mean=0, std=stdv)
 
-    def forward(self, hidden_state, encoder_outputs, src_len=None):
+    def forward(
+        self, hidden_state: torch.Tensor, encoder_outputs: torch.Tensor, src_mask: Optional[torch.Tensor] = None
+    ):
         """
         Args:
-            hidden_state: previous decode hidden state, in shape (B,H)
-            encoder_outputs: encoder outputs from encoder, in shape (B,T, H)
+            hidden_state: query: decode hidden state, in shape (B,H)
+            encoder_outputs: keys, encoder outputs from encoder, in shape (B,T, H)
             src_len: used for masking. NoneType or tensor in shape (B) indicating sequence length
         returns:
             attention energies in shape (B,T)
         """
         max_len = encoder_outputs.size(1)
-        H = hidden_state.unsqueeze(1).repeat(1, max_len, 1)  # [B,T,H]
-        attn_energies = self.score(H, encoder_outputs)  # compute attention score
+        H = hidden_state.unsqueeze(1).repeat(1, max_len, 1)  # (B,T,H)
+        attn_energies = self.score(H, encoder_outputs)  # compute attention score (B, T)
 
-        if src_len is not None:
-            mask = []
-            for b in range(src_len.size(0)):
-                mask.append([0] * src_len[b].item() + [1] * (encoder_outputs.size(1) - src_len[b].item()))
-            mask = cuda_(torch.ByteTensor(mask).unsqueeze(1))  # [B,1,T]
-            attn_energies = attn_energies.masked_fill(mask, -1e18)
+        if src_mask is not None:
+            attn_energies = attn_energies.masked_fill(src_mask == 0, -float('inf'))
 
         return F.softmax(attn_energies, dim=-1)
 
-    def score(self, hidden_state, encoder_outputs):
+    def score(self, hidden_state: torch.Tensor, encoder_outputs: torch.Tensor):
         """
+        Computes unnormalized attention weights 
+
         Args:
-            hidden_state: (B, T,  H)
-            encoder_outputs: (B, T, H)
+            hidden_state: usually decoder hidden state - query (B, T, H)
+            encoder_outputs: encoder outputs - key (B, T, H)
         """
         energy = F.tanh(self.attn(torch.cat([hidden_state, encoder_outputs], 2)))  # [B*T*2H]->[B*T*H]
         energy = energy.transpose(2, 1)  # [B*H*T]
@@ -207,7 +214,9 @@ class Attn(nn.Module):
 
 
 class DecoderAttentionRNN(nn.Module):
-    def __init__(self, hidden_size, embed_size, num_layers=1, dropout=0.1, bridge=True):
+    def __init__(
+        self, attention: nn.Module, hidden_size: int, embed_size: int, num_layers=1, dropout=0.1, bridge=True
+    ):
         super(DecoderAttentionRNN, self).__init__()
         # Define parameters
         self.hidden_size = hidden_size
@@ -219,7 +228,7 @@ class DecoderAttentionRNN(nn.Module):
         # to initialize from the final encoder state
         self.bridge = nn.Linear(hidden_size, hidden_size, bias=True) if bridge else None
 
-        self.attn = Attn(hidden_size)
+        self.attn = attention
         self.gru = nn.GRU(hidden_size + embed_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         # self.attn_combine = nn.Linear(hidden_size + embed_size, hidden_size)
 
@@ -228,22 +237,20 @@ class DecoderAttentionRNN(nn.Module):
 
     def forward(self, encoder_outputs, last_hidden, src_lengths, trg, trg_lengths, max_len=None):
         """
+
         Args:
-            encoder_outputs:
-                encoder outputs in shape (B, T, 2*H)
-            last_hidden:
-                last hidden stat of the encoder, in shape (layers, B, 2 * H)
-            src_lengths:
-                encoder lenghts (B, 1)
-            trg:
-                embedded input for current time step, in shape (B, T, E)
-            trg_lengths: (B, 1)
+            encoder_outputs: encoder outputs in shape (B, T, H)
+            last_hidden: last hidden stat of the encoder, in shape (layers, B, H)
+            src_lengths: encoder lenghts (B)
+            trg: embedded input for current time step, in shape (B, T, D)
+            trg_lengths: (B)
             max_len:  int
         return:
             decoder output
         """
 
         bs = trg.size(0)
+        src_max_length = encoder_outputs.size(1)
         # the maximum number of steps to unroll the RNN
         if max_len is None:
             max_len = int(trg_lengths.max(dim=-1)[0].item())
@@ -252,23 +259,29 @@ class DecoderAttentionRNN(nn.Module):
 
         # here we store all intermediate hidden states and pre-output vectors
         decoder_states = []
+        src_mask = torch.arange(src_max_length, device=encoder_outputs.device).expand(
+            bs, src_max_length
+        ) < src_lengths.unsqueeze(1)
 
         for i in range(max_len):
-            prev_embed = trg[:, i].unsqueeze(1)  # [B, 1, E]
+            prev_embed = trg[:, i].unsqueeze(1)  # [B, 1, D]
             # Calculate attention weights and apply to encoder outputs
-            attn_weights = self.attn(hidden[-1], encoder_outputs)  # (B, T)
-            context = attn_weights.unsqueeze(1).bmm(encoder_outputs)  # (B,1,2 *H)
+            attn_weights = self.attn(
+                hidden_state=hidden[-1], encoder_outputs=encoder_outputs, src_mask=src_mask
+            )  # (B, T)
+            context = attn_weights.unsqueeze(1).bmm(encoder_outputs)  # (B,1,2*He)
             # Combine embedded input word and attended context, run through RNN
-            rnn_input = torch.cat((prev_embed, context), 2)  # (B, 1, embed_size + 2 * H)
+            rnn_input = torch.cat((prev_embed, context), 2)  # (B, 1, H + He*2)
             # rnn_input = self.attn_combine(rnn_input) # use it in case your size of rnn_input is different
             # rnn_input = F.relu(rnn_input)
             # output = (B, 1, 2*H)
             # hidden (layers, B, 2*H)
-            output, hidden = self.gru(rnn_input, last_hidden)
+            output, hidden = self.gru(rnn_input, last_hidden)  # (B, 1, H)
+            # dropout?
 
             decoder_states.append(output)
 
-        decoder_states = torch.cat(decoder_states, dim=1)  # (B, T, 2*H)
+        decoder_states = torch.cat(decoder_states, dim=1)  # (B, T, H)
         return decoder_states, hidden
 
     def init_hidden(self, hidden):
