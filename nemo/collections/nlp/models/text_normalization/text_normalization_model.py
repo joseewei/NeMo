@@ -134,7 +134,7 @@ class TextNormalizationModel(NLPModel):
         context_output, _ = self.context_encoder(input_seqs=context_embedding, input_lengths=len_context)
 
         context_to_tagger = self.context_project(context_output[:, :, self._cfg.context.hidden_size :])
-        context_to_tagger = nn.functional.relu(context_to_tagger)
+        context_to_tagger = nn.functional.tanh(context_to_tagger)
         tagger_output, _ = self.tagger_decoder(context_to_tagger)
         tagger_logits = self.tagger_output_project(tagger_output)
 

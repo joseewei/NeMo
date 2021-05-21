@@ -53,7 +53,7 @@ class EncoderDecoder(nn.Module):
         decoder_output, decoder_hidden = self.decode(
             encoder_outputs, decoder_init_hidden, src_lengths, trg, trg_lengths
         )
-        pre_output = self.generator.proj(decoder_output)
+        pre_output = self.generator(decoder_output)
         return pre_output
 
     def encode(self, src, src_lengths):
@@ -229,11 +229,10 @@ class DecoderAttentionRNN(nn.Module):
         self.bridge = nn.Linear(hidden_size, hidden_size, bias=True) if bridge else None
 
         self.attn = attention
-        self.gru = nn.GRU(hidden_size + embed_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
-        # self.attn_combine = nn.Linear(hidden_size + embed_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
+        # first hidden size should be 2 * encoder hidden size, in this case its the same
+        self.attn_combine = nn.Linear(hidden_size + embed_size, hidden_size) 
 
-        # pre output layer
-        self.out = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, encoder_outputs, last_hidden, src_lengths, trg, trg_lengths, max_len=None):
         """
@@ -272,8 +271,8 @@ class DecoderAttentionRNN(nn.Module):
             context = attn_weights.unsqueeze(1).bmm(encoder_outputs)  # (B,1,2*He)
             # Combine embedded input word and attended context, run through RNN
             rnn_input = torch.cat((prev_embed, context), 2)  # (B, 1, H + He*2)
-            # rnn_input = self.attn_combine(rnn_input) # use it in case your size of rnn_input is different
-            # rnn_input = F.relu(rnn_input)
+            rnn_input = self.attn_combine(rnn_input) # use it in case your size of rnn_input is different
+            # rnn_input = F.tanh(rnn_input) #makes it worse
             # output = (B, 1, 2*H)
             # hidden (layers, B, 2*H)
             output, hidden = self.gru(rnn_input, last_hidden)  # (B, 1, H)
@@ -301,7 +300,7 @@ class Generator(nn.Module):
         self.proj = nn.Linear(hidden_size, vocab_size, bias=False)
 
     def forward(self, x):
-        return F.log_softmax(self.proj(x), dim=-1)
+        return self.proj(x)
 
 
 class DecoderRNN(nn.Module):
