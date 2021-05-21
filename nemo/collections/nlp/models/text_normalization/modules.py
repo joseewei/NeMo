@@ -23,20 +23,27 @@ class EncoderDecoder(nn.Module):
     other models.
     """
 
-    def __init__(self, encoder, decoder, src_embed, trg_embed, generator):
+    def __init__(self, encoder, decoder, src_embed, trg_embed, teacher_forcing):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.src_embed = src_embed
+        
         self.trg_embed = trg_embed
-        self.generator = generator
+        self.teacher_forcing=teacher_forcing
+
+        
+        self.src_embed.weight.data.normal_(0, 0.1)
+        
+        self.trg_embed.weight.data.normal_(0, 0.1)
+        
 
     def forward(
         self,
         src: torch.Tensor,
         trg: torch.Tensor,
         src_lengths: torch.Tensor,
-        trg_lengths: torch.Tensor,
+        max_len: int,
         decoder_init_hidden: Optional[torch.Tensor] = None,
     ):
         """
@@ -44,23 +51,53 @@ class EncoderDecoder(nn.Module):
             src: input embedding. padded part should be masked out (B, T)
             tgt: output embedding. padded part should be masked out (B, T)
             src_lengths: input length, (B)
-            target_lengths: output length, (B)
             decoder_init_hidden: initial hidden state for decoder, (1, B, Hd)
+            max_len: max output length
         """
-        encoder_outputs, encoder_hidden = self.encode(src, src_lengths)
+        encoder_outputs, encoder_hidden = self.encoder(self.src_embed(src), src_lengths)
         if decoder_init_hidden is None:
             decoder_init_hidden = encoder_hidden
-        decoder_output, decoder_hidden = self.decode(
-            encoder_outputs, decoder_init_hidden, src_lengths, trg, trg_lengths
-        )
-        pre_output = self.generator(decoder_output)
-        return pre_output
 
-    def encode(self, src, src_lengths):
-        return self.encoder(self.src_embed(src), src_lengths)
 
-    def decode(self, encoder_outputs, encoder_hidden, src_lengths, trg, trg_lengths):
-        return self.decoder(encoder_outputs, encoder_hidden, src_lengths, self.trg_embed(trg), trg_lengths)
+        #### prepare decoding
+        bs = encoder_outputs.size(0)
+        src_max_length = encoder_outputs.size(1)
+        # the maximum number of steps to unroll the RNN
+        training=self.training
+        if training:
+            max_len = trg.size(1)
+        if (not training) or (np.random.rand() > self.teacher_forcing):
+            use_teacher_forcing = False
+        else:
+            use_teacher_forcing = True
+        
+        if max_len is None:
+            raise ValueError("max_len needs to be initialized")
+
+        hidden = self.decoder.init_hidden(decoder_init_hidden)
+
+        # here we store all intermediate hidden states and pre-output vectors
+
+        decoder_states = torch.zeros(bs, max_len, self.decoder.num_classes, device=encoder_outputs.device)
+        src_mask = torch.arange(src_max_length, device=encoder_outputs.device).expand(
+            bs, src_max_length
+        ) < src_lengths.unsqueeze(1)
+
+        trg = self.trg_embed(trg)
+        decoder_input = trg[:, 0].unsqueeze(1)
+        # unroll as long as max_len 
+        for i in range(max_len):
+            output, hidden = self.decoder(encoder_outputs=encoder_outputs, encoder_mask=src_mask, decoder_input=decoder_input, prev_decoder_hidden=hidden)
+            decoder_states[:, i:i+1, :] = output
+            
+            if use_teacher_forcing:
+                decoder_input = trg[:, i].unsqueeze(1)
+            else:
+                decoder_input = torch.argmax(output, dim=2).detach() 
+                decoder_input = self.trg_embed(decoder_input)
+
+        return decoder_states
+
 
 
 class EncoderRNN(nn.Module):
@@ -101,6 +138,7 @@ class EncoderRNN(nn.Module):
         # hidden (num_layers * 2, B, H)
         outputs, hidden = self.gru(packed, hidden)
         outputs, output_lengths = torch.nn.utils.rnn.pad_packed_sequence(outputs)  # unpack (back to padded)
+        # dropout
         outputs = outputs.transpose(0, 1).contiguous()  # (B, T, 2*H)
 
         fwd_h_final = hidden[0 : hidden.size(0) : 2]
@@ -214,17 +252,23 @@ class Attention(nn.Module):
 
 
 class DecoderAttentionRNN(nn.Module):
+    """
+
+    Args:
+        teacher forcing ratio:  1 means full teacher forcing , 0 means no teacher forcing e.g. used for inference
+
+    """
     def __init__(
-        self, attention: nn.Module, hidden_size: int, embed_size: int, num_layers=1, dropout=0.1, bridge=True
+        self, attention: nn.Module, hidden_size: int, embed_size: int, num_classes: int, num_layers=1, dropout=0.1, teacher_forcing=1., bridge=False
     ):
         super(DecoderAttentionRNN, self).__init__()
         # Define parameters
         self.hidden_size = hidden_size
         self.embed_size = embed_size
         self.num_layers = num_layers
-        self.dropout = dropout
         # Define layers
         self.dropout = nn.Dropout(dropout)
+        self.teacher_forcing = teacher_forcing
         # to initialize from the final encoder state
         self.bridge = nn.Linear(hidden_size, hidden_size, bias=True) if bridge else None
 
@@ -232,75 +276,46 @@ class DecoderAttentionRNN(nn.Module):
         self.gru = nn.GRU(hidden_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         # first hidden size should be 2 * encoder hidden size, in this case its the same
         self.attn_combine = nn.Linear(hidden_size + embed_size, hidden_size) 
+        self.proj = nn.Linear(hidden_size, num_classes)
+        self.num_classes = num_classes
 
 
-    def forward(self, encoder_outputs, last_hidden, src_lengths, trg, trg_lengths, max_len=None):
+    def forward(self, encoder_outputs, encoder_mask, decoder_input, prev_decoder_hidden):
         """
-
+        only single step
         Args:
-            encoder_outputs: encoder outputs in shape (B, T, H)
-            last_hidden: last hidden stat of the encoder, in shape (layers, B, H)
-            src_lengths: encoder lenghts (B)
-            trg: embedded input for current time step, in shape (B, T, D)
-            trg_lengths: (B)
-            max_len:  int
-        return:
-            decoder output
+            encoder_outputs: encoder output (B, T, He*2)        
+            encoder_mask: (B, T)
+            decoder_input: (B, 1, D)
+            prev_decoder_hidden: (num_layers, B, H)
         """
-
-        bs = trg.size(0)
-        src_max_length = encoder_outputs.size(1)
-        # the maximum number of steps to unroll the RNN
-        if max_len is None:
-            max_len = int(trg_lengths.max(dim=-1)[0].item())
-
-        hidden = self.init_hidden(last_hidden)
-
-        # here we store all intermediate hidden states and pre-output vectors
-        decoder_states = []
-        src_mask = torch.arange(src_max_length, device=encoder_outputs.device).expand(
-            bs, src_max_length
-        ) < src_lengths.unsqueeze(1)
-
-        for i in range(max_len):
-            prev_embed = trg[:, i].unsqueeze(1)  # [B, 1, D]
-            # Calculate attention weights and apply to encoder outputs
-            attn_weights = self.attn(
-                hidden_state=hidden[-1], encoder_outputs=encoder_outputs, src_mask=src_mask
-            )  # (B, T)
-            context = attn_weights.unsqueeze(1).bmm(encoder_outputs)  # (B,1,2*He)
-            # Combine embedded input word and attended context, run through RNN
-            rnn_input = torch.cat((prev_embed, context), 2)  # (B, 1, H + He*2)
-            rnn_input = self.attn_combine(rnn_input) # use it in case your size of rnn_input is different
-            # rnn_input = F.tanh(rnn_input) #makes it worse
-            # output = (B, 1, 2*H)
-            # hidden (layers, B, 2*H)
-            output, hidden = self.gru(rnn_input, last_hidden)  # (B, 1, H)
-            # dropout?
-
-            decoder_states.append(output)
-
-        decoder_states = torch.cat(decoder_states, dim=1)  # (B, T, H)
-        return decoder_states, hidden
+        # Calculate attention weights and apply to encoder outputs
+        attn_weights = self.attn(
+            hidden_state=prev_decoder_hidden[-1], encoder_outputs=encoder_outputs, src_mask=encoder_mask
+        )  # (B, T)
+        context = attn_weights.unsqueeze(1).bmm(encoder_outputs)  # (B,1,2*He)
+        # Combine embedded input word and attended context, run through RNN
+        rnn_input = torch.cat((decoder_input, context), 2)  # (B, 1, H + He*2)
+        rnn_input = self.attn_combine(rnn_input) # (B, 1, H)
+        # rnn_input = F.tanh(rnn_input) #makes it worse
+        # output = (B, 1, H)
+        # hidden (layers, B, H)
+        output, hidden = self.gru(rnn_input, prev_decoder_hidden)
+        output = self.dropout(output)
+        output = self.proj(output)
+        return output, hidden
 
     def init_hidden(self, hidden):
         """Returns the initial decoder state,
         conditioned on the final encoder state."""
         if hidden is None:
             return None  # start with zeros
+        if self.bridge:
+            return torch.tanh(self.bridge(hidden))
+        else:
+            return hidden
 
-        return torch.tanh(self.bridge(hidden))
 
-
-class Generator(nn.Module):
-    """Define standard linear + softmax generation step."""
-
-    def __init__(self, hidden_size, vocab_size):
-        super(Generator, self).__init__()
-        self.proj = nn.Linear(hidden_size, vocab_size, bias=False)
-
-    def forward(self, x):
-        return self.proj(x)
 
 
 class DecoderRNN(nn.Module):
@@ -331,7 +346,6 @@ if __name__ == "__main__":
         ),
         nn.Embedding(src_vocab_size, encoder_input_size),
         nn.Embedding(tgt_vocab_size, decoder_input_size),
-        Generator(hidden_size=2 * hidden_size, vocab_size=tgt_vocab_size),
     )
 
     input_seqs = torch.randint(high=src_vocab_size, size=(bs, max_seq_length))

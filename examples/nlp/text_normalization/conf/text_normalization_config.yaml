@@ -35,6 +35,8 @@ model:
     num_workers: ${model.dataset.num_workers}
     drop_last: ${model.dataset.drop_last}
     pin_memory: ${model.dataset.pin_memory}
+    max_len: 20
+
 
   validation_ds:
     file: /home/yzhang/data/nlp/text_norm/dataset/train.txt # .json file
@@ -45,6 +47,7 @@ model:
     num_workers: ${model.dataset.num_workers}
     drop_last: ${model.dataset.drop_last}
     pin_memory: ${model.dataset.pin_memory}
+    max_len: 20
 
    
   tokenizer_context:
@@ -92,14 +95,16 @@ model:
     dropout: 0.1
     hidden_size: 512 # seq2seq decoder units
     attention_size: 256 # attention mechanism size
+    teacher_forcing: 0.8
+    max_len: 8
   
 
   optim:
     name: adamw
-    lr: 3e-5
+    lr: 10e-4
     weight_decay: 0.0
     sched:
-      name: SquareRootAnnealing
+      name: WarmupAnnealing
 
       # pytorch lightning args
       monitor: val_loss
@@ -107,7 +112,7 @@ model:
 
       # scheduler config override
       warmup_steps: null
-      warmup_ratio: 0.0
+      warmup_ratio: 0.1
       last_epoch: -1
 
 exp_manager:

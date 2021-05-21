@@ -31,7 +31,6 @@ from nemo.collections.nlp.models.text_normalization.modules import (
     DecoderAttentionRNN,
     EncoderDecoder,
     EncoderRNN,
-    Generator,
 )
 from nemo.collections.nlp.modules.common.tokenizer_utils import get_tokenizer
 from nemo.collections.nlp.parts.utils_funcs import tensor2list
@@ -56,7 +55,6 @@ class TextNormalizationModel(NLPModel):
         self._tokenizer_encoder = self._setup_tokenizer(cfg.tokenizer_encoder)
         self._tokenizer_decoder = self._setup_tokenizer(cfg.tokenizer_decoder)
         super().__init__(cfg=cfg, trainer=trainer)
-        self.teacher_forcing = True
 
         self.context_embedding = nn.Embedding(
             self._tokenizer_context.vocab_size, cfg.context.embedding_size, padding_idx=self._tokenizer_context.pad_id
@@ -95,6 +93,7 @@ class TextNormalizationModel(NLPModel):
                 hidden_size=cfg.seq_decoder.hidden_size,
                 num_layers=cfg.seq_decoder.num_layers,
                 dropout=cfg.seq_decoder.dropout,
+                num_classes=self._tokenizer_decoder.vocab_size,
             ),
             nn.Embedding(
                 self._tokenizer_encoder.vocab_size,
@@ -106,7 +105,7 @@ class TextNormalizationModel(NLPModel):
                 cfg.seq_decoder.embedding_size,
                 padding_idx=self._tokenizer_decoder.pad_id,
             ),
-            Generator(cfg.seq_decoder.hidden_size, vocab_size=self._tokenizer_decoder.vocab_size),
+            teacher_forcing=cfg.seq_decoder.teacher_forcing,
         )
 
         self.seq2seq_loss = CrossEntropyLoss(logits_ndim=3)
@@ -125,9 +124,9 @@ class TextNormalizationModel(NLPModel):
         input_ids,
         len_input,
         output_ids,
-        len_output,
         l_context_ids,
         r_context_ids,
+        max_len
     ):
         batch_size = len(context_ids)
         context_embedding = self.context_embedding(context_ids)
@@ -151,23 +150,10 @@ class TextNormalizationModel(NLPModel):
             src=input_ids,
             trg=output_ids,
             src_lengths=len_input,
-            trg_lengths=len_output,
             decoder_init_hidden=context_lr,
+            max_len=max_len
         )
 
-        # all_decoder_outputs = torch.zeros((batch_size, max_target_length, self._tokenizer_sent.vocab_size), device=self._device)
-        # decoder_hidden = context_hidden.view(1, batch_size, -1)
-        # decoder_input = output_ids[:, 0]
-        # for i in range(max_target_length):
-        #     # word_input torch.Size([5])    decoder_hidden=torch.Size([1, 5, 25])
-        #     if self.teacher_forcing:
-        #         decoder_input = output_ids[:, i]
-        #     l_context = context_outputs[l_context_ids, torch.arange(end=batch_size, dtype=torch.long)]
-        #     r_context = context_outputs[r_context_ids, torch.arange(end=batch_size, dtype=torch.long)]
-        #     decoder_output, decoder_hidden = self.seq2seq_decoder(word_input=decoder_input, last_hidden=decoder_hidden, encoder_outputs=context_outputs, l_context=l_context, r_context=r_context, src_len=len_input)
-        #     all_decoder_outputs[:, 0, :] = decoder_output
-        #     topv, topi = decoder_output.topk(1)
-        #     decoder_input = topi.squeeze().detach()  # detach from history as input
         return tagger_logits, seq_logits
 
     def _setup_tokenizer(self, cfg: DictConfig):
@@ -220,9 +206,9 @@ class TextNormalizationModel(NLPModel):
             input_ids,
             len_input,
             output_ids,
-            len_output,
             l_context_ids,
             r_context_ids,
+            max_len=self._cfg.train_ds.max_len
         )
         tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
             bs, max_context_length
@@ -265,9 +251,9 @@ class TextNormalizationModel(NLPModel):
             input_ids,
             len_input,
             output_ids,
-            len_output,
             l_context_ids,
             r_context_ids,
+            max_len=self._cfg.validation_ds.max_len
         )
         tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
             bs, max_context_length
