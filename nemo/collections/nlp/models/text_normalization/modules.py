@@ -43,8 +43,8 @@ class EncoderDecoder(nn.Module):
         src: torch.Tensor,
         trg: torch.Tensor,
         src_lengths: torch.Tensor,
-        max_len: int,
         decoder_init_hidden: Optional[torch.Tensor] = None,
+        max_len: Optional[int]=None
     ):
         """
         Args: 
@@ -52,7 +52,7 @@ class EncoderDecoder(nn.Module):
             tgt: output embedding. padded part should be masked out (B, T)
             src_lengths: input length, (B)
             decoder_init_hidden: initial hidden state for decoder, (1, B, Hd)
-            max_len: max output length
+            max_len: max output length, only specified for inference
         """
         encoder_outputs, encoder_hidden = self.encoder(self.src_embed(src), src_lengths)
         if decoder_init_hidden is None:
@@ -63,16 +63,13 @@ class EncoderDecoder(nn.Module):
         bs = encoder_outputs.size(0)
         src_max_length = encoder_outputs.size(1)
         # the maximum number of steps to unroll the RNN
-        training=self.training
-        if training:
+        if max_len is None:
             max_len = trg.size(1)
-        if (not training) or (np.random.rand() > self.teacher_forcing):
+        if (not self.training) or (np.random.rand() > self.teacher_forcing):
             use_teacher_forcing = False
         else:
             use_teacher_forcing = True
         
-        if max_len is None:
-            raise ValueError("max_len needs to be initialized")
 
         hidden = self.decoder.init_hidden(decoder_init_hidden)
 

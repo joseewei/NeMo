@@ -126,7 +126,7 @@ class TextNormalizationModel(NLPModel):
         output_ids,
         l_context_ids,
         r_context_ids,
-        max_len
+        max_len: Optional[int] = None
     ):
         batch_size = len(context_ids)
         context_embedding = self.context_embedding(context_ids)
@@ -208,7 +208,6 @@ class TextNormalizationModel(NLPModel):
             output_ids,
             l_context_ids,
             r_context_ids,
-            max_len=self._cfg.train_ds.max_len
         )
         tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
             bs, max_context_length
@@ -253,7 +252,6 @@ class TextNormalizationModel(NLPModel):
             output_ids,
             l_context_ids,
             r_context_ids,
-            max_len=self._cfg.validation_ds.max_len
         )
         tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
             bs, max_context_length
@@ -271,7 +269,7 @@ class TextNormalizationModel(NLPModel):
         seq_loss = self.seq2seq_loss(logits=seq_logits, labels=output_ids, loss_mask=seq_loss_mask)
         loss = tagger_loss + seq_loss
 
-        return {'val_loss': loss, 'tp': tp, 'fn': fn, 'fp': fp}
+        return {f'{prefix}_loss': loss, 'tp': tp, 'fn': fn, 'fp': fp}
 
     def validation_epoch_end(self, outputs):
         """
