@@ -91,7 +91,7 @@ class MTEncDecModel(EncDecNLPModel):
                 )
             elif isinstance(self.src_language, ListConfig):
                 for lng in self.src_language:
-                    self.multilingual_ids.append(self.encoder_tokenizer.token_to_id("<" + lng + ">"))
+                    self.multilingual_ids.append(None)
             elif isinstance(self.tgt_language, ListConfig):
                 for lng in self.tgt_language:
                     self.multilingual_ids.append(self.encoder_tokenizer.token_to_id("<" + lng + ">"))
