@@ -42,8 +42,6 @@ def main(cfg: DictConfig) -> None:
 
     if cfg.do_training:
         trainer.fit(model)
-        if cfg.model.nemo_path:
-            model.save_to(cfg.model.nemo_path)
 
     if hasattr(cfg.model, 'test_ds') and cfg.model.test_ds.file is not None:
         trainer.test(model)

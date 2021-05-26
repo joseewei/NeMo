@@ -23,7 +23,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from nemo.collections.common.losses import CrossEntropyLoss
-from nemo.collections.nlp.data import TextNormalizationDataset
+from nemo.collections.nlp.data import TextNormalizationDataset, tag_labels
 from nemo.collections.nlp.metrics.classification_report import ClassificationReport
 from nemo.collections.nlp.models.nlp_model import NLPModel
 from nemo.collections.nlp.models.text_normalization.modules import (
@@ -112,7 +112,7 @@ class TextNormalizationModel(NLPModel):
         self.tagger_loss = CrossEntropyLoss(logits_ndim=3)
 
         self.classification_report = ClassificationReport(
-            num_classes=cfg.tagger.num_classes, mode='micro', dist_sync_on_step=True
+            num_classes=cfg.tagger.num_classes, label_ids=tag_labels, mode='micro', dist_sync_on_step=True
         )
 
     # @typecheck()
@@ -186,6 +186,7 @@ class TextNormalizationModel(NLPModel):
         return tokenizer
 
     def training_step(self, batch, batch_idx):
+        # TODO rename to match dataset output context_ids -> sent_ids, input_ids -> unnormalized_ids ..
         (
             context_ids,
             tag_ids,
@@ -197,6 +198,7 @@ class TextNormalizationModel(NLPModel):
             l_context_ids,
             r_context_ids,
         ) = batch
+
         bs, max_context_length = context_ids.shape
         _, max_target_length = output_ids.shape
         tagger_logits, seq_logits = self.forward(
@@ -209,9 +211,12 @@ class TextNormalizationModel(NLPModel):
             l_context_ids,
             r_context_ids,
         )
+        for i in range(len(output_ids)):
+            print('----->', self._tokenizer_decoder.ids_to_text(tensor2list(output_ids[i])))
         tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
             bs, max_context_length
         ) < len_context.unsqueeze(1)
+        # TODO replace loss mask with -100 idx
         tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
         seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(
             bs, max_target_length
@@ -289,6 +294,74 @@ class TextNormalizationModel(NLPModel):
         self.log('recall', recall)
 
         self.classification_report.reset()
+
+    def test_epoch_end(self, outputs):
+        """
+        Called at test time to aggregate outputs.
+        outputs: list of individual outputs of each validation step.
+        """
+        avg_loss = torch.stack([x['test_loss'] for x in outputs]).mean()
+
+        # calculate metrics and classification report
+        precision, recall, f1, report = self.classification_report.compute()
+
+        logging.info(report)
+
+        self.log('test_loss', avg_loss, prog_bar=True)
+        self.log('precision', precision)
+        self.log('f1', f1)
+        self.log('recall', recall)
+
+        self.classification_report.reset()
+
+    @torch.no_grad()
+    def infer(self):
+        # store predictions for all queries in a single list
+        all_preds = []
+        mode = self.training
+        try:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            # Switch model to evaluation mode
+            self.eval()
+            self.to(device)
+            infer_datalayer = self._setup_dataloader_from_config(self._cfg.test_ds)
+
+            for batch in infer_datalayer:
+                (
+                    context_ids,
+                    tag_ids,
+                    len_context,
+                    input_ids,
+                    len_input,
+                    output_ids,
+                    len_output,
+                    l_context_ids,
+                    r_context_ids,
+                ) = batch
+                bs, max_context_length = context_ids.shape
+                _, max_target_length = output_ids.shape
+                tagger_logits, seq_logits = self.forward(
+                    context_ids,
+                    tag_ids,
+                    len_context,
+                    input_ids,
+                    len_input,
+                    output_ids,
+                    l_context_ids,
+                    r_context_ids,
+                )
+                tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(bs, max_context_length) < len_context.unsqueeze(1)
+                tagger_logits = tagger_logits[tagger_loss_mask]
+                tag_ids = torch.masked_select(tag_ids, tagger_loss_mask)
+                tag_preds = torch.argmax(tagger_logits, axis=-1)
+
+                seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(bs, max_target_length) < len_output.unsqueeze(1)
+                import pdb; pdb.set_trace()
+
+        finally:
+            # set mode back to its original value
+            self.train(mode=mode)
+        return all_preds
 
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)

@@ -28,7 +28,7 @@ from nemo.core.classes import Dataset
 from nemo.core.neural_types import ChannelType, LabelsType, LengthsType, MaskType, NeuralType
 from nemo.utils import logging
 
-__all__ = ['TextNormalizationDataset']
+__all__ = ['TextNormalizationDataset', 'tag_labels']
 
 
 PUNCT_TYPE = "PUNCT"
@@ -277,6 +277,7 @@ def get_features(
             else:
                 # semiotic token
                 tokens = tokenizer_context.text_to_ids(instance.un_normalized)
+                # TODO rename left_context_ids and right_context_ids - to show it's a starting idx
                 left_context_ids.append(len(sent_ids) - 1)  # exclusive of this token
                 sent_ids.extend(tokens)
                 right_context_ids.append(len(sent_ids))  # exclusive of this token
@@ -299,6 +300,11 @@ def get_features(
             for i in range(len(unnormalized_ids))
         ]
 
+        if len(features) > 0:
+            print([instance.un_normalized for instance in sentence])
+            names = ['send_ids', 'tag_ids', 'unnormalized_ids', 'normalized_ids', 'left_context_ids', 'right_context_ids']
+            for i, f in enumerate(features[0]):
+                print(f'{names[i]}: {f}')
         return features
 
     features = []
