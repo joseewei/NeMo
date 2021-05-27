@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.autograd import Variable
 
 # we will use CUDA if it is available
 USE_CUDA = torch.cuda.is_available()
@@ -28,15 +27,13 @@ class EncoderDecoder(nn.Module):
         self.encoder = encoder
         self.decoder = decoder
         self.src_embed = src_embed
-        
-        self.trg_embed = trg_embed
-        self.teacher_forcing=teacher_forcing
 
-        
+        self.trg_embed = trg_embed
+        self.teacher_forcing = teacher_forcing
+
         self.src_embed.weight.data.normal_(0, 0.1)
-        
+
         self.trg_embed.weight.data.normal_(0, 0.1)
-        
 
     def forward(
         self,
@@ -44,7 +41,7 @@ class EncoderDecoder(nn.Module):
         trg: torch.Tensor,
         src_lengths: torch.Tensor,
         decoder_init_hidden: Optional[torch.Tensor] = None,
-        max_len: Optional[int]=None
+        max_len: Optional[int] = None,
     ):
         """
         Args: 
@@ -58,7 +55,6 @@ class EncoderDecoder(nn.Module):
         if decoder_init_hidden is None:
             decoder_init_hidden = encoder_hidden
 
-
         #### prepare decoding
         bs = encoder_outputs.size(0)
         src_max_length = encoder_outputs.size(1)
@@ -69,7 +65,6 @@ class EncoderDecoder(nn.Module):
             use_teacher_forcing = False
         else:
             use_teacher_forcing = True
-        
 
         hidden = self.decoder.init_hidden(decoder_init_hidden)
 
@@ -82,19 +77,23 @@ class EncoderDecoder(nn.Module):
 
         trg = self.trg_embed(trg)
         decoder_input = trg[:, 0].unsqueeze(1)
-        # unroll as long as max_len 
+        # unroll as long as max_len
         for i in range(max_len):
-            output, hidden = self.decoder(encoder_outputs=encoder_outputs, encoder_mask=src_mask, decoder_input=decoder_input, prev_decoder_hidden=hidden)
-            decoder_states[:, i:i+1, :] = output
-            
+            output, hidden = self.decoder(
+                encoder_outputs=encoder_outputs,
+                encoder_mask=src_mask,
+                decoder_input=decoder_input,
+                prev_decoder_hidden=hidden,
+            )
+            decoder_states[:, i : i + 1, :] = output
+
             if use_teacher_forcing:
                 decoder_input = trg[:, i].unsqueeze(1)
             else:
-                decoder_input = torch.argmax(output, dim=2).detach() 
+                decoder_input = torch.argmax(output, dim=2).detach()
                 decoder_input = self.trg_embed(decoder_input)
 
         return decoder_states
-
 
 
 class EncoderRNN(nn.Module):
@@ -255,8 +254,17 @@ class DecoderAttentionRNN(nn.Module):
         teacher forcing ratio:  1 means full teacher forcing , 0 means no teacher forcing e.g. used for inference
 
     """
+
     def __init__(
-        self, attention: nn.Module, hidden_size: int, embed_size: int, num_classes: int, num_layers=1, dropout=0.1, teacher_forcing=1., bridge=False
+        self,
+        attention: nn.Module,
+        hidden_size: int,
+        embed_size: int,
+        num_classes: int,
+        num_layers=1,
+        dropout=0.1,
+        teacher_forcing=1.0,
+        bridge=False,
     ):
         super(DecoderAttentionRNN, self).__init__()
         # Define parameters
@@ -272,10 +280,9 @@ class DecoderAttentionRNN(nn.Module):
         self.attn = attention
         self.gru = nn.GRU(hidden_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
         # first hidden size should be 2 * encoder hidden size, in this case its the same
-        self.attn_combine = nn.Linear(hidden_size + embed_size, hidden_size) 
+        self.attn_combine = nn.Linear(hidden_size + embed_size, hidden_size)
         self.proj = nn.Linear(hidden_size, num_classes)
         self.num_classes = num_classes
-
 
     def forward(self, encoder_outputs, encoder_mask, decoder_input, prev_decoder_hidden):
         """
@@ -293,7 +300,7 @@ class DecoderAttentionRNN(nn.Module):
         context = attn_weights.unsqueeze(1).bmm(encoder_outputs)  # (B,1,2*He)
         # Combine embedded input word and attended context, run through RNN
         rnn_input = torch.cat((decoder_input, context), 2)  # (B, 1, H + He*2)
-        rnn_input = self.attn_combine(rnn_input) # (B, 1, H)
+        rnn_input = self.attn_combine(rnn_input)  # (B, 1, H)
         # rnn_input = F.tanh(rnn_input) #makes it worse
         # output = (B, 1, H)
         # hidden (layers, B, H)
@@ -311,8 +318,6 @@ class DecoderAttentionRNN(nn.Module):
             return torch.tanh(self.bridge(hidden))
         else:
             return hidden
-
-
 
 
 class DecoderRNN(nn.Module):
@@ -352,6 +357,3 @@ if __name__ == "__main__":
     output_lengths = torch.ones(bs) * max_seq_length
 
     output = model(src=input_seqs, trg=output_seqs, src_lengths=input_lengths, trg_lengths=output_lengths)
-    import ipdb
-
-    ipdb.set_trace()

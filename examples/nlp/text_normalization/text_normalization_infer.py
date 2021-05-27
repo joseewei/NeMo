@@ -14,16 +14,16 @@
 
 
 import os
+from argparse import ArgumentParser
 
 import pytorch_lightning as pl
+import torch
 from omegaconf import DictConfig, OmegaConf
 
 from nemo.collections.nlp.models import TextNormalizationModel
 from nemo.core.config import hydra_runner
 from nemo.utils import logging
 from nemo.utils.exp_manager import exp_manager
-from argparse import ArgumentParser
-import torch
 
 
 @hydra_runner(config_path="conf", config_name="text_normalization_config")
@@ -45,7 +45,7 @@ def main(cfg: DictConfig) -> None:
         checkpoint_callback=False,
     )
 
-    model = "/home/ebakhturina/NeMo/examples/nlp/text_normalization/nemo_experiments/TextNormalization/2021-05-25_15-04-57/checkpoints/TextNormalization.nemo"
+    model = "/home/ebakhturina/NeMo/examples/nlp/text_normalization/nemo_experiments/TextNormalization/2021-05-27_05-39-58/checkpoints/TextNormalization.nemo"
 
     torch.set_grad_enabled(False)
 
@@ -59,6 +59,8 @@ def main(cfg: DictConfig) -> None:
 
     model.setup_test_data(cfg.model.test_ds)
     trainer.test(model)
+
+    model.infer(cfg.model.test_ds)
 
 
 if __name__ == '__main__':

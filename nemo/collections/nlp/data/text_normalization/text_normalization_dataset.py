@@ -287,7 +287,11 @@ def get_features(
                 unnormalized_ids.append(
                     [tokenizer_encoder.bos_id] + tokenizer_encoder.text_to_ids(instance.un_normalized)
                 )
-                normalized_ids.append(tokenizer_decoder.text_to_ids(instance.normalized) + [tokenizer_decoder.eos_id])
+                normalized_ids.append(
+                    [tokenizer_decoder.bos_id]
+                    + tokenizer_decoder.text_to_ids(instance.normalized)
+                    + [tokenizer_decoder.eos_id]
+                )
 
         # start of sentence, needs to be only single token
         tokens = [tokenizer_context.eos_id]
@@ -302,7 +306,14 @@ def get_features(
 
         if len(features) > 0:
             print([instance.un_normalized for instance in sentence])
-            names = ['send_ids', 'tag_ids', 'unnormalized_ids', 'normalized_ids', 'left_context_ids', 'right_context_ids']
+            names = [
+                'send_ids',
+                'tag_ids',
+                'unnormalized_ids',
+                'normalized_ids',
+                'left_context_ids',
+                'right_context_ids',
+            ]
             for i, f in enumerate(features[0]):
                 print(f'{names[i]}: {f}')
         return features
