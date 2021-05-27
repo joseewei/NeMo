@@ -722,12 +722,12 @@ class MTEncDecModel(EncDecNLPModel):
 
         mode = self.training
         prepend_ids = []
-        if self.multilingual:
-            if source_lang is None or target_lang is None:
-                raise ValueError("Expect source_lang and target_lang to infer for multilingual model.")
-            src_symbol = self.encoder_tokenizer.token_to_id('<' + source_lang + '>')
-            tgt_symbol = self.encoder_tokenizer.token_to_id('<' + target_lang + '>')
-            prepend_ids = [src_symbol if src_symbol in self.multilingual_ids else tgt_symbol]
+        # if self.multilingual:
+        #     if source_lang is None or target_lang is None:
+        #         raise ValueError("Expect source_lang and target_lang to infer for multilingual model.")
+        #     src_symbol = self.encoder_tokenizer.token_to_id('<' + source_lang + '>')
+        #     tgt_symbol = self.encoder_tokenizer.token_to_id('<' + target_lang + '>')
+        #     prepend_ids = [src_symbol if src_symbol in self.multilingual_ids else tgt_symbol]
         try:
             self.eval()
             inputs = []
