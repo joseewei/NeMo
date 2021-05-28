@@ -305,7 +305,7 @@ class TextNormalizationModel(NLPModel):
         self.classification_report.reset()
 
     @torch.no_grad()
-    def infer(self, cfg: DictConfig):
+    def infer(self, cfg: DictConfig, max_target_length: int=10):
         # store predictions for all queries in a single list
         all_preds = []
         mode = self.training
@@ -331,7 +331,6 @@ class TextNormalizationModel(NLPModel):
 
                 context_ids = context_ids.to(device)
                 bs, max_context_length = context_ids.shape
-                _, max_target_length = output_ids.shape
 
                 context_output, context_lr = self.get_context(
                     context_ids, len_context.to(device), l_context_ids.to(device), r_context_ids.to(device)
@@ -348,32 +347,35 @@ class TextNormalizationModel(NLPModel):
                 tag_preds = torch.argmax(tagger_logits, axis=-1)
                 semiotic_tag_preds = torch.logical_or(tag_preds == tag_labels['B-I'], tag_preds == tag_labels['B-M'])
 
-                input_ids = []
-                # TODO currently the assumption is sentence has only a single semiotic token per example
+                input_ids_current = []
+                # TODO currently the assumption is that there is only one semiotic token per example
                 for i in range(len(context_ids)):
                     input_str = self._tokenizer_context.ids_to_text(tensor2list(context_ids[i][semiotic_tag_preds[i]]))
-                    input_str = [self._tokenizer_encoder.bos_id] + self._tokenizer_encoder.text_to_ids(input_str)
-                    # input_str = np.pad(normalized_ids, pad_width=[0, pad_width], constant_values=self.tokenizer_decoder.pad_id)
+                    input_ids_current.append([self._tokenizer_encoder.bos_id] + self._tokenizer_encoder.text_to_ids(input_str))
 
-                tag_preds_masked = tag_preds[tagger_loss_mask]
+                len_input_current = [len(x) for x in input_ids_current]
+                max_length = max(len_input_current)
+                len_input_current = torch.LongTensor(len_input_current).to(device)
+                for i in range(len(input_ids_current)):
+                    pad_width = max_length - len(input_ids_current[i])
+                    input_ids_current[i] = np.pad(input_ids_current[i], pad_width=[0, pad_width], constant_values=self._tokenizer_encoder.pad_id)
+
+                input_ids_current = torch.LongTensor(input_ids_current).to(device)
+                decoder_start = torch.tensor([self._tokenizer_decoder.bos_id] * len(input_ids_current)).unsqueeze(1).to(device)
 
                 # during inference output_ids[:,0].unsqueeze(1)[:,0]
-                seq_logits = self.seq2seq(
-                    src=input_ids, trg=output_ids, src_lengths=len_input, decoder_init_hidden=context_lr, max_len=None
-                )
-
-                seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(
-                    bs, max_target_length
-                ) < len_output.to(device).unsqueeze(1)
+                seq_logits = self.seq2seq(src=input_ids_current,
+                                          trg=decoder_start,
+                                          src_lengths=len_input_current,
+                                          decoder_init_hidden=context_lr,
+                                          max_len=max_target_length)
 
                 seq_preds = tensor2list(torch.argmax(seq_logits, axis=-1))
-                for input, pred in zip(tensor2list(input_ids), seq_preds):
+                for input, pred in zip(tensor2list(input_ids_current), seq_preds):
                     print('raw :', self._tokenizer_encoder.ids_to_text(input))
                     print('norm:', self._tokenizer_decoder.ids_to_text(pred))
 
-                import pdb
-
-                pdb.set_trace()
+                import pdb; pdb.set_trace()
                 print()
         finally:
             # set mode back to its original value

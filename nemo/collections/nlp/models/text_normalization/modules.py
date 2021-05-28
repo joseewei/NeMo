@@ -86,11 +86,12 @@ class EncoderDecoder(nn.Module):
                 prev_decoder_hidden=hidden,
             )
             decoder_states[:, i : i + 1, :] = output
-
             if use_teacher_forcing:
                 decoder_input = trg[:, i].unsqueeze(1)
             else:
                 decoder_input = torch.argmax(output, dim=2).detach()
+                print(decoder_input[0])
+                output_options = torch.argsort(output, dim=2)
                 decoder_input = self.trg_embed(decoder_input)
 
         return decoder_states

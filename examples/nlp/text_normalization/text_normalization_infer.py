@@ -53,12 +53,9 @@ def main(cfg: DictConfig) -> None:
         raise ValueError(f'{model} not found.')
     model = TextNormalizationModel.restore_from(model)
 
-    # if torch.cuda.is_available():
-    #     model = model.cuda()
-    # model.freeze()
 
-    model.setup_test_data(cfg.model.test_ds)
-    trainer.test(model)
+    # model.setup_test_data(cfg.model.test_ds)
+    # trainer.test(model)
 
     model.infer(cfg.model.test_ds)
 
