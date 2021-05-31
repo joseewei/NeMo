@@ -195,11 +195,18 @@ class ConvASREncoder(NeuralModule, Exportable):
 
     @typecheck()
     def forward(self, audio_signal, length=None):
-        s_input, length = self.encoder(([audio_signal], length))
-        if length is None:
-            return s_input[-1]
+        # s_input, length = self.encoder(([audio_signal], length))
+        audio_signal = [audio_signal]
+        outputs = []
+        for layer in self.encoder:
+            audio_signal, length = layer((audio_signal, length))
+            outputs.append(audio_signal[-1])
 
-        return s_input[-1], length
+        s_input = audio_signal
+        if length is None:
+            return torch.cat(outputs[1:], dim=1)  # s_input[-1]
+
+        return torch.cat(outputs[1:], dim=1), length  # s_input[-1], length
 
 
 class ConvASRDecoder(NeuralModule, Exportable):
@@ -406,7 +413,9 @@ class SpeakerDecoder(NeuralModule, Exportable):
         if self.pool_mode == 'xvector' or self.pool_mode == 'tap':
             self._pooling = StatsPoolLayer(feat_in=feat_in, pool_mode=pool_mode)
         elif self.pool_mode == 'ecapa':
-            self._pooling = AttentivePoolingLayer(input_channels=feat_in, attention_channels=128, global_context=True)
+            self._pooling = AttentivePoolingLayer(
+                encoder_filters=1024, input_channels=feat_in, attention_channels=128, global_context=True
+            )
         self._feat_in = self._pooling.feat_in
 
         shapes = [self._feat_in]

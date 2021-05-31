@@ -185,10 +185,12 @@ class StatsPoolLayer(nn.Module):
 
 
 class AttentivePoolingLayer(nn.Module):
-    def __init__(self, input_channels, attention_channels, global_context=True, init_mode='xavier_uniform'):
+    def __init__(self, encoder_filters,input_channels, attention_channels, global_context=True, init_mode='xavier_uniform'):
         super().__init__()
         self.global_context = global_context
         self.feat_in = 2 * input_channels
+        self.relu   = nn.ReLU()
+        self.group_conv = nn.Conv1d(3*encoder_filters, input_channels, kernel_size=1)
         self.attention = nn.Sequential(
             nn.Conv1d(3 * input_channels, attention_channels, kernel_size=1),
             nn.ReLU(),
@@ -201,6 +203,9 @@ class AttentivePoolingLayer(nn.Module):
         self.apply(lambda x: init_weights(x, mode=init_mode))
 
     def forward(self, x):
+        x = self.group_conv(x)
+        x = self.relu(x)
+        
         t = x.shape[-1]
 
         if self.global_context:
