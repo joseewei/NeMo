@@ -390,7 +390,7 @@ class SpeakerDecoder(NeuralModule, Exportable):
         )
 
     def __init__(
-        self, feat_in, num_classes, emb_sizes=None, pool_mode='xvector', angular=False, init_mode="xavier_uniform",
+        self, feat_in, num_classes, encoder_filters=1024, emb_sizes=None, pool_mode='xvector', angular=False, init_mode="xavier_uniform",
     ):
         super().__init__()
         self.angular = angular
@@ -414,7 +414,7 @@ class SpeakerDecoder(NeuralModule, Exportable):
             self._pooling = StatsPoolLayer(feat_in=feat_in, pool_mode=pool_mode)
         elif self.pool_mode == 'ecapa':
             self._pooling = AttentivePoolingLayer(
-                encoder_filters=1024, input_channels=feat_in, attention_channels=128, global_context=True
+                encoder_filters=encoder_filters, input_channels=feat_in, attention_channels=128, global_context=True
             )
         self._feat_in = self._pooling.feat_in
 
