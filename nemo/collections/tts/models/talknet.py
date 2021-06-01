@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from nemo.collections.asr.data.audio_to_text import AudioToCharWithDursF0Dataset
-from nemo.collections.tts.helpers.helpers import get_mask_from_lengths, binarize_attention_parallel
+from nemo.collections.tts.helpers.helpers import binarize_attention_parallel, get_mask_from_lengths
 from nemo.collections.tts.losses.aligner_loss import BinLoss, ForwardSumLoss
 from nemo.collections.tts.models.base import SpectrogramGenerator
 from nemo.collections.tts.modules.fastpitch import regulate_len
