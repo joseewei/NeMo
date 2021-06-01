@@ -338,5 +338,4 @@ class FFTransformerEncoder(FFTransformerDecoder):
         }
 
     def forward(self, input, conditioning=0):
-
         return self._forward(self.word_emb(input), (input != self.padding_idx).unsqueeze(2), conditioning)  # (B, L, 1)

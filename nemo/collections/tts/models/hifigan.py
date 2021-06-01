@@ -168,6 +168,11 @@ class HifiGanModel(Vocoder, Exportable):
         self.manual_backward(loss_g)
         self.optim_g.step()
 
+        # run schedulers
+        sch1, sch2 = self.lr_schedulers()
+        sch1.step()
+        sch2.step()
+
         metrics = {
             "g_l1_loss": loss_mel,
             "g_loss_fm_mpd": loss_fm_mpd,

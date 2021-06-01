@@ -24,7 +24,7 @@ from nemo.collections.tts.models.hifigan import HifiGanModel
 from nemo.collections.tts.models.melgan import MelGanModel
 from nemo.collections.tts.models.squeezewave import SqueezeWaveModel
 from nemo.collections.tts.models.tacotron2 import Tacotron2Model
-from nemo.collections.tts.models.talknet import TalkNetDursModel, TalkNetPitchModel, TalkNetSpectModel
+from nemo.collections.tts.models.talknet import TalkNet3Model, TalkNetDursModel, TalkNetPitchModel, TalkNetSpectModel
 from nemo.collections.tts.models.two_stages import GriffinLimModel, MelPsuedoInverseModel, TwoStagesModel
 from nemo.collections.tts.models.uniglow import UniGlowModel
 from nemo.collections.tts.models.waveglow import WaveGlowModel
@@ -42,6 +42,7 @@ __all__ = [
     "TalkNetDursModel",
     "TalkNetPitchModel",
     "TalkNetSpectModel",
+    "TalkNet3Model",
     "UniGlowModel",
     "MelGanModel",
     "HifiGanModel",

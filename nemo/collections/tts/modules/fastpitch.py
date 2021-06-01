@@ -64,7 +64,8 @@ from nemo.core.neural_types.neural_type import NeuralType
 
 def regulate_len(durations, enc_out, pace=1.0, mel_max_len=None):
     """If target=None, then predicted durations are applied"""
-    reps = torch.round(durations.float() / pace).long()
+    reps = durations.float() / pace
+    reps = (reps + 0.5).long()
     dec_lens = reps.sum(dim=1)
 
     enc_rep = pad_sequence([torch.repeat_interleave(o, r, dim=0) for o, r in zip(enc_out, reps)], batch_first=True)
