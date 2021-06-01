@@ -66,7 +66,6 @@ model:
         add_blank_at: ${add_blank_at}
         pad_with_space: ${pad_with_space}
         improved_version_g2p: ${improved_version_g2p}
-        phoneme_dict_path: ${phoneme_dict_path}
     dataloader_params:
       drop_last: false
       shuffle: true
@@ -98,7 +97,6 @@ model:
         add_blank_at: ${add_blank_at}
         pad_with_space: ${pad_with_space}
         improved_version_g2p: ${improved_version_g2p}
-        phoneme_dict_path: ${phoneme_dict_path}
     dataloader_params:
       drop_last: false
       shuffle: false
