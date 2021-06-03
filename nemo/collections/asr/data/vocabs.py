@@ -35,13 +35,22 @@ except (FileNotFoundError, LookupError):
     HAVE_G2P = False
 
 _words_re = re.compile("([a-z\-]+'[a-z\-]+|[a-z\-]+)|([^a-z{}]+)")
+_words_with_unwanted_space_after_hyphen_re = re.compile("([a-z\-]+'[a-z\-]+\-\s|[a-z\-]+\-\s)|([^a-z{}]+)")
 
-
+# Based on LJSpeech
 def _text_preprocessing(text):
     text = unicode(text)
     text = ''.join(char for char in unicodedata.normalize('NFD', text) if unicodedata.category(char) != 'Mn')
     text = text.lower()
     text = re.sub("[^ a-z'\".,?!()\[\]:;\-]", "", text)
+
+    # it fixes bug in LJSpeech label
+    def remove_unwanted_space(match_obj):
+        if match_obj.group(1) is not None:
+            return match_obj.group(1)[:-1]
+        return match_obj.group(0)
+
+    text = re.sub(_words_with_unwanted_space_after_hyphen_re, remove_unwanted_space, text)
     return text
 
 

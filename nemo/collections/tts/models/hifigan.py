@@ -217,17 +217,17 @@ class HifiGanModel(Vocoder, Exportable):
                 clips += [
                     wandb.Audio(
                         audio[i, : audio_len[i]].data.cpu().numpy(),
-                        caption=f"real audio {i}",
+                        caption=f"real audio {i}, epoch {self.current_epoch}",
                         sample_rate=self.sample_rate,
                     ),
                     wandb.Audio(
                         audio_pred[i, 0, : audio_len[i]].data.cpu().numpy().astype('float32'),
-                        caption=f"generated audio {i}",
+                        caption=f"generated audio {i}, epoch {self.current_epoch}",
                         sample_rate=self.sample_rate,
                     ),
                     wandb.Audio(
                         pred_denoised[i, : audio_len[i]].data.cpu().numpy(),
-                        caption=f"denoised audio {i}",
+                        caption=f"denoised audio {i}, epoch {self.current_epoch}",
                         sample_rate=self.sample_rate,
                     ),
                 ]

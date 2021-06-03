@@ -456,8 +456,15 @@ class TalkNet3Model(ModelPT):
             self.bin_loss_warmup_epochs = cfg.bin_loss_warmup_epochs
 
         # TODO(Oktai): debug flags
-        self.encoder_type = "transformer"
-        self.decoder_type = "transformer"
+        self.encoder_type = "mlp_mixer"
+        self.decoder_type = "mlp_mixer"
+        self.conditioning_on_aligner_text_encoder = False
+        self.conditioning_on_aligner_text_decoder = True
+
+        if self.conditioning_on_aligner_text_encoder or self.conditioning_on_aligner_text_decoder:
+            assert self.learn_alignment
+            self.aligner_text_proj = self.aligner.key_proj
+            self.text_emb = instantiate(cfg.text_emb)
 
         # Transformer-based encoder
         if self.encoder_type == "transformer":
@@ -566,7 +573,16 @@ class TalkNet3Model(ModelPT):
             enc_out, enc_mask = self.encoder(input=text, conditioning=0)
         # MLPMixer-based encoder or GMLP-based encoder
         elif self.encoder_type == "mlp_mixer" or self.encoder_type == "g_mlp":
-            enc_out, enc_len = self.encoder(text, text_len)
+            if self.conditioning_on_aligner_text_encoder:
+                # TODO(Oktai): need masking?
+                text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
+                enc_out, enc_len = self.encoder(
+                    text,
+                    text_len,
+                    conditioning=self.text_emb(text_proj).transpose(1, 2)
+                )
+            else:
+                enc_out, enc_len = self.encoder(text, text_len)
             enc_mask = get_mask_from_lengths(enc_len).unsqueeze(2)
         elif self.decoder_type == "qn":
             enc_out, enc_len = self.encoder(self.symbol_emb(text).transpose(1, 2), text_len)
@@ -605,6 +621,11 @@ class TalkNet3Model(ModelPT):
             pitch_emb = self.pitch_emb(pitch.unsqueeze(1))
 
         enc_out = enc_out + pitch_emb.transpose(1, 2)
+
+        if self.conditioning_on_aligner_text_decoder:
+            text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
+            text_emb_from_aligner = self.text_emb(text_proj)
+            enc_out = enc_out + text_emb_from_aligner.transpose(1, 2)
 
         if self.learn_alignment:
             len_regulated_enc_out, dec_lens = regulate_len(attn_hard_dur, enc_out)
@@ -648,7 +669,16 @@ class TalkNet3Model(ModelPT):
             enc_out, enc_mask = self.encoder(input=text, conditioning=0)
         # MLPMixer-based encoder or GMLP-based encoder
         elif self.encoder_type == "mlp_mixer" or self.encoder_type == "g_mlp":
-            enc_out, enc_len = self.encoder(text, text_len)
+            if self.conditioning_on_aligner_text_encoder:
+                # TODO(Oktai): need masking?
+                text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
+                enc_out, enc_len = self.encoder(
+                    text,
+                    text_len,
+                    conditioning=self.text_emb(text_proj).transpose(1, 2)
+                )
+            else:
+                enc_out, enc_len = self.encoder(text, text_len)
             enc_mask = get_mask_from_lengths(enc_len).unsqueeze(2)
         elif self.decoder_type == "qn":
             enc_out, enc_len = self.encoder(self.symbol_emb(text).transpose(1, 2), text_len)
