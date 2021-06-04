@@ -47,6 +47,17 @@ model:
     drop_last: ${model.dataset.drop_last}
     pin_memory: ${model.dataset.pin_memory}
 
+
+  test_ds:
+    file: /home/yzhang/data/nlp/text_norm/dataset/test.txt # .json file
+    batch_size: 2 # per GPU
+    shuffle: false
+    num_samples: -1    
+    # Default values for the following params are retrieved from dataset config section, but you may override them
+    num_workers: ${model.dataset.num_workers}
+    drop_last: ${model.dataset.drop_last}
+    pin_memory: ${model.dataset.pin_memory}
+
    
   tokenizer_context:
     tokenizer_name: sentencepiece # tokenizer that inherits from TokenizerSpec
