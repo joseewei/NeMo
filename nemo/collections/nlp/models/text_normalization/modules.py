@@ -331,33 +331,3 @@ class DecoderRNN(nn.Module):
         return output, hidden
 
 
-if __name__ == "__main__":
-    encoder_input_size = 20
-    decoder_input_size = 20
-    src_vocab_size = 1000
-    tgt_vocab_size = 1000
-    hidden_size = 5
-    bs = 8
-    max_seq_length = 10
-    dropout = 0.1
-    num_layers = 2
-
-    model = EncoderDecoder(
-        EncoderRNN(input_size=encoder_input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=dropout),
-        DecoderAttentionRNN(
-            embed_size=decoder_input_size, hidden_size=2 * hidden_size, num_layers=num_layers, dropout=dropout
-        ),
-        nn.Embedding(src_vocab_size, encoder_input_size),
-        nn.Embedding(tgt_vocab_size, decoder_input_size),
-    )
-
-    input_seqs = torch.randint(high=src_vocab_size, size=(bs, max_seq_length))
-    input_lengths = torch.ones(bs) * max_seq_length
-
-    output_seqs = torch.randint(high=tgt_vocab_size, size=(bs, max_seq_length))
-    output_lengths = torch.ones(bs) * max_seq_length
-
-    output = model(src=input_seqs, trg=output_seqs, src_lengths=input_lengths, trg_lengths=output_lengths)
-    import ipdb
-
-    ipdb.set_trace()
