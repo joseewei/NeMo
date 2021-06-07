@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from nemo.collections.common.losses import CrossEntropyLoss
-from nemo.collections.nlp.data import TextNormalizationDataset
+from nemo.collections.nlp.data import TextNormalizationDataset, TextNormalizationTestDataset
 from nemo.collections.nlp.data.text_normalization.text_normalization_dataset import tag_labels
 from nemo.collections.nlp.metrics.classification_report import ClassificationReport
 from nemo.collections.nlp.models.nlp_model import NLPModel
@@ -235,20 +235,51 @@ class TextNormalizationModel(NLPModel):
         else:
             prefix = 'val'
 
-        (
-            context_ids,
-            tag_ids,
-            len_context,
-            input_ids,
-            len_input,
-            output_ids,
-            len_output,
-            l_context_ids,
-            r_context_ids,
-            example_ids,
-        ) = batch
+        if prefix == 'val':
+            (
+                context_ids,
+                tag_ids,
+                len_context,
+                input_ids,
+                len_input,
+                output_ids,
+                len_output,
+                l_context_ids,
+                r_context_ids,
+                example_ids,
+            ) = batch
+        else:
+           
+            (
+                context_ids,
+                len_context,
+                example_ids,
+            ) = batch 
 
         bs, max_context_length = context_ids.shape
+
+
+
+        # compute sentence accuracy
+
+        input_ids, tag_preds, seq_preds, row_index, left_column_index, right_column_index = self.inference(
+            example_ids, self._cfg.seq_decoder.max_len, self._device, context_ids, len_context, bs, max_context_length
+        )
+
+        preds = self.assemble_output(
+            context_ids=context_ids,
+            seq_preds=seq_preds,
+            tag_preds=tag_preds,
+            example_ids=example_ids,
+            row_index=row_index,
+            left_column_index=left_column_index,
+            right_column_index=right_column_index,
+        )
+
+        if prefix == 'test':
+            return {f'{prefix}_preds': preds}
+
+
         _, max_target_length = output_ids.shape
         tagger_logits, seq_logits = self.forward(
             context_ids=context_ids,
@@ -267,36 +298,41 @@ class TextNormalizationModel(NLPModel):
         tag_ids = torch.masked_select(tag_ids, tagger_loss_mask)
         tag_preds = torch.argmax(tagger_logits, axis=-1)
 
-        tp, fn, fp, _ = self.classification_report(tag_preds, tag_ids)
-
         seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(
             bs, max_target_length
         ) < len_output.unsqueeze(1)
         seq_loss = self.seq2seq_loss(logits=seq_logits, labels=output_ids, loss_mask=seq_loss_mask)
         loss = tagger_loss + seq_loss
 
-        # compute sentence accuracy
 
-        return {f'{prefix}_loss': loss, 'tp': tp, 'fn': fn, 'fp': fp}
+
+        return {f'{prefix}_loss': loss, f'{prefix}_preds': preds}
 
     def validation_epoch_end(self, outputs):
         """
         Called at the end of validation to aggregate outputs.
         outputs: list of individual outputs of each validation step.
         """
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+        
+        if self.trainer.testing:
+            prefix = 'test'
+        else:
+            prefix = 'val'
 
-        # calculate metrics and classification report
-        precision, recall, f1, report = self.classification_report.compute()
+        if prefix == 'val':
+            avg_loss = torch.stack([x[f'{prefix}_loss'] for x in outputs]).mean()
+            self.log(f'{prefix}_loss', avg_loss)
 
-        logging.info(report)
+        all_preds = {}
+        for x in outputs:
+            all_preds.update(x[f'{prefix}_preds'])
 
-        self.log('val_loss', avg_loss, prog_bar=True)
-        self.log('precision', precision)
-        self.log('f1', f1)
-        self.log('recall', recall)
+        
+        eval_dataset = self._test_dl.dataset if self.trainer.testing else self._validation_dl.dataset
+        accuracy = eval_dataset.evaluate(all_preds)
 
-        self.classification_report.reset()
+        logging.info(f'{prefix}_accuracy {accuracy}')
+        self.log(f'{prefix}_accuracy', accuracy)
 
     def test_step(self, batch, batch_idx):
         return self.validation_step(batch, batch_idx)
@@ -306,19 +342,7 @@ class TextNormalizationModel(NLPModel):
         Called at test time to aggregate outputs.
         outputs: list of individual outputs of each validation step.
         """
-        avg_loss = torch.stack([x['test_loss'] for x in outputs]).mean()
-
-        # calculate metrics and classification report
-        precision, recall, f1, report = self.classification_report.compute()
-
-        logging.info(report)
-
-        self.log('test_loss', avg_loss, prog_bar=True)
-        self.log('precision', precision)
-        self.log('f1', f1)
-        self.log('recall', recall)
-
-        self.classification_report.reset()
+        return self.validation_epoch_end(outputs)
 
     def assemble_output(
         self, context_ids, seq_preds, tag_preds, example_ids, row_index, left_column_index, right_column_index
@@ -385,15 +409,6 @@ class TextNormalizationModel(NLPModel):
                         start_index = j
 
             decoder_counter = decode(prev_tag, i, start_index, j, decoder_counter)
-
-        # for i in range(len(seq_preds)):
-        #     if self._tokenizer_decoder.eos_id in seq_preds[i]:
-        #         seq_preds[i] = seq_preds[i][: seq_preds[i].index(self._tokenizer_decoder.eos_id)]
-        # for input, pred in zip(tensor2list(input_ids), seq_preds):
-        #     print('raw :', self._tokenizer_encoder.ids_to_text(input))
-        #     pred = self._tokenizer_decoder.ids_to_text(pred)
-        #     print('norm:', pred)
-        #     all_preds.append(pred)
 
         return preds
 
@@ -584,7 +599,7 @@ class TextNormalizationModel(NLPModel):
             )
             self._test_dl = None
             return
-        self._train_dl = self._setup_dataloader_from_config(cfg=train_data_config)
+        self._train_dl = self._setup_dataloader_from_config(cfg=train_data_config, mode="train")
 
     def setup_validation_data(self, val_data_config: Optional[DictConfig]):
         if not val_data_config or not val_data_config.file:
@@ -593,7 +608,7 @@ class TextNormalizationModel(NLPModel):
             )
             self._test_dl = None
             return
-        self._validation_dl = self._setup_dataloader_from_config(cfg=val_data_config)
+        self._validation_dl = self._setup_dataloader_from_config(cfg=val_data_config, mode="val")
 
     def setup_test_data(self, test_data_config: Optional[DictConfig]):
         if not test_data_config or test_data_config.file is None:
@@ -602,9 +617,9 @@ class TextNormalizationModel(NLPModel):
             )
             self._test_dl = None
             return
-        self._test_dl = self._setup_dataloader_from_config(cfg=test_data_config)
+        self._test_dl = self._setup_dataloader_from_config(cfg=test_data_config, mode="test")
 
-    def _setup_dataloader_from_config(self, cfg: DictConfig):
+    def _setup_dataloader_from_config(self, cfg: DictConfig, mode: str):
         input_file = cfg.file
         if not os.path.exists(input_file):
             raise FileNotFoundError(
@@ -616,14 +631,23 @@ class TextNormalizationModel(NLPModel):
                 [WORD][SPACE][WORD][SPACE][WORD][...][TAB][LABEL]'
             )
 
-        dataset = TextNormalizationDataset(
-            input_file=input_file,
-            tokenizer_context=self._tokenizer_context,
-            tokenizer_encoder=self._tokenizer_encoder,
-            tokenizer_decoder=self._tokenizer_decoder,
-            num_samples=cfg.get("num_samples", -1),
-            use_cache=self._cfg.dataset.use_cache,
-        )
+        if mode in ["train", "val"]:
+            dataset = TextNormalizationDataset(
+                input_file=input_file,
+                tokenizer_context=self._tokenizer_context,
+                tokenizer_encoder=self._tokenizer_encoder,
+                tokenizer_decoder=self._tokenizer_decoder,
+                num_samples=cfg.get("num_samples", -1),
+                use_cache=self._cfg.dataset.use_cache,
+            )
+        else:
+            dataset = TextNormalizationTestDataset(
+                input_file=input_file,
+                tokenizer_context=self._tokenizer_context,
+                tokenizer_encoder=self._tokenizer_encoder,
+                tokenizer_decoder=self._tokenizer_decoder,
+                num_samples=cfg.get("num_samples", -1),
+                use_cache=self._cfg.dataset.use_cache)
 
         dl = torch.utils.data.DataLoader(
             dataset=dataset,

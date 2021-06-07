@@ -17,6 +17,7 @@ import pickle
 import random
 from collections import namedtuple
 from typing import Dict, List, Optional
+from sklearn.metrics import accuracy_score
 
 import numpy as np
 import torch
@@ -28,7 +29,7 @@ from nemo.core.classes import Dataset
 from nemo.core.neural_types import ChannelType, LabelsType, LengthsType, MaskType, NeuralType
 from nemo.utils import logging
 
-__all__ = ['TextNormalizationDataset']
+__all__ = ['TextNormalizationDataset', 'TextNormalizationTestDataset']
 
 
 PUNCT_TYPE = "PUNCT"
@@ -101,7 +102,7 @@ class TextNormalizationDataset(Dataset):
         filename = os.path.basename(input_file)
         features_pkl = os.path.join(
             data_dir,
-            "cached_{}_{}_{}_{}_{}".format(
+            "cached_TextNormalizationDataset_{}_{}_{}_{}_{}".format(
                 filename,
                 tokenizer_context.name,
                 str(context_vocab_size),
@@ -113,39 +114,39 @@ class TextNormalizationDataset(Dataset):
             ),
         )
 
-        master_device = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
-        features = None
-        if master_device and (not use_cache or not os.path.exists(features_pkl)):
-            if num_samples == 0:
-                raise ValueError("num_samples has to be positive", num_samples)
-
-            instances = load_file(input_file)
-            self.examples = [
-                [(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances
-            ]
-
+        self.tokenizer_context = tokenizer_context
+        self.tokenizer_encoder = tokenizer_encoder
+        self.tokenizer_decoder = tokenizer_decoder
+        instances = load_file(input_file)
+        self.examples = [
+            [(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances
+        ]
+        if use_cache and os.path.exists(features_pkl):
+            logging.info(f"loading from {features_pkl}")
+            with open(features_pkl, "rb") as reader:
+                self.features = pickle.load(reader)
+        else:
             features = get_features(
                 sentences=instances,
                 tokenizer_context=tokenizer_context,
                 tokenizer_encoder=tokenizer_encoder,
                 tokenizer_decoder=tokenizer_decoder,
+                mode="train"
             )
+            
+            self.features = features  # list of tuples of sent_ids, tag_ids, unnormalized_id, normalized_id, lefT_context_id, right_context_id,
 
-            pickle.dump(features, open(features_pkl, "wb"))
-            logging.info(f'features saved to {features_pkl}')
+            if use_cache:
+                master_device = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
+                if master_device:
+                    logging.info("  Saving train features into cached file %s", features_pkl)
+                    with open(features_pkl, "wb") as writer:
+                        pickle.dump(self.features, writer)
 
-        # wait until the master process writes to the processed data files
-        if torch.distributed.is_initialized():
-            torch.distributed.barrier()
+                # wait until the master process writes to the processed data files
+                if torch.distributed.is_initialized():
+                    torch.distributed.barrier()
 
-        if features is None:
-            features = pickle.load(open(features_pkl, 'rb'))
-            logging.info(f'features restored from {features_pkl}')
-
-        self.tokenizer_context = tokenizer_context
-        self.tokenizer_encoder = tokenizer_encoder
-        self.tokenizer_decoder = tokenizer_decoder
-        self.features = features  # list of tuples of sent_ids, tag_ids, unnormalized_id, normalized_id, lefT_context_id, right_context_id,
 
     def __len__(self):
         return len(self.features)
@@ -219,10 +220,7 @@ class TextNormalizationDataset(Dataset):
             else:
                 normalized_ids_padded.append(normalized_ids)
 
-        # sent_ids_padded = pad_sequence(sent_ids, batch_first=False, padding_value=self.tokenizer_context.pad_id)
-        # tag_ids_padded = pad_sequence(tag_ids, batch_first=False, padding_value=-1)
-        # unnormalized_ids_padded = pad_sequence(unnormalized_ids, batch_first=False, padding_value=self.tokenizer_encoder.pad_id)
-        # normalized_ids_padded = pad_sequence(normalized_ids, batch_first=False, padding_value=self.tokenizer_encoder.pad_id)
+            
 
         return (
             torch.LongTensor(sent_ids_padded),
@@ -237,12 +235,165 @@ class TextNormalizationDataset(Dataset):
             torch.LongTensor(np.asarray(example_ids)),
         )
 
+    def evaluate(self, predictions):
+        """
+        Args:
+            predictions: dict of example_id to tokens
+        """
+        
+        num_samples = len(predictions)
+        ids = predictions.keys()
+        predictions = [" ".join(predictions[i]) for i in ids]
+        gt = [" ".join([x[1] for x in self.examples[i]]) for i in ids ]
+
+        accuracy = accuracy_score(gt, predictions)
+        return accuracy
+
+
+
+
+class TextNormalizationTestDataset(Dataset):
+    @property
+    def output_types(self) -> Optional[Dict[str, NeuralType]]:
+        """Returns definitions of module output ports.
+               """
+        return {
+            'context_ids': NeuralType(('B', 'T'), ChannelType()),
+            'len_context': NeuralType(('B'), LengthsType()),
+            'example_id': NeuralType(('B'), ChannelType()),
+        }
+
+    def __init__(
+        self,
+        input_file: str,
+        tokenizer_context: TokenizerSpec,
+        tokenizer_encoder: TokenizerSpec,
+        tokenizer_decoder: TokenizerSpec,
+        num_samples: int = -1,
+        use_cache: bool = True,
+    ):
+
+        data_dir = os.path.dirname(input_file)
+
+        context_vocab_size = getattr(tokenizer_context, "vocab_size", 0)
+        encoder_vocab_size = getattr(tokenizer_encoder, "vocab_size", 0)
+        decoder_vocab_size = getattr(tokenizer_decoder, "vocab_size", 0)
+        filename = os.path.basename(input_file)
+        features_pkl = os.path.join(
+            data_dir,
+            "cached_TextNormalizationTestDataset_{}_{}_{}_{}_{}".format(
+                filename,
+                tokenizer_context.name,
+                str(context_vocab_size),
+                tokenizer_encoder.name,
+                str(encoder_vocab_size),
+                tokenizer_decoder.name,
+                str(decoder_vocab_size),
+                str(num_samples),
+            ),
+        )
+
+        self.tokenizer_context = tokenizer_context
+        self.tokenizer_encoder = tokenizer_encoder
+        self.tokenizer_decoder = tokenizer_decoder
+        instances = load_file(input_file)
+        self.examples = [
+            [(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances
+        ]
+        if use_cache and os.path.exists(features_pkl):
+            logging.info(f"loading from {features_pkl}")
+            with open(features_pkl, "rb") as reader:
+                self.features = pickle.load(reader)
+        else:
+            features = get_features(
+                sentences=instances,
+                tokenizer_context=tokenizer_context,
+                tokenizer_encoder=tokenizer_encoder,
+                tokenizer_decoder=tokenizer_decoder,
+                mode="test"
+            )
+            
+            self.features = features  # list of tuples of sent_ids, tag_ids, unnormalized_id, normalized_id, lefT_context_id, right_context_id,
+
+            if use_cache:
+                master_device = not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0
+                if master_device:
+                    logging.info("  Saving train features into cached file %s", features_pkl)
+                    with open(features_pkl, "wb") as writer:
+                        pickle.dump(self.features, writer)
+
+                # wait until the master process writes to the processed data files
+                if torch.distributed.is_initialized():
+                    torch.distributed.barrier()
+
+
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, idx):
+        return (
+            np.array(self.features[idx][0]),
+            np.array(self.features[idx][1]),
+        )
+
+    def _collate_fn(self, batch):
+        """collate batch of sent_ids, tag_ids, unnormalized_ids, normalized_ids l_context_id r_context_id
+        """
+
+        bs = len(batch)
+        # initialize
+        len_context = [0 for _ in range(bs)]
+        example_ids = [0 for _ in range(bs)]
+        # max length depends on batch, does not support predefined max length yet, where input might need to be truncated.
+        max_length_sent = max([len(batch[i][0]) for i in range(bs)])
+
+        sent_ids_padded = []
+
+        for i in range(bs):
+            sent_ids, example_id = batch[i]
+            len_context[i] = len(sent_ids)
+            example_ids[i] = example_id
+
+            if len(sent_ids) < max_length_sent:
+                pad_width = max_length_sent - len(sent_ids)
+                sent_ids_padded.append(
+                    np.pad(sent_ids, pad_width=[0, pad_width], constant_values=self.tokenizer_context.pad_id)
+                )
+            else:
+                sent_ids_padded.append(sent_ids)
+
+
+            
+
+        return (
+            torch.LongTensor(sent_ids_padded),
+            torch.LongTensor(len_context),
+            torch.LongTensor(np.asarray(example_ids)),
+        )
+
+    def evaluate(self, predictions):
+        """
+        Args:
+            predictions: dict of example_id to tokens
+        """
+        
+        num_samples = len(predictions)
+        ids = predictions.keys()
+        assert(num_samples == len(self.examples), "no. predictions should match original dataset length for test and inference")
+        predictions = [" ".join(predictions[i]) for i in ids]
+        gt = [" ".join([x[1] for x in self.examples[i]]) for i in ids ]
+
+        accuracy = accuracy_score(gt, predictions)
+        return accuracy
+
+
 
 def get_features(
     sentences: List[List[Instance]],
     tokenizer_context: TokenizerSpec,
     tokenizer_encoder: TokenizerSpec,
     tokenizer_decoder: TokenizerSpec,
+    mode: str
 ) -> List[tuple]:
     """
     data processing from list of instances into tuples 
@@ -257,6 +408,7 @@ def get_features(
         # normalized_ids <BOS>, word ids .., <EOS>
         # return list of unnormalized_ids, normalized_ids, l_context_id, r_context_id, sent_ids, tag_ids
 
+        
         sent_ids = []  # list
         tag_ids = []  # list
         unnormalized_ids = []  # list of list
@@ -297,18 +449,26 @@ def get_features(
         sent_ids.extend(tokens)
         tag_ids.extend([tag_labels['O-I']] * len(tokens))
 
-        features = [
-            (
-                sent_ids,
-                tag_ids,
-                unnormalized_ids[i],
-                normalized_ids[i],
-                left_context_ids[i],
-                right_context_ids[i],
-                example_id,
-            )
-            for i in range(len(unnormalized_ids))
-        ]
+        if mode=="train":
+            features = [
+                (
+                    sent_ids,
+                    tag_ids,
+                    unnormalized_ids[i],
+                    normalized_ids[i],
+                    left_context_ids[i],
+                    right_context_ids[i],
+                    example_id,
+                )
+                for i in range(len(unnormalized_ids))
+            ]
+        elif mode=="test":
+            features = [
+                (
+                    sent_ids,
+                    example_id,
+                )
+            ]
 
         return features
 
@@ -316,3 +476,5 @@ def get_features(
     for example_id, sentence in enumerate(sentences):
         features.extend(process_sentence(sentence=sentence, example_id=example_id))
     return features
+
+

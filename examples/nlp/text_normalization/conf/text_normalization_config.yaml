@@ -12,10 +12,10 @@ trainer:
   amp_level: O1 # O1 or O2 if using AMP
   accelerator: ddp
   gradient_clip_val: 0.0
-  val_check_interval: 1.0 # check once per epoch .25 for 4 times per epoch
+  val_check_interval: 5 # check once per epoch .25 for 4 times per epoch
   checkpoint_callback: false # provided by exp_manager
   logger: false # provided by exp_manager
-  # num_sanity_val_steps: 0
+  num_sanity_val_steps: 0
   log_every_n_steps: 1  # Interval of logging.
 
 model:
@@ -38,7 +38,7 @@ model:
 
 
   validation_ds:
-    file: /home/yzhang/data/nlp/text_norm/dataset/train.txt # .json file
+    file: /home/yzhang/data/nlp/text_norm/dataset/test.txt # .json file
     batch_size: 8 # per GPU
     shuffle: false
     num_samples: -1    
