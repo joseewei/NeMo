@@ -120,8 +120,9 @@ class TextNormalizationDataset(Dataset):
                 raise ValueError("num_samples has to be positive", num_samples)
 
             instances = load_file(input_file)
-            self.examples = [[(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances]
-
+            self.examples = [
+                [(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances
+            ]
 
             features = get_features(
                 sentences=instances,
@@ -197,9 +198,7 @@ class TextNormalizationDataset(Dataset):
                 sent_ids_padded.append(
                     np.pad(sent_ids, pad_width=[0, pad_width], constant_values=self.tokenizer_context.pad_id)
                 )
-                tag_ids_padded.append(
-                    np.pad(tag_ids, pad_width=[0, pad_width], constant_values=self.tokenizer_context.pad_id)
-                )
+                tag_ids_padded.append(np.pad(tag_ids, pad_width=[0, pad_width], constant_values=-1))
             else:
                 sent_ids_padded.append(sent_ids)
                 tag_ids_padded.append(tag_ids)
@@ -299,7 +298,15 @@ def get_features(
         tag_ids.extend([tag_labels['O-I']] * len(tokens))
 
         features = [
-            (sent_ids, tag_ids, unnormalized_ids[i], normalized_ids[i], left_context_ids[i], right_context_ids[i], example_id)
+            (
+                sent_ids,
+                tag_ids,
+                unnormalized_ids[i],
+                normalized_ids[i],
+                left_context_ids[i],
+                right_context_ids[i],
+                example_id,
+            )
             for i in range(len(unnormalized_ids))
         ]
 
