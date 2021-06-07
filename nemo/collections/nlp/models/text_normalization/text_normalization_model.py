@@ -258,6 +258,31 @@ class TextNormalizationModel(NLPModel):
 
         bs, max_context_length = context_ids.shape
 
+        if prefix == "val":
+            _, max_target_length = output_ids.shape
+            tagger_logits, seq_logits = self.forward(
+                context_ids=context_ids,
+                len_context=len_context,
+                input_ids=input_ids,
+                len_input=len_input,
+                output_ids=output_ids,
+                l_context_ids=l_context_ids,
+                r_context_ids=r_context_ids,
+            )
+            tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
+                bs, max_context_length
+            ) < len_context.unsqueeze(1)
+            tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
+            tagger_logits = tagger_logits[tagger_loss_mask]
+            tag_ids = torch.masked_select(tag_ids, tagger_loss_mask)
+            tag_preds = torch.argmax(tagger_logits, axis=-1)
+
+            seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(
+                bs, max_target_length
+            ) < len_output.unsqueeze(1)
+            seq_loss = self.seq2seq_loss(logits=seq_logits, labels=output_ids, loss_mask=seq_loss_mask)
+            loss = tagger_loss + seq_loss
+
 
 
         # compute sentence accuracy
@@ -278,35 +303,8 @@ class TextNormalizationModel(NLPModel):
 
         if prefix == 'test':
             return {f'{prefix}_preds': preds}
-
-
-        _, max_target_length = output_ids.shape
-        tagger_logits, seq_logits = self.forward(
-            context_ids=context_ids,
-            len_context=len_context,
-            input_ids=input_ids,
-            len_input=len_input,
-            output_ids=output_ids,
-            l_context_ids=l_context_ids,
-            r_context_ids=r_context_ids,
-        )
-        tagger_loss_mask = torch.arange(max_context_length).to(self._device).expand(
-            bs, max_context_length
-        ) < len_context.unsqueeze(1)
-        tagger_loss = self.tagger_loss(logits=tagger_logits, labels=tag_ids, loss_mask=tagger_loss_mask)
-        tagger_logits = tagger_logits[tagger_loss_mask]
-        tag_ids = torch.masked_select(tag_ids, tagger_loss_mask)
-        tag_preds = torch.argmax(tagger_logits, axis=-1)
-
-        seq_loss_mask = torch.arange(max_target_length).to(self._device).expand(
-            bs, max_target_length
-        ) < len_output.unsqueeze(1)
-        seq_loss = self.seq2seq_loss(logits=seq_logits, labels=output_ids, loss_mask=seq_loss_mask)
-        loss = tagger_loss + seq_loss
-
-
-
-        return {f'{prefix}_loss': loss, f'{prefix}_preds': preds}
+        else:
+            return {f'{prefix}_loss': loss, f'{prefix}_preds': preds}
 
     def validation_epoch_end(self, outputs):
         """
