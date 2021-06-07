@@ -34,7 +34,7 @@ __all__ = ['TextNormalizationDataset']
 PUNCT_TYPE = "PUNCT"
 PLAIN_TYPE = "PLAIN"
 Instance = namedtuple('Instance', 'token_type un_normalized normalized')
-tag_labels = {'<self>': 0, 'sil': 1, 'B-I': 2, 'B-M': 3}
+tag_labels = {'O-I': 0, 'O-M': 1, 'B-I': 2, 'B-M': 3}
 
 
 def load_files(file_paths: List[str]) -> List[List[Instance]]:
@@ -80,6 +80,7 @@ class TextNormalizationDataset(Dataset):
             'len_output': NeuralType(('B'), LengthsType()),
             'l_context_ids': NeuralType(('B'), ChannelType()),
             'r_context_ids': NeuralType(('B'), ChannelType()),
+            'example_id': NeuralType(('B'), ChannelType()),
         }
 
     def __init__(
@@ -119,6 +120,8 @@ class TextNormalizationDataset(Dataset):
                 raise ValueError("num_samples has to be positive", num_samples)
 
             instances = load_file(input_file)
+            self.examples = [[(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances]
+
 
             features = get_features(
                 sentences=instances,
@@ -154,6 +157,7 @@ class TextNormalizationDataset(Dataset):
             np.array(self.features[idx][3]),
             np.array(self.features[idx][4]),
             np.array(self.features[idx][5]),
+            np.array(self.features[idx][6]),
         )
 
     def _collate_fn(self, batch):
@@ -167,6 +171,7 @@ class TextNormalizationDataset(Dataset):
         len_decoder_input = [0 for _ in range(bs)]
         l_context_ids = [0 for _ in range(bs)]
         r_context_ids = [0 for _ in range(bs)]
+        example_ids = [0 for _ in range(bs)]
         # max length depends on batch, does not support predefined max length yet, where input might need to be truncated.
         max_length_sent = max([len(batch[i][0]) for i in range(bs)])
         max_length_input = max([len(batch[i][2]) for i in range(bs)])
@@ -178,12 +183,13 @@ class TextNormalizationDataset(Dataset):
         normalized_ids_padded = []
 
         for i in range(bs):
-            sent_ids, tag_ids, unnormalized_ids, normalized_ids, l_context_id, r_context_id = batch[i]
+            sent_ids, tag_ids, unnormalized_ids, normalized_ids, l_context_id, r_context_id, example_id = batch[i]
             len_context[i] = len(sent_ids)
             len_encoder_input[i] = len(unnormalized_ids)
             len_decoder_input[i] = len(normalized_ids)
             l_context_ids[i] = l_context_id
             r_context_ids[i] = r_context_id
+            example_ids[i] = example_id
 
             assert len(sent_ids) == len(tag_ids)
             if len(sent_ids) < max_length_sent:
@@ -229,6 +235,7 @@ class TextNormalizationDataset(Dataset):
             torch.LongTensor(len_decoder_input),
             torch.LongTensor(np.asarray(l_context_ids)),
             torch.LongTensor(np.asarray(r_context_ids)),
+            torch.LongTensor(np.asarray(example_ids)),
         )
 
 
@@ -246,7 +253,7 @@ def get_features(
     List of (sent_ids: List, tag_ids: List, unnormalized_ids: List, normalized_ids: List, left_context_id:int, right_context_id:int)
     """
 
-    def process_sentence(sentence: List[Instance]):
+    def process_sentence(sentence: List[Instance], example_id: int):
         # unnormalized_ids: <BOS> <EOS>
         # normalized_ids <BOS>, word ids .., <EOS>
         # return list of unnormalized_ids, normalized_ids, l_context_id, r_context_id, sent_ids, tag_ids
@@ -262,18 +269,15 @@ def get_features(
         tokens = [tokenizer_context.bos_id]
         assert (len(tokens) == 1, "BOS should be tokenized to single token")
         sent_ids.extend(tokens)
-        tag_ids.extend([tag_labels['<self>']] * len(tokens))
+        tag_ids.extend([tag_labels['O-I']] * len(tokens))
 
         for instance in sentence:
-            if instance.token_type == PLAIN_TYPE:
+            if instance.token_type in [PLAIN_TYPE, PUNCT_TYPE]:
                 tokens = tokenizer_context.text_to_ids(instance.un_normalized)
                 sent_ids.extend(tokens)
-                tag_ids.extend([tag_labels['<self>']] * len(tokens))
-            elif instance.token_type == PUNCT_TYPE:
-                tokens = tokenizer_context.text_to_ids(instance.un_normalized)
-                assert (len(tokens) == 1, "punctuation should be tokenized to single token")
-                sent_ids.extend(tokens)
-                tag_ids.extend([tag_labels['sil']] * len(tokens))
+                tag_ids.append(tag_labels['O-I'])
+                if len(tokens) > 1:
+                    tag_ids.extend([tag_labels['O-M']] * (len(tokens) - 1))
             else:
                 # semiotic token
                 tokens = tokenizer_context.text_to_ids(instance.un_normalized)
@@ -292,16 +296,16 @@ def get_features(
         tokens = [tokenizer_context.eos_id]
         assert (len(tokens) == 1, "EOS should be tokenized to single token")
         sent_ids.extend(tokens)
-        tag_ids.extend([tag_labels['<self>']] * len(tokens))
+        tag_ids.extend([tag_labels['O-I']] * len(tokens))
 
         features = [
-            (sent_ids, tag_ids, unnormalized_ids[i], normalized_ids[i], left_context_ids[i], right_context_ids[i])
+            (sent_ids, tag_ids, unnormalized_ids[i], normalized_ids[i], left_context_ids[i], right_context_ids[i], example_id)
             for i in range(len(unnormalized_ids))
         ]
 
         return features
 
     features = []
-    for sentence in sentences:
-        features.extend(process_sentence(sentence))
+    for example_id, sentence in enumerate(sentences):
+        features.extend(process_sentence(sentence=sentence, example_id=example_id))
     return features
