@@ -45,7 +45,7 @@ def load_files(file_paths: List[str]) -> List[List[Instance]]:
     return res
 
 
-def load_file(file_path: str) -> List[List[Instance]]:
+def load_file(file_path: str, max_sentence_length: Optional[int] = None) -> List[List[Instance]]:
     """
     load Google data file into list of sentences of instances
     """
@@ -55,7 +55,8 @@ def load_file(file_path: str) -> List[List[Instance]]:
         for line in fp:
             parts = line.strip().split("\t")
             if parts[0] == "<eos>":
-                res.append(sentence)
+                if max_sentence_length is None or len(sentence) < max_sentence_length:
+                    res.append(sentence)
                 sentence = []
             else:
                 l_type, l_token, l_normalized = parts
@@ -90,6 +91,7 @@ class TextNormalizationDataset(Dataset):
         tokenizer_context: TokenizerSpec,
         tokenizer_encoder: TokenizerSpec,
         tokenizer_decoder: TokenizerSpec,
+        max_sentence_length: Optional[int] = None,
         num_samples: int = -1,
         use_cache: bool = True,
     ):
@@ -102,7 +104,7 @@ class TextNormalizationDataset(Dataset):
         filename = os.path.basename(input_file)
         features_pkl = os.path.join(
             data_dir,
-            "cached_TextNormalizationDataset_{}_{}_{}_{}_{}".format(
+            "cached_TextNormalizationDataset_{}_{}_{}_{}_maxlen_{}".format(
                 filename,
                 tokenizer_context.name,
                 str(context_vocab_size),
@@ -110,14 +112,15 @@ class TextNormalizationDataset(Dataset):
                 str(encoder_vocab_size),
                 tokenizer_decoder.name,
                 str(decoder_vocab_size),
-                str(num_samples),
+                max_sentence_length,
+                
             ),
         )
 
         self.tokenizer_context = tokenizer_context
         self.tokenizer_encoder = tokenizer_encoder
         self.tokenizer_decoder = tokenizer_decoder
-        instances = load_file(input_file)
+        instances = load_file(input_file, max_sentence_length=max_sentence_length)
         self.examples = [
             [(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances
         ]
@@ -269,6 +272,7 @@ class TextNormalizationTestDataset(Dataset):
         tokenizer_context: TokenizerSpec,
         tokenizer_encoder: TokenizerSpec,
         tokenizer_decoder: TokenizerSpec,
+        max_sentence_length: Optional[int] = None,
         num_samples: int = -1,
         use_cache: bool = True,
     ):
@@ -281,7 +285,7 @@ class TextNormalizationTestDataset(Dataset):
         filename = os.path.basename(input_file)
         features_pkl = os.path.join(
             data_dir,
-            "cached_TextNormalizationTestDataset_{}_{}_{}_{}_{}".format(
+            "cached_TextNormalizationTestDataset_{}_{}_{}_{}_maxlen_{}".format(
                 filename,
                 tokenizer_context.name,
                 str(context_vocab_size),
@@ -292,11 +296,10 @@ class TextNormalizationTestDataset(Dataset):
                 str(num_samples),
             ),
         )
-
         self.tokenizer_context = tokenizer_context
         self.tokenizer_encoder = tokenizer_encoder
         self.tokenizer_decoder = tokenizer_decoder
-        instances = load_file(input_file)
+        instances = load_file(input_file, max_sentence_length=max_sentence_length)
         self.examples = [
             [(instance.token_type, instance.normalized) for instance in sentence] for sentence in instances
         ]

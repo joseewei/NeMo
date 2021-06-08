@@ -49,7 +49,7 @@ def main(args):
         vocab_size=args.context_vocab,
         sample_size=-1,
         do_lower_case=False,
-        tokenizer_type='word',
+        tokenizer_type='bpe',
         output_dir=args.output_dir + '/context_tok',
         bos=True,
         eos=True,
@@ -84,14 +84,14 @@ def parse_args():
     parser.add_argument(
         "--file", type=str, help="training file path", default="/home/yzhang/data/nlp/text_norm/dataset/train.txt"
     )
-    parser.add_argument("--context_vocab", type=int, help="context vocab size", default=1000)
+    parser.add_argument("--context_vocab", type=int, help="context vocab size", default=32000)
     parser.add_argument("--target_vocab", type=int, help="target vocab size", default=1000)
-    parser.add_argument("--input_vocab", type=int, help="input vocab size", default=254)
+    parser.add_argument("--input_vocab", type=int, help="input vocab size", default=1000)
     parser.add_argument(
         "--output_dir",
         type=str,
         help="output directory for newly creately files",
-        default="/home/yzhang/data/nlp/text_norm/dataset/tmp",
+        default="/home/yzhang/data/nlp/text_norm/dataset/tmp3",
     )
     return parser.parse_args()
 

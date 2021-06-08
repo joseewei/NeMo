@@ -420,19 +420,12 @@ class TextNormalizationModel(NLPModel):
             # Switch model to evaluation modef
             self.eval()
             self.to(device)
-            infer_datalayer = self._setup_dataloader_from_config(cfg=cfg)
+            infer_datalayer = self._setup_dataloader_from_config(cfg=cfg, mode="infer")
 
             for batch in tqdm(infer_datalayer):
                 (
                     context_ids,
-                    tag_ids,
                     len_context,
-                    input_ids,
-                    len_input,
-                    output_ids,
-                    len_output,
-                    l_context_ids,
-                    r_context_ids,
                     example_ids,
                 ) = batch
                 # only use context_ids, len_context, example_ids
@@ -637,6 +630,7 @@ class TextNormalizationModel(NLPModel):
                 tokenizer_decoder=self._tokenizer_decoder,
                 num_samples=cfg.get("num_samples", -1),
                 use_cache=self._cfg.dataset.use_cache,
+                max_sentence_length=self._cfg.dataset.max_sentence_length
             )
         else:
             dataset = TextNormalizationTestDataset(
@@ -645,8 +639,8 @@ class TextNormalizationModel(NLPModel):
                 tokenizer_encoder=self._tokenizer_encoder,
                 tokenizer_decoder=self._tokenizer_decoder,
                 num_samples=cfg.get("num_samples", -1),
-                use_cache=self._cfg.dataset.use_cache)
-
+                use_cache=self._cfg.dataset.use_cache,
+                max_sentence_length=None)
         dl = torch.utils.data.DataLoader(
             dataset=dataset,
             batch_size=cfg.batch_size,
