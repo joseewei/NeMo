@@ -17,10 +17,10 @@ import pickle
 import random
 from collections import namedtuple
 from typing import Dict, List, Optional
-from sklearn.metrics import accuracy_score
 
 import numpy as np
 import torch
+from sklearn.metrics import accuracy_score
 from torch.nn.utils.rnn import pad_sequence
 
 from nemo.collections.common.tokenizers.tokenizer_spec import TokenizerSpec
@@ -113,7 +113,6 @@ class TextNormalizationDataset(Dataset):
                 tokenizer_decoder.name,
                 str(decoder_vocab_size),
                 max_sentence_length,
-                
             ),
         )
 
@@ -134,9 +133,9 @@ class TextNormalizationDataset(Dataset):
                 tokenizer_context=tokenizer_context,
                 tokenizer_encoder=tokenizer_encoder,
                 tokenizer_decoder=tokenizer_decoder,
-                mode="train"
+                mode="train",
             )
-            
+
             self.features = features  # list of tuples of sent_ids, tag_ids, unnormalized_id, normalized_id, lefT_context_id, right_context_id,
 
             if use_cache:
@@ -149,7 +148,6 @@ class TextNormalizationDataset(Dataset):
                 # wait until the master process writes to the processed data files
                 if torch.distributed.is_initialized():
                     torch.distributed.barrier()
-
 
     def __len__(self):
         return len(self.features)
@@ -223,8 +221,6 @@ class TextNormalizationDataset(Dataset):
             else:
                 normalized_ids_padded.append(normalized_ids)
 
-            
-
         return (
             torch.LongTensor(sent_ids_padded),
             torch.LongTensor(tag_ids_padded),
@@ -243,16 +239,14 @@ class TextNormalizationDataset(Dataset):
         Args:
             predictions: dict of example_id to tokens
         """
-        
+
         num_samples = len(predictions)
         ids = predictions.keys()
         predictions = [" ".join(predictions[i]) for i in ids]
-        gt = [" ".join([x[1] for x in self.examples[i]]) for i in ids ]
+        gt = [" ".join([x[1] for x in self.examples[i]]) for i in ids]
 
         accuracy = accuracy_score(gt, predictions)
         return accuracy
-
-
 
 
 class TextNormalizationTestDataset(Dataset):
@@ -313,9 +307,9 @@ class TextNormalizationTestDataset(Dataset):
                 tokenizer_context=tokenizer_context,
                 tokenizer_encoder=tokenizer_encoder,
                 tokenizer_decoder=tokenizer_decoder,
-                mode="test"
+                mode="test",
             )
-            
+
             self.features = features  # list of tuples of sent_ids, tag_ids, unnormalized_id, normalized_id, lefT_context_id, right_context_id,
 
             if use_cache:
@@ -328,7 +322,6 @@ class TextNormalizationTestDataset(Dataset):
                 # wait until the master process writes to the processed data files
                 if torch.distributed.is_initialized():
                     torch.distributed.barrier()
-
 
     def __len__(self):
         return len(self.features)
@@ -365,9 +358,6 @@ class TextNormalizationTestDataset(Dataset):
             else:
                 sent_ids_padded.append(sent_ids)
 
-
-            
-
         return (
             torch.LongTensor(sent_ids_padded),
             torch.LongTensor(len_context),
@@ -379,16 +369,18 @@ class TextNormalizationTestDataset(Dataset):
         Args:
             predictions: dict of example_id to tokens
         """
-        
+
         num_samples = len(predictions)
         ids = predictions.keys()
-        assert(num_samples == len(self.examples), "no. predictions should match original dataset length for test and inference")
+        assert (
+            num_samples == len(self.examples),
+            "no. predictions should match original dataset length for test and inference",
+        )
         predictions = [" ".join(predictions[i]) for i in ids]
-        gt = [" ".join([x[1] for x in self.examples[i]]) for i in ids ]
+        gt = [" ".join([x[1] for x in self.examples[i]]) for i in ids]
 
         accuracy = accuracy_score(gt, predictions)
         return accuracy
-
 
 
 def get_features(
@@ -396,7 +388,7 @@ def get_features(
     tokenizer_context: TokenizerSpec,
     tokenizer_encoder: TokenizerSpec,
     tokenizer_decoder: TokenizerSpec,
-    mode: str
+    mode: str,
 ) -> List[tuple]:
     """
     data processing from list of instances into tuples 
@@ -411,7 +403,6 @@ def get_features(
         # normalized_ids <BOS>, word ids .., <EOS>
         # return list of unnormalized_ids, normalized_ids, l_context_id, r_context_id, sent_ids, tag_ids
 
-        
         sent_ids = []  # list
         tag_ids = []  # list
         unnormalized_ids = []  # list of list
@@ -452,7 +443,7 @@ def get_features(
         sent_ids.extend(tokens)
         tag_ids.extend([tag_labels['O-I']] * len(tokens))
 
-        if mode=="train":
+        if mode == "train":
             features = [
                 (
                     sent_ids,
@@ -465,13 +456,8 @@ def get_features(
                 )
                 for i in range(len(unnormalized_ids))
             ]
-        elif mode=="test":
-            features = [
-                (
-                    sent_ids,
-                    example_id,
-                )
-            ]
+        elif mode == "test":
+            features = [(sent_ids, example_id,)]
 
         return features
 
@@ -479,5 +465,3 @@ def get_features(
     for example_id, sentence in enumerate(sentences):
         features.extend(process_sentence(sentence=sentence, example_id=example_id))
     return features
-
-

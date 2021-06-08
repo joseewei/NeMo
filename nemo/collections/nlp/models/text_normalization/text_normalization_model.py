@@ -115,10 +115,6 @@ class TextNormalizationModel(NLPModel):
         self.seq2seq_loss = CrossEntropyLoss(logits_ndim=3)
         self.tagger_loss = CrossEntropyLoss(logits_ndim=3)
 
-        self.classification_report = ClassificationReport(
-            num_classes=cfg.tagger.num_classes, mode='micro', dist_sync_on_step=True
-        )
-
     def tagger_forward(self, context_output):
         context_to_tagger = self.context_project(context_output[:, :, self._cfg.context.hidden_size :])
         context_to_tagger = nn.functional.tanh(context_to_tagger)
@@ -133,7 +129,7 @@ class TextNormalizationModel(NLPModel):
         right_context = context_output[:, :, self._cfg.context.hidden_size :].view(-1, self._cfg.context.hidden_size)
         return context_output, left_context, right_context
 
-    # @typecheck()
+    @typecheck()
     def forward(
         self,
         context_ids,
@@ -249,12 +245,8 @@ class TextNormalizationModel(NLPModel):
                 example_ids,
             ) = batch
         else:
-           
-            (
-                context_ids,
-                len_context,
-                example_ids,
-            ) = batch 
+
+            (context_ids, len_context, example_ids,) = batch
 
         bs, max_context_length = context_ids.shape
 
@@ -283,8 +275,6 @@ class TextNormalizationModel(NLPModel):
             seq_loss = self.seq2seq_loss(logits=seq_logits, labels=output_ids, loss_mask=seq_loss_mask)
             loss = tagger_loss + seq_loss
 
-
-
         # compute sentence accuracy
 
         input_ids, tag_preds, seq_preds, row_index, left_column_index, right_column_index = self.inference(
@@ -311,7 +301,7 @@ class TextNormalizationModel(NLPModel):
         Called at the end of validation to aggregate outputs.
         outputs: list of individual outputs of each validation step.
         """
-        
+
         if self.trainer.testing:
             prefix = 'test'
         else:
@@ -325,7 +315,6 @@ class TextNormalizationModel(NLPModel):
         for x in outputs:
             all_preds.update(x[f'{prefix}_preds'])
 
-        
         eval_dataset = self._test_dl.dataset if self.trainer.testing else self._validation_dl.dataset
         accuracy = eval_dataset.evaluate(all_preds)
 
@@ -423,11 +412,7 @@ class TextNormalizationModel(NLPModel):
             infer_datalayer = self._setup_dataloader_from_config(cfg=cfg, mode="infer")
 
             for batch in tqdm(infer_datalayer):
-                (
-                    context_ids,
-                    len_context,
-                    example_ids,
-                ) = batch
+                (context_ids, len_context, example_ids,) = batch
                 # only use context_ids, len_context, example_ids
                 context_ids = context_ids.to(device)
                 len_context = len_context.to(device)
@@ -630,7 +615,7 @@ class TextNormalizationModel(NLPModel):
                 tokenizer_decoder=self._tokenizer_decoder,
                 num_samples=cfg.get("num_samples", -1),
                 use_cache=self._cfg.dataset.use_cache,
-                max_sentence_length=self._cfg.dataset.max_sentence_length
+                max_sentence_length=self._cfg.dataset.max_sentence_length,
             )
         else:
             dataset = TextNormalizationTestDataset(
@@ -640,7 +625,8 @@ class TextNormalizationModel(NLPModel):
                 tokenizer_decoder=self._tokenizer_decoder,
                 num_samples=cfg.get("num_samples", -1),
                 use_cache=self._cfg.dataset.use_cache,
-                max_sentence_length=None)
+                max_sentence_length=None,
+            )
         dl = torch.utils.data.DataLoader(
             dataset=dataset,
             batch_size=cfg.batch_size,

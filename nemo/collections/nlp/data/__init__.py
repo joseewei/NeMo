@@ -34,7 +34,10 @@ from nemo.collections.nlp.data.neural_machine_translation.neural_machine_transla
     NeuralMachineTranslationDataset,
 )
 from nemo.collections.nlp.data.question_answering_squad.qa_dataset import SquadDataset
-from nemo.collections.nlp.data.text_normalization.text_normalization_dataset import TextNormalizationDataset, TextNormalizationTestDataset
+from nemo.collections.nlp.data.text_normalization.text_normalization_dataset import (
+    TextNormalizationDataset,
+    TextNormalizationTestDataset,
+)
 from nemo.collections.nlp.data.token_classification.token_classification_dataset import (
     BertTokenClassificationDataset,
     BertTokenClassificationInferDataset,

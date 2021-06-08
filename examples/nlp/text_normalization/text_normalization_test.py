@@ -30,9 +30,8 @@ def main(cfg: DictConfig) -> None:
     trainer = pl.Trainer(**cfg.trainer)
     exp_dir = exp_manager(trainer, cfg.get("exp_manager", None))
 
-
     logging.info(f'Loading pretrained model {cfg.pretrained_model}')
-    model = "/home/yzhang/code/NeMo/examples/nlp/text_normalization/model_8000.nemo"
+    model = "/home/yzhang/code/NeMo/examples/nlp/text_normalization/model.nemo"
     model = TextNormalizationModel.restore_from(model)
     model.setup_test_data(test_data_config=cfg.model.test_ds)
 

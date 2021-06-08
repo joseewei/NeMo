@@ -91,7 +91,7 @@ def parse_args():
         "--output_dir",
         type=str,
         help="output directory for newly creately files",
-        default="/home/yzhang/data/nlp/text_norm/dataset/tmp3",
+        default="/home/yzhang/data/nlp/text_norm/dataset/tmp4",
     )
     return parser.parse_args()
 

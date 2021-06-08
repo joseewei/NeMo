@@ -36,7 +36,7 @@ def main(cfg: DictConfig) -> None:
         checkpoint_callback=False,
     )
 
-    model = "/home/yzhang/code/NeMo/examples/nlp/text_normalization/model_8000.nemo"
+    model = "/home/yzhang/code/NeMo/examples/nlp/text_normalization/model.nemo"
     torch.set_grad_enabled(False)
     if not os.path.exists(model):
         raise ValueError(f'{model} not found.')
