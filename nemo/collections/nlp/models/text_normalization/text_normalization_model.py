@@ -400,7 +400,7 @@ class TextNormalizationModel(NLPModel):
         return preds
 
     @torch.no_grad()
-    def infer(self, cfg: DictConfig, max_output_length=10):
+    def infer(self, cfg: DictConfig, max_output_length: int):
         # store predictions for all queries in a single list
         all_preds = defaultdict(list)
         mode = self.training

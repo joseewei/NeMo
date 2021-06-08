@@ -41,7 +41,7 @@ def main(cfg: DictConfig) -> None:
     if not os.path.exists(model):
         raise ValueError(f'{model} not found.')
     model = TextNormalizationModel.restore_from(model)
-    all_preds = model.infer(cfg.model.test_ds)
+    all_preds = model.infer(cfg.model.infer_ds, max_output_length=cfg.model.infer_ds.max_output_length)
 
     num_samples = len(all_preds)
     predictions = [" ".join(all_preds[i]) for i in range(num_samples)]
