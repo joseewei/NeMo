@@ -20,7 +20,8 @@ import torch
 from megatron import get_args, initialize_megatron
 from megatron.checkpointing import set_checkpoint_version
 from megatron.model import get_language_model
-from megatron.model.bert_model import bert_attention_mask_func, bert_extended_attention_mask, bert_position_ids
+from megatron.model.bert_model import bert_extended_attention_mask, bert_position_ids
+from megatron.model.enums import AttnMaskType
 from megatron.mpu import (
     get_model_parallel_group,
     model_parallel_is_initialized,
@@ -116,7 +117,7 @@ class MegatronBertEncoder(BertModule):
         logging.info(f'Megatron-lm argparse args: {args}')
 
         self.language_model, self._language_model_key = get_language_model(
-            attention_mask_func=bert_attention_mask_func, num_tokentypes=0, add_pooler=False
+            attention_mask_func=AttnMaskType.padding, num_tokentypes=0, add_pooler=False
         )
 
         self.config = OmegaConf.create(config)
