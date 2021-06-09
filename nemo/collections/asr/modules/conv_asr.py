@@ -21,11 +21,11 @@ import torch.nn.functional as F
 from omegaconf import MISSING, ListConfig, OmegaConf
 
 from nemo.collections.asr.parts.submodules.jasper import (
+    AttentivePoolingLayer,
     JasperBlock,
     MaskedConv1d,
     StatsPoolLayer,
     init_weights,
-    AttentivePoolingLayer,
     jasper_activations,
 )
 from nemo.core.classes.common import typecheck
