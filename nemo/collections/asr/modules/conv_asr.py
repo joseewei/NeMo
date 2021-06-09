@@ -390,7 +390,14 @@ class SpeakerDecoder(NeuralModule, Exportable):
         )
 
     def __init__(
-        self, feat_in, num_classes, encoder_filters=1024, emb_sizes=None, pool_mode='xvector', angular=False, init_mode="xavier_uniform",
+        self,
+        feat_in,
+        num_classes,
+        encoder_filters=1024,
+        emb_sizes=None,
+        pool_mode='xvector',
+        angular=False,
+        init_mode="xavier_uniform",
     ):
         super().__init__()
         self.angular = angular
