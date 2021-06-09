@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -22,6 +23,7 @@ from omegaconf import MISSING, ListConfig, OmegaConf
 
 from nemo.collections.asr.parts.submodules.jasper import (
     AttentivePoolingLayer,
+    Bottle2neck,
     JasperBlock,
     MaskedConv1d,
     StatsPoolLayer,
@@ -348,6 +350,61 @@ class ConvASRDecoderClassification(NeuralModule, Exportable):
     @property
     def num_classes(self):
         return self._num_classes
+
+
+class ECAPA_Encoder(NeuralModule, Exportable):
+    @property
+    def input_types(self):
+        """Returns definitions of module input ports.
+        """
+        return OrderedDict(
+            {
+                "audio_signal": NeuralType(('B', 'D', 'T'), SpectrogramType()),
+                "length": NeuralType(tuple('B'), LengthsType()),
+            }
+        )
+
+    @property
+    def output_types(self):
+        """Returns definitions of module output ports.
+        """
+        return OrderedDict(
+            {
+                "outputs": NeuralType(('B', 'D', 'T'), AcousticEncodedRepresentation()),
+                "encoded_lengths": NeuralType(tuple('B'), LengthsType()),
+            }
+        )
+
+    def __init__(self, feat_in, filters, kernel_sizes, dilations, scale=8, init_mode='xavier_uniform'):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(
+            nn.Sequential(
+                nn.Conv1d(feat_in, filters[0], kernel_size=kernel_sizes[0], padding=2, dilation=1),
+                nn.ReLU(),
+                nn.BatchNorm1d(filters[0]),
+            )
+        )
+
+        for i in range(len(filters) - 1):
+            self.layers.append(
+                Bottle2neck(
+                    filters[i], filters[i + 1], kernel_size=kernel_sizes[i + 1], dilation=dilations[i + 1], scale=scale
+                )
+            )
+
+        self.apply(lambda x: init_weights(x, mode=init_mode))
+
+    def forward(self, audio_signal, length=None):
+        x = audio_signal
+        outputs = []
+        for layer in self.layers:
+            x = layer(x)
+            outputs.append(x)
+
+        if length is None:
+            return torch.cat(outputs[1:], dim=1)
+        return torch.cat(outputs[1:], dim=1), length
 
 
 class SpeakerDecoder(NeuralModule, Exportable):
