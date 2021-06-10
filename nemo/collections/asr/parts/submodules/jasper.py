@@ -199,7 +199,7 @@ class SEModule(nn.Module):
         return input * x
 
 class Res2NetBlock(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, scale=8, dilation=1):
+    def __init__(self, in_channels, out_channels, scale=8, dilation=1,init_mode='xavier_uniform'):
         super(Res2NetBlock, self).__init__()
         assert in_channels % scale == 0
         assert out_channels % scale == 0
@@ -207,16 +207,16 @@ class Res2NetBlock(torch.nn.Module):
         in_channel = in_channels // scale
         hidden_channel = out_channels // scale
 
-        self.blocks = nn.ModuleList(
-            [
+        self.blocks = []
+        for i in range(scale - 1):
+            self.blocks.append(
                 TDNN_Block(
                     in_channel, hidden_channel, kernel_size=3, dilation=dilation
                 )
-                for i in range(scale - 1)
-            ]
         )
+        self.blocks = nn.ModuleList(self.blocks)
         self.scale = scale
-
+        self.apply(lambda x: init_weights(x, mode=init_mode))  
     def forward(self, x):
         y = []
         for i, x_i in enumerate(torch.chunk(x, self.scale, dim=1)):
@@ -265,6 +265,7 @@ class SERes2NetBlock(nn.Module):
         kernel_size=1,
         dilation=1,
         activation=torch.nn.ReLU,
+        init_mode='xavier_uniform'
     ):
         super(SERes2NetBlock,self).__init__()
         self.out_channels = out_channels
@@ -294,7 +295,7 @@ class SERes2NetBlock(nn.Module):
                 out_channels=out_channels,
                 kernel_size=1,
             )
-
+        self.apply(lambda x: init_weights(x, mode=init_mode)) 
     def forward(self, x, lengths=None):
         residual = x
         if self.shortcut:
