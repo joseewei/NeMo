@@ -22,6 +22,7 @@ from megatron.checkpointing import set_checkpoint_version
 from megatron.model import get_language_model
 from megatron.model.bert_model import bert_extended_attention_mask, bert_position_ids
 from megatron.model.enums import AttnMaskType
+from megatron import fused_kernels
 from megatron.mpu import (
     get_model_parallel_group,
     model_parallel_is_initialized,
@@ -83,6 +84,7 @@ class MegatronBertEncoder(BertModule):
         config['tokenizer_type'] = 'BertWordPieceLowerCase'
         config['lazy_mpu_init'] = True
         config['onnx_safe'] = True
+        config['seq_length'] = 512
 
         # if 'model_parallel_size' in config:
         if self._model_parallel_size is not None:
@@ -114,10 +116,13 @@ class MegatronBertEncoder(BertModule):
 
         # read Megatron arguments back
         args = get_args()
+
+        fused_kernels.load(args)
+
         logging.info(f'Megatron-lm argparse args: {args}')
 
         self.language_model, self._language_model_key = get_language_model(
-            attention_mask_func=AttnMaskType.padding, num_tokentypes=0, add_pooler=False
+            encoder_attn_mask_type=AttnMaskType.padding, num_tokentypes=0, add_pooler=False
         )
 
         self.config = OmegaConf.create(config)
@@ -128,14 +133,14 @@ class MegatronBertEncoder(BertModule):
         self,
         micro_batch_size=1,
         tensor_model_parallel_size=1,
-        scaled_masked_softmax_fusion=False,
+        masked_softmax_fusion=False,
         bias_gelu_fusion=False,
         bias_dropout_fusion=False,
     ):
         def extra_args_provider(parser):
             parser.set_defaults(micro_batch_size=micro_batch_size)
             parser.set_defaults(tensor_model_parallel_size=tensor_model_parallel_size)
-            parser.set_defaults(scaled_masked_softmax_fusion=scaled_masked_softmax_fusion)
+            parser.set_defaults(masked_softmax_fusion=masked_softmax_fusion)
             parser.set_defaults(bias_gelu_fusion=bias_gelu_fusion)
             parser.set_defaults(bias_dropout_fusion=bias_dropout_fusion)
 
@@ -179,9 +184,9 @@ class MegatronBertEncoder(BertModule):
         position_ids = bert_position_ids(input_ids)
 
         sequence_output = self.language_model(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            attention_mask=extended_attention_mask,
+            enc_input_ids=input_ids,
+            enc_position_ids=position_ids,
+            enc_attn_mask=extended_attention_mask,
             tokentype_ids=token_type_ids,
         )
         return sequence_output
