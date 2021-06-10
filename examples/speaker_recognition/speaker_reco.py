@@ -17,6 +17,7 @@ import os
 import pytorch_lightning as pl
 from omegaconf import ListConfig, OmegaConf
 from pytorch_lightning import seed_everything
+from pytorch_lightning import profiler
 
 from nemo.collections.asr.models import EncDecSpeakerLabelModel
 from nemo.core.config import hydra_runner

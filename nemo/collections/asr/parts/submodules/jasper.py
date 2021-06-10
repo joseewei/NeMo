@@ -18,8 +18,11 @@ from typing import Callable, List, Optional, Tuple
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch.nn.functional import pad
 from torch.nn.init import _calculate_correct_fan
+from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.utils import _single
+import torch.nn.functional as F
 
 from nemo.collections.asr.parts.utils.activations import Swish
 from nemo.utils import logging
@@ -161,88 +164,148 @@ def get_asymtric_padding(kernel_size, stride, dilation, future_context):
 
     return (left_context, right_context)
 
+class TDNN_Block(nn.Module):
+    def __init__(self,inp_filters,out_filters,kernel_size=1,dilation=1,activation=nn.ReLU):
+        super(TDNN_Block, self).__init__()
+        padding = get_same_padding(kernel_size, 1, dilation)
+        self.layer = nn.Conv1d(
+            in_channels=inp_filters,
+            out_channels=out_filters,
+            kernel_size=kernel_size,
+            dilation=dilation,
+            padding=padding
+        )
+        self.activation = activation()
+        self.bn = BatchNorm1d(out_filters)
+    
+    def forward(self,inp):
+        x = self.layer(inp)
+        return self.bn(self.activation(x))
 
 class SEModule(nn.Module):
-    def __init__(self, channels, bottleneck=128):
+    def __init__(self, inp_filters, se_filters, out_filters):
         super(SEModule, self).__init__()
         self.se = nn.Sequential(
             nn.AdaptiveAvgPool1d(1),
-            nn.Conv1d(channels, bottleneck, kernel_size=1, padding=0),
+            nn.Conv1d(inp_filters, se_filters, kernel_size=1,),
             nn.ReLU(),
-            nn.BatchNorm1d(bottleneck),
-            nn.Conv1d(bottleneck, channels, kernel_size=1, padding=0),
+            nn.BatchNorm1d(se_filters),
+            nn.Conv1d(se_filters, out_filters, kernel_size=1,),
             nn.Sigmoid(),
             )
 
-    def forward(self, input):
+    def forward(self, input,lengths=None):
         x = self.se(input)
         return input * x
 
-class Bottle2neck(nn.Module):
+class Res2NetBlock(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, scale=8, dilation=1):
+        super(Res2NetBlock, self).__init__()
+        assert in_channels % scale == 0
+        assert out_channels % scale == 0
 
-    def __init__(self, inplanes, planes, kernel_size=None, dilation=None, scale = 4):
+        in_channel = in_channels // scale
+        hidden_channel = out_channels // scale
 
-        super(Bottle2neck, self).__init__()
+        self.blocks = nn.ModuleList(
+            [
+                TDNN_Block(
+                    in_channel, hidden_channel, kernel_size=3, dilation=dilation
+                )
+                for i in range(scale - 1)
+            ]
+        )
+        self.scale = scale
 
-        width       = int(math.floor(planes / scale))
-        
-        self.conv1  = nn.Conv1d(inplanes, width*scale, kernel_size=1)
-        self.bn1    = nn.BatchNorm1d(width*scale)
-        
-        self.nums   = scale -1
+    def forward(self, x):
+        y = []
+        for i, x_i in enumerate(torch.chunk(x, self.scale, dim=1)):
+            if i == 0:
+                y_i = x_i
+            elif i == 1:
+                y_i = self.blocks[i - 1](x_i)
+            else:
+                y_i = self.blocks[i - 1](x_i + y_i)
+            y.append(y_i)
+        y = torch.cat(y, dim=1)
+        return y
 
-        convs       = []
-        bns         = []
+class SERes2NetBlock(nn.Module):
+    """An implementation of building block in ECAPA-TDNN, i.e.,
+    TDNN-Res2Net-TDNN-SEBlock.
 
-        num_pad = math.floor(kernel_size/2)*dilation
+    Arguments
+    ----------
+    out_channels: int
+        The number of output channels.
+    res2net_scale: int
+        The scale of the Res2Net block.
+    kernel_size: int
+        The kernel size of the TDNN blocks.
+    dilation: int
+        The dilation of the Res2Net block.
+    activation : torch class
+        A class for constructing the activation layers.
 
-        for i in range(self.nums):
-            convs.append(nn.Conv1d(width, width, kernel_size=kernel_size, dilation=dilation, padding=num_pad))
-            bns.append(nn.BatchNorm1d(width))
+    Example
+    -------
+    >>> x = torch.rand(8, 120, 64).transpose(1, 2)
+    >>> conv = SERes2NetBlock(64, 64, res2net_scale=4)
+    >>> out = conv(x).transpose(1, 2)
+    >>> out.shape
+    torch.Size([8, 120, 64])
+    """
 
-        self.convs  = nn.ModuleList(convs)
-        self.bns    = nn.ModuleList(bns)
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        res2net_scale=8,
+        se_channels=128,
+        kernel_size=1,
+        dilation=1,
+        activation=torch.nn.ReLU,
+    ):
+        super(SERes2NetBlock,self).__init__()
+        self.out_channels = out_channels
+        self.tdnn1 = TDNN_Block(
+            in_channels,
+            out_channels,
+            kernel_size=1,
+            dilation=1,
+            activation=activation,
+        )
+        self.res2net_block = Res2NetBlock(
+            out_channels, out_channels, res2net_scale, dilation
+        )
+        self.tdnn2 = TDNN_Block(
+            out_channels,
+            out_channels,
+            kernel_size=1,
+            dilation=1,
+            activation=activation,
+        )
+        self.se_block = SEModule(out_channels, se_channels, out_channels)
 
-        self.conv3  = nn.Conv1d(width*scale, planes, kernel_size=1)
-        self.bn3    = nn.BatchNorm1d(planes)
+        self.shortcut = None
+        if in_channels != out_channels:
+            self.shortcut = nn.Conv1d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=1,
+            )
 
-        self.relu   = nn.ReLU()
-
-        self.width  = width
-        self.se     = SEModule(planes)
-
-    def forward(self, x, length=None):
+    def forward(self, x, lengths=None):
         residual = x
+        if self.shortcut:
+            residual = self.shortcut(x)
 
-        out = self.conv1(x)
-        out = self.relu(out)
-        out = self.bn1(out)
+        x = self.tdnn1(x)
+        x = self.res2net_block(x)
+        x = self.tdnn2(x)
+        x = self.se_block(x, lengths)
 
-        spx = torch.split(out, self.width, 1)
-        for i in range(self.nums):
-          if i==0:
-            sp = spx[i]
-          else:
-            sp = sp + spx[i]
-          sp = self.convs[i](sp)
-          sp = self.relu(sp)
-          sp = self.bns[i](sp)
-          if i==0:
-            out = sp
-          else:
-            out = torch.cat((out, sp), 1)
-
-        out = torch.cat((out, spx[self.nums]),1)
-
-        out = self.conv3(out)
-        out = self.relu(out)
-        out = self.bn3(out)
-
-        out = self.se(out)
-
-        out += residual
-
-        return out 
+        return x + residual
 class StatsPoolLayer(nn.Module):
     def __init__(self, feat_in, pool_mode='xvector'):
         super().__init__()
@@ -264,53 +327,181 @@ class StatsPoolLayer(nn.Module):
             pooled = mean
         return pooled
 
+def length_to_mask(length, max_len=None, dtype=None, device=None):
+    """Creates a binary mask for each sequence.
+
+    Reference: https://discuss.pytorch.org/t/how-to-generate-variable-length-mask/23397/3
+
+    Arguments
+    ---------
+    length : torch.LongTensor
+        Containing the length of each sequence in the batch. Must be 1D.
+    max_len : int
+        Max length for the mask, also the size of the second dimension.
+    dtype : torch.dtype, default: None
+        The dtype of the generated mask.
+    device: torch.device, default: None
+        The device to put the mask variable.
+
+    Returns
+    -------
+    mask : tensor
+        The binary mask.
+
+    Example
+    -------
+    >>> length=torch.Tensor([1,2,3])
+    >>> mask=length_to_mask(length)
+    >>> mask
+    tensor([[1., 0., 0.],
+            [1., 1., 0.],
+            [1., 1., 1.]])
+    """
+    assert len(length.shape) == 1
+
+    if max_len is None:
+        max_len = length.max().long().item()  # using arange to generate mask
+    mask = torch.arange(
+        max_len, device=length.device, dtype=length.dtype
+    ).expand(len(length), max_len) < length.unsqueeze(1)
+
+    if dtype is None:
+        dtype = length.dtype
+
+    if device is None:
+        device = length.device
+
+    mask = torch.as_tensor(mask, dtype=dtype, device=device)
+    return mask
 
 class AttentivePoolingLayer(nn.Module):
-    def __init__(self, encoder_filters,input_channels, attention_channels, global_context=True, init_mode='xavier_uniform'):
+    """This class implements an attentive statistic pooling layer for each channel.
+    It returns the concatenated mean and std of the input tensor.
+
+    Arguments
+    ---------
+    channels: int
+        The number of input channels.
+    attention_channels: int
+        The number of attention channels.
+
+    Example
+    -------
+    >>> inp_tensor = torch.rand([8, 120, 64]).transpose(1, 2)
+    >>> asp_layer = AttentiveStatisticsPooling(64)
+    >>> lengths = torch.rand((8,))
+    >>> out_tensor = asp_layer(inp_tensor, lengths).transpose(1, 2)
+    >>> out_tensor.shape
+    torch.Size([8, 1, 128])
+    """
+
+    def __init__(self, inp_channels, attention_channels=128, global_context=True):
         super().__init__()
+
+        self.eps = 1e-12
         self.global_context = global_context
-        self.feat_in = 2 * input_channels
-        self.relu   = nn.ReLU()
-        self.group_conv = nn.Conv1d(3*encoder_filters, input_channels, kernel_size=1)
-        self.attention = nn.Sequential(
-            nn.Conv1d(3 * input_channels, attention_channels, kernel_size=1),
-            nn.ReLU(),
-            nn.BatchNorm1d(attention_channels),
-            nn.Conv1d(attention_channels, input_channels, kernel_size=1),
-            nn.Softmax(dim=2),
-        )
-        self.bn5 = nn.BatchNorm1d(2 * input_channels)
-
-        self.apply(lambda x: init_weights(x, mode=init_mode))
-
-    def forward(self, x):
-        x = self.group_conv(x)
-        x = self.relu(x)
-        
-        t = x.shape[-1]
-
-        if self.global_context:
-            global_x = torch.cat(
-                (
-                    x,
-                    torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
-                    torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t),
-                ),
-                dim=1,
-            )
+        self.feat_in = 2 * inp_channels
+        if global_context:
+            self.tdnn = TDNN_Block(inp_channels * 3, attention_channels, 1, 1)
         else:
-            global_x = x
+            self.tdnn = TDNN_Block(inp_channels, attention_channels, 1, 1)
+        self.tanh = nn.Tanh()
+        self.conv = nn.Conv1d(
+            in_channels=attention_channels, out_channels=inp_channels, kernel_size=1
+        )
 
-        w = self.attention(global_x)
+    def forward(self, x, lengths=None):
+        """Calculates mean and std for a batch (input tensor).
 
-        mu = torch.sum(x * w, dim=2)
-        sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
+        Arguments
+        ---------
+        x : torch.Tensor
+            Tensor of shape [N, C, L].
+        """
+        L = x.shape[-1]
 
-        x = torch.cat((mu, sg), 1)
+        def _compute_statistics(x, m, dim=2, eps=self.eps):
+            mean = (m * x).sum(dim)
+            std = torch.sqrt(
+                (m * (x - mean.unsqueeze(dim)).pow(2)).sum(dim).clamp(eps)
+            )
+            return mean, std
 
-        x = self.bn5(x)
+        if lengths is None:
+            lengths = torch.ones(x.shape[0], device=x.device)
 
-        return x
+        # Make binary mask of shape [N, 1, L]
+        mask = length_to_mask(lengths * L, max_len=L, device=x.device)
+        mask = mask.unsqueeze(1)
+
+        # Expand the temporal context of the pooling layer by allowing the
+        # self-attention to look at global properties of the utterance.
+        if self.global_context:
+            # torch.std is unstable for backward computation
+            # https://github.com/pytorch/pytorch/issues/4320
+            total = mask.sum(dim=2, keepdim=True).float()
+            mean, std = _compute_statistics(x, mask / total)
+            mean = mean.unsqueeze(2).repeat(1, 1, L)
+            std = std.unsqueeze(2).repeat(1, 1, L)
+            attn = torch.cat([x, mean, std], dim=1)
+        else:
+            attn = x
+
+        # Apply layers
+        attn = self.conv(self.tanh(self.tdnn(attn)))
+
+        # Filter out zero-paddings
+        attn = attn.masked_fill(mask == 0, float("-inf"))
+
+        attn = F.softmax(attn, dim=2)
+        mean, std = _compute_statistics(x, attn)
+        # Append mean and std of the batch
+        pooled_stats = torch.cat((mean, std), dim=1)
+        pooled_stats = pooled_stats.unsqueeze(2)
+
+        return pooled_stats
+
+# class AttentivePoolingLayer(nn.Module):
+#     def __init__(self,input_channels, attention_channels, global_context=True, init_mode='xavier_uniform'):
+#         super().__init__()
+#         self.global_context = global_context
+#         self.feat_in = 2 * input_channels
+#         self.attention = nn.Sequential(
+#             nn.Conv1d(3 * input_channels, attention_channels, kernel_size=1),
+#             nn.ReLU(),
+#             nn.BatchNorm1d(attention_channels),
+#             nn.Conv1d(attention_channels, input_channels, kernel_size=1),
+#             nn.Softmax(dim=2),
+#         )
+#         self.bn5 = nn.BatchNorm1d(2 * input_channels)
+
+#         self.apply(lambda x: init_weights(x, mode=init_mode))
+
+#     def forward(self, x):
+#         t = x.shape[-1]
+
+#         if self.global_context:
+#             global_x = torch.cat(
+#                 (
+#                     x,
+#                     torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
+#                     torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t),
+#                 ),
+#                 dim=1,
+#             )
+#         else:
+#             global_x = x
+
+#         w = self.attention(global_x)
+
+#         mu = torch.sum(x * w, dim=2)
+#         sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
+
+#         x = torch.cat((mu, sg), 1)
+
+#         x = self.bn5(x)
+
+#         return x
 
 
 class MaskedConv1d(nn.Module):

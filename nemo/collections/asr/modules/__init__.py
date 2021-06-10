@@ -22,9 +22,9 @@ from nemo.collections.asr.modules.beam_search_decoder import BeamSearchDecoderWi
 from nemo.collections.asr.modules.conformer_encoder import ConformerEncoder
 from nemo.collections.asr.modules.conv_asr import (
     ConvASRDecoder,
+    ECAPA_Encoder,
     ConvASRDecoderClassification,
     ConvASREncoder,
-    ECAPA_Encoder,
     SpeakerDecoder,
 )
 from nemo.collections.asr.modules.lstm_decoder import LSTMDecoder

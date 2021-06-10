@@ -23,10 +23,11 @@ from omegaconf import MISSING, ListConfig, OmegaConf
 
 from nemo.collections.asr.parts.submodules.jasper import (
     AttentivePoolingLayer,
-    Bottle2neck,
     JasperBlock,
     MaskedConv1d,
+    SERes2NetBlock,
     StatsPoolLayer,
+    TDNN_Block,
     init_weights,
     jasper_activations,
 )
@@ -376,35 +377,41 @@ class ECAPA_Encoder(NeuralModule, Exportable):
         )
 
     def __init__(self, feat_in, filters, kernel_sizes, dilations, scale=8, init_mode='xavier_uniform'):
-        super().__init__()
+        super(ECAPA_Encoder, self).__init__()
         self.layers = nn.ModuleList()
-        self.layers.append(
-            nn.Sequential(
-                nn.Conv1d(feat_in, filters[0], kernel_size=kernel_sizes[0], padding=2, dilation=1),
-                nn.ReLU(),
-                nn.BatchNorm1d(filters[0]),
-            )
-        )
+        self.layers.append(TDNN_Block(feat_in, filters[0], kernel_size=kernel_sizes[0], dilation=dilations[0]))
 
-        for i in range(len(filters) - 1):
+        for i in range(len(filters) - 2):
             self.layers.append(
-                Bottle2neck(
-                    filters[i], filters[i + 1], kernel_size=kernel_sizes[i + 1], dilation=dilations[i + 1], scale=scale
+                SERes2NetBlock(
+                    filters[i],
+                    filters[i + 1],
+                    res2net_scale=scale,
+                    se_channels=128,
+                    kernel_size=kernel_sizes[i + 1],
+                    dilation=dilations[i + 1],
                 )
             )
-
+        self.mfa = TDNN_Block(
+            filters[-1],
+            filters[-1],
+            kernel_sizes[-1],
+            dilations[-1]
+        )
         self.apply(lambda x: init_weights(x, mode=init_mode))
 
     def forward(self, audio_signal, length=None):
         x = audio_signal
         outputs = []
+        
         for layer in self.layers:
             x = layer(x)
             outputs.append(x)
-
+        x = torch.cat(outputs[1:], dim=1)
+        x = self.mfa(x)
         if length is None:
-            return torch.cat(outputs[1:], dim=1)
-        return torch.cat(outputs[1:], dim=1), length
+            return x
+        return x, length
 
 
 class SpeakerDecoder(NeuralModule, Exportable):
@@ -450,7 +457,6 @@ class SpeakerDecoder(NeuralModule, Exportable):
         self,
         feat_in,
         num_classes,
-        encoder_filters=1024,
         emb_sizes=None,
         pool_mode='xvector',
         angular=False,
@@ -478,7 +484,7 @@ class SpeakerDecoder(NeuralModule, Exportable):
             self._pooling = StatsPoolLayer(feat_in=feat_in, pool_mode=pool_mode)
         elif self.pool_mode == 'ecapa':
             self._pooling = AttentivePoolingLayer(
-                encoder_filters=encoder_filters, input_channels=feat_in, attention_channels=128, global_context=True
+                inp_channels=feat_in, attention_channels=128, global_context=True
             )
         self._feat_in = self._pooling.feat_in
 
@@ -510,7 +516,7 @@ class SpeakerDecoder(NeuralModule, Exportable):
     def forward(self, encoder_output):
         pool = self._pooling(encoder_output)
         embs = []
-
+        pool = pool.squeeze(-1)
         for layer in self.emb_layers:
             pool, emb = layer(pool), layer[: self.emb_id](pool)
             embs.append(emb)
