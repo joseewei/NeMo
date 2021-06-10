@@ -74,14 +74,16 @@ class MegatronBertEncoder(BertModule):
 
         self._hidden_size = config.get('hidden_size')
 
-        if not os.path.exists(vocab_file):
-            raise ValueError(f'Vocab file not found at {vocab_file}')
+        # if not os.path.exists(vocab_file):
+        #     raise ValueError(f'Vocab file not found at {vocab_file}')
 
         # convert config to dictionary
         if isinstance(config, DictConfig):
             config = OmegaConf.to_container(config)
-        config["vocab_file"] = vocab_file
-        config['tokenizer_type'] = 'BertWordPieceLowerCase'
+        # config["vocab_file"] = vocab_file
+        # config['tokenizer_type'] = 'BertWordPieceLowerCase'
+        config['tokenizer_type'] = 'YTTMBPETokenizer'
+        config["vocab_file"] = config.pop('tokenizer_model')  # megatron gets yttm tokenizer model from vocab_file arg
         config['lazy_mpu_init'] = True
         config['onnx_safe'] = True
         config['seq_length'] = 512

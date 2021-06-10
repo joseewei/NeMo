@@ -113,37 +113,37 @@ def get_megatron_lm_model(
         model: MegatronBertEncoder
         checkpoint_file: path to checkpoint file or directory
     """
-    config = None
-    # get default config and checkpoint
-    if config_file:
-        with open(config_file) as f:
-            config = json.load(f)
-            # replace dashes with underscores in config keys
-            fixed_config = {}
-            for key in config.keys():
-                fixed_key = key.replace("-", "_")
-                if fixed_key == 'max_seq_length':
-                    fixed_key = 'max_position_embeddings'
-                fixed_config[fixed_key] = config[key]
-            # 'vocab_size" no longer used.
-            if 'vocab_size' in fixed_config:
-                fixed_config.pop('vocab_size')
-            config = fixed_config
-    elif config_dict:
-        config = config_dict
-    elif pretrained_model_name in get_megatron_lm_models_list():
-        config = get_megatron_config(pretrained_model_name)
-    else:
-        raise ValueError(f"{pretrained_model_name} is not supported")
+    # config = None
+    # # get default config and checkpoint
+    # if config_file:
+    #     with open(config_file) as f:
+    #         config = json.load(f)
+    #         # replace dashes with underscores in config keys
+    #         fixed_config = {}
+    #         for key in config.keys():
+    #             fixed_key = key.replace("-", "_")
+    #             if fixed_key == 'max_seq_length':
+    #                 fixed_key = 'max_position_embeddings'
+    #             fixed_config[fixed_key] = config[key]
+    #         # 'vocab_size" no longer used.
+    #         if 'vocab_size' in fixed_config:
+    #             fixed_config.pop('vocab_size')
+    #         config = fixed_config
+    # elif config_dict:
+    config = config_dict
+    # elif pretrained_model_name in get_megatron_lm_models_list():
+    #     config = get_megatron_config(pretrained_model_name)
+    # else:
+    #     raise ValueError(f"{pretrained_model_name} is not supported")
 
-    if config is None:
-        raise ValueError(f"config_file or config_dict is required for {pretrained_model_name}")
+    # if config is None:
+    #     raise ValueError(f"config_file or config_dict is required for {pretrained_model_name}")
 
-    if not checkpoint_file:
-        checkpoint_file = get_megatron_checkpoint(pretrained_model_name)
+    # if not checkpoint_file:
+    #     checkpoint_file = get_megatron_checkpoint(pretrained_model_name)
 
-    if not vocab_file:
-        vocab_file = get_megatron_vocab_file(pretrained_model_name)
+    # if not vocab_file:
+    #     vocab_file = get_megatron_vocab_file(pretrained_model_name)
 
     app_state = AppState()
     if app_state.model_parallel_size is not None and app_state.model_parallel_rank is not None:
@@ -180,7 +180,7 @@ def get_megatron_lm_model(
         model_parallel_rank = None
 
     model = MegatronBertEncoder(
-        model_name=pretrained_model_name,
+        model_name=None,
         config=config,
         vocab_file=vocab_file,
         model_parallel_size=model_parallel_size,
