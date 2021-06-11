@@ -279,7 +279,10 @@ class SERes2NetBlock(nn.Module):
         self.res2net_block = Res2NetBlock(
             out_channels, out_channels, res2net_scale, dilation
         )
-        # self.res2net_block = nn.Conv1d(out_channels,out_channels,kernel_size=3,dilation=1,padding=1,groups=res2net_scale)
+        self.res2net_block = nn.Conv1d(out_channels,out_channels,kernel_size=3,dilation=1,padding=1,groups=res2net_scale)
+        self.activation = nn.ReLU()
+        self.bn = nn.BatchNorm1d(out_channels)
+
         self.tdnn2 = TDNN_Block(
             out_channels,
             out_channels,
@@ -304,6 +307,7 @@ class SERes2NetBlock(nn.Module):
 
         x = self.tdnn1(x)
         x = self.res2net_block(x)
+        x = self.bn(self.activation(x))
         x = self.tdnn2(x)
         x = self.se_block(x, lengths)
 
