@@ -443,7 +443,7 @@ class TalkNet3Model(ModelPT):
         self.decoder_type = "mlp_mixer"
 
         self.conditioning_on_nlp_model_text_encoder = False
-        self.conditioning_on_nlp_model_text_decoder = True
+        self.conditioning_on_nlp_model_text_decoder = False
 
         self.conditioning_on_aligner_text_encoder = False
         self.conditioning_on_aligner_text_decoder = False
