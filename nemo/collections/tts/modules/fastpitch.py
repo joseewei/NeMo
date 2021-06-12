@@ -64,16 +64,42 @@ from nemo.core.neural_types.neural_type import NeuralType
 
 def regulate_len(durations, enc_out, pace=1.0, mel_max_len=None):
     """If target=None, then predicted durations are applied"""
+    dtype = enc_out.dtype
     reps = durations.float() / pace
     reps = (reps + 0.5).long()
     dec_lens = reps.sum(dim=1)
 
-    enc_rep = pad_sequence([torch.repeat_interleave(o, r, dim=0) for o, r in zip(enc_out, reps)], batch_first=True)
+    max_len = dec_lens.max()
+    reps_cumsum = torch.cumsum(torch.nn.functional.pad(reps, (1, 0, 0, 0), value=0.0), dim=1)[:, None, :]
+    reps_cumsum = reps_cumsum.to(dtype)
+
+    range_ = torch.arange(max_len).to(enc_out.device)[None, :, None]
+    mult = (reps_cumsum[:, :, :-1] <= range_) & (reps_cumsum[:, :, 1:] > range_)
+    mult = mult.to(dtype)
+    enc_rep = torch.matmul(mult, enc_out)
+
     if mel_max_len:
         enc_rep = enc_rep[:, :mel_max_len]
         dec_lens = torch.clamp_max(dec_lens, mel_max_len)
     return enc_rep, dec_lens
 
+
+def average_pitch(pitch, durs):
+    durs_cums_ends = torch.cumsum(durs, dim=1).long()
+    durs_cums_starts = torch.nn.functional.pad(durs_cums_ends[:, :-1], (1, 0))
+    pitch_nonzero_cums = torch.nn.functional.pad(torch.cumsum(pitch != 0.0, dim=2), (1, 0))
+    pitch_cums = torch.nn.functional.pad(torch.cumsum(pitch, dim=2), (1, 0))
+
+    bs, l = durs_cums_ends.size()
+    n_formants = pitch.size(1)
+    dcs = durs_cums_starts[:, None, :].expand(bs, n_formants, l)
+    dce = durs_cums_ends[:, None, :].expand(bs, n_formants, l)
+
+    pitch_sums = (torch.gather(pitch_cums, 2, dce) - torch.gather(pitch_cums, 2, dcs)).float()
+    pitch_nelems = (torch.gather(pitch_nonzero_cums, 2, dce) - torch.gather(pitch_nonzero_cums, 2, dcs)).float()
+
+    pitch_avg = torch.where(pitch_nelems == 0.0, pitch_nelems, pitch_sums / pitch_nelems)
+    return pitch_avg
 
 class ConvReLUNorm(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=1, dropout=0.0):

@@ -230,7 +230,7 @@ class Chars(Base):
     """Chars vocabulary."""
 
     def __init__(
-        self, punct=True, spaces=False, apostrophe=True, add_blank_at="last_but_one",
+        self, punct=True, spaces=False, apostrophe=True, add_blank_at="last_but_one", pad_with_space=False,
     ):
         labels = []
         self.space, labels = len(labels), labels + [' ']  # Space
@@ -246,18 +246,35 @@ class Chars(Base):
         self.punct = punct
         self.spaces = spaces
 
-        self._parser = parsers.ENCharParser(labels)
+        self.pad_with_space = pad_with_space
 
     def encode(self, text):
         """See base class."""
-        text = self._parser._normalize(text)  # noqa
+        cs, space, labels = [], self.labels[self.space], set(self.labels)
 
-        if self.spaces:
-            for p in set(text) & set(self.PUNCT):
-                text = text.replace(p, f' {p} ')
-            text = text.strip().replace('  ', ' ')
+        for c in "".join(_word_tokenize(_text_preprocessing(text))):  # noqa
+            # Add space if last one isn't one
+            if c == space and len(cs) > 0 and cs[-1] != space:
+                cs.append(c)
 
-        return self._parser._tokenize(text)  # noqa
+            # Add next char
+            if (c.isalnum() or c == "'") and c in labels:
+                cs.append(c)
+
+            # Add punct and remove space if needed
+            if (c in self.PUNCT) and self.punct:
+                if not self.spaces and len(cs) > 0 and cs[-1] == space:
+                    cs.pop()
+                cs.append(c)
+
+        # Remove trailing spaces
+        while cs[-1] == space:
+            cs.pop()
+
+        if self.pad_with_space:
+            cs = [space] + cs + [space]
+
+        return [self._label2id[p] for p in cs]
 
 
 class Phonemes(Base):

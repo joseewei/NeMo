@@ -23,35 +23,18 @@ from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from torch import nn
 from torch.nn import functional as F
+from transformers import AlbertModel
 
 from nemo.collections.asr.data.audio_to_text import AudioToCharWithDursF0Dataset
 from nemo.collections.tts.helpers.helpers import binarize_attention_parallel, get_mask_from_lengths
 from nemo.collections.tts.losses.aligner_loss import BinLoss, ForwardSumLoss
 from nemo.collections.tts.models.base import SpectrogramGenerator
-from nemo.collections.tts.modules.fastpitch import regulate_len
+from nemo.collections.tts.modules.fastpitch import regulate_len, average_pitch
 from nemo.collections.tts.modules.talknet import GaussianEmbedding, MaskedInstanceNorm1d, StyleResidual
 from nemo.core import Exportable
 from nemo.core.classes import ModelPT, PretrainedModelInfo, typecheck
 from nemo.core.neural_types import MelSpectrogramType, NeuralType
 from nemo.utils import logging
-
-
-def average_pitch(pitch, durs):
-    durs_cums_ends = torch.cumsum(durs, dim=1).long()
-    durs_cums_starts = F.pad(durs_cums_ends[:, :-1], (1, 0))
-    pitch_nonzero_cums = F.pad(torch.cumsum(pitch != 0.0, dim=2), (1, 0))
-    pitch_cums = F.pad(torch.cumsum(pitch, dim=2), (1, 0))
-
-    bs, l = durs_cums_ends.size()
-    n_formants = pitch.size(1)
-    dcs = durs_cums_starts[:, None, :].expand(bs, n_formants, l)
-    dce = durs_cums_ends[:, None, :].expand(bs, n_formants, l)
-
-    pitch_sums = (torch.gather(pitch_cums, 2, dce) - torch.gather(pitch_cums, 2, dcs)).float()
-    pitch_nelems = (torch.gather(pitch_nonzero_cums, 2, dce) - torch.gather(pitch_nonzero_cums, 2, dcs)).float()
-
-    pitch_avg = torch.where(pitch_nelems == 0.0, pitch_nelems, pitch_sums / pitch_nelems)
-    return pitch_avg
 
 
 class TalkNetDursModel(ModelPT):
@@ -458,8 +441,17 @@ class TalkNet3Model(ModelPT):
         # TODO(Oktai): debug flags
         self.encoder_type = "mlp_mixer"
         self.decoder_type = "mlp_mixer"
+
+        self.conditioning_on_nlp_model_text_encoder = False
+        self.conditioning_on_nlp_model_text_decoder = True
+
         self.conditioning_on_aligner_text_encoder = False
-        self.conditioning_on_aligner_text_decoder = True
+        self.conditioning_on_aligner_text_decoder = False
+
+        if self.conditioning_on_nlp_model_text_encoder or self.conditioning_on_nlp_model_text_decoder:
+            self.nlp_model_text_proj = AlbertModel.from_pretrained('albert-base-v2').embeddings.word_embeddings
+            self.nlp_model_text_proj.weight.requires_grad = False
+            self.text_emb = instantiate(cfg.text_emb)
 
         if self.conditioning_on_aligner_text_encoder or self.conditioning_on_aligner_text_decoder:
             assert self.learn_alignment
@@ -562,7 +554,7 @@ class TalkNet3Model(ModelPT):
 
         return loss, durs_loss, acc, acc_dist_1, acc_dist_3, pitch_loss, mel_loss, ctc_loss, bin_loss
 
-    def forward(self, text, text_len, durs=None, pitch=None, spect=None, spect_len=None, attn_prior=None):
+    def forward(self, text, text_len, durs=None, pitch=None, spect=None, spect_len=None, attn_prior=None, nlp_tokens=None):
         if self.training:
             assert pitch is not None
             if not self.learn_alignment:
@@ -576,6 +568,14 @@ class TalkNet3Model(ModelPT):
             if self.conditioning_on_aligner_text_encoder:
                 # TODO(Oktai): need masking?
                 text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
+                enc_out, enc_len = self.encoder(
+                    text,
+                    text_len,
+                    conditioning=self.text_emb(text_proj).transpose(1, 2)
+                )
+            elif self.conditioning_on_nlp_model_text_encoder:
+                # TODO(Oktai): need masking?
+                text_proj = self.nlp_model_text_proj(nlp_tokens).transpose(1, 2)
                 enc_out, enc_len = self.encoder(
                     text,
                     text_len,
@@ -626,6 +626,10 @@ class TalkNet3Model(ModelPT):
             text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
             text_emb_from_aligner = self.text_emb(text_proj)
             enc_out = enc_out + text_emb_from_aligner.transpose(1, 2)
+        elif self.conditioning_on_nlp_model_text_decoder:
+            text_proj = self.nlp_model_text_proj(nlp_tokens).transpose(1, 2)
+            text_emb_from_nlp_model = self.text_emb(text_proj)
+            enc_out = enc_out + text_emb_from_nlp_model.transpose(1, 2)
 
         if self.learn_alignment:
             len_regulated_enc_out, dec_lens = regulate_len(attn_hard_dur, enc_out)
@@ -663,7 +667,7 @@ class TalkNet3Model(ModelPT):
             attn_hard_dur,
         )
 
-    def infer(self, text, text_len, durs=None, spect=None, spect_len=None, attn_prior=None, use_gt_durs=False):
+    def infer(self, text, text_len, durs=None, spect=None, spect_len=None, attn_prior=None, use_gt_durs=False, nlp_tokens=None):
         # Transformer-based encoder
         if self.encoder_type == "transformer":
             enc_out, enc_mask = self.encoder(input=text, conditioning=0)
@@ -672,6 +676,14 @@ class TalkNet3Model(ModelPT):
             if self.conditioning_on_aligner_text_encoder:
                 # TODO(Oktai): need masking?
                 text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
+                enc_out, enc_len = self.encoder(
+                    text,
+                    text_len,
+                    conditioning=self.text_emb(text_proj).transpose(1, 2)
+                )
+            elif self.conditioning_on_nlp_model_text_encoder:
+                # TODO(Oktai): need masking?
+                text_proj = self.nlp_model_text_proj(nlp_tokens).transpose(1, 2)
                 enc_out, enc_len = self.encoder(
                     text,
                     text_len,
@@ -707,6 +719,15 @@ class TalkNet3Model(ModelPT):
         pitch_emb = self.pitch_emb(pitch_predicted.unsqueeze(1))
 
         enc_out = enc_out + pitch_emb.transpose(1, 2)
+
+        if self.conditioning_on_aligner_text_decoder:
+            text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
+            text_emb_from_aligner = self.text_emb(text_proj)
+            enc_out = enc_out + text_emb_from_aligner.transpose(1, 2)
+        elif self.conditioning_on_nlp_model_text_decoder:
+            text_proj = self.nlp_model_text_proj(nlp_tokens).transpose(1, 2)
+            text_emb_from_nlp_model = self.text_emb(text_proj)
+            enc_out = enc_out + text_emb_from_nlp_model.transpose(1, 2)
 
         if use_gt_durs:
             if durs is not None:
@@ -751,9 +772,12 @@ class TalkNet3Model(ModelPT):
                 )
 
     def training_step(self, batch, batch_idx):
-        attn_prior, durs = None, None
+        attn_prior, durs, nlp_tokens = None, None, None
         if self.learn_alignment:
-            audio, audio_len, text, text_len, attn_prior, pitch = batch
+            if self.conditioning_on_nlp_model_text_encoder or self.conditioning_on_nlp_model_text_decoder:
+                audio, audio_len, text, text_len, attn_prior, pitch, nlp_tokens = batch
+            else:
+                audio, audio_len, text, text_len, attn_prior, pitch = batch
         else:
             audio, audio_len, text, text_len, durs, pitch, _ = batch
 
@@ -772,6 +796,7 @@ class TalkNet3Model(ModelPT):
             spect=spect if self.learn_alignment else None,
             spect_len=spect_len,
             attn_prior=attn_prior,
+            nlp_tokens=nlp_tokens
         )
 
         if durs is None:
@@ -807,9 +832,12 @@ class TalkNet3Model(ModelPT):
         return {'loss': loss, 'progress_bar': train_log, 'log': train_log}
 
     def validation_step(self, batch, batch_idx):
-        attn_prior, durs = None, None
+        attn_prior, durs, nlp_tokens = None, None, None
         if self.learn_alignment:
-            audio, audio_len, text, text_len, attn_prior, pitch = batch
+            if self.conditioning_on_nlp_model_text_encoder or self.conditioning_on_nlp_model_text_decoder:
+                audio, audio_len, text, text_len, attn_prior, pitch, nlp_tokens = batch
+            else:
+                audio, audio_len, text, text_len, attn_prior, pitch = batch
         else:
             audio, audio_len, text, text_len, durs, pitch, _ = batch
 
@@ -828,6 +856,7 @@ class TalkNet3Model(ModelPT):
             spect=spect if self.learn_alignment else None,
             spect_len=spect_len,
             attn_prior=attn_prior,
+            nlp_tokens=nlp_tokens
         )
 
         if durs is None:

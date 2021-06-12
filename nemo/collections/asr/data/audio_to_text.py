@@ -24,6 +24,7 @@ import torch
 import webdataset as wd
 from scipy.stats import betabinom
 from torch.nn import functional as F
+from transformers import AlbertTokenizer
 
 from nemo.collections.asr.data import vocabs
 from nemo.collections.asr.parts.preprocessing.features import WaveformFeaturizer
@@ -348,7 +349,7 @@ class AudioToCharWithDursF0Dataset(AudioToCharDataset):
             (vocabs.Base) Vocabulary
         """
         if notation == 'chars':
-            vocab = vocabs.Chars(punct=punct, spaces=spaces, add_blank_at=add_blank_at)
+            vocab = vocabs.Chars(punct=punct, spaces=spaces, add_blank_at=add_blank_at, pad_with_space=pad_with_space)
         elif notation == 'phonemes':
             vocab = vocabs.Phonemes(
                 punct=punct,
@@ -647,6 +648,86 @@ class AudioToCharWithPriorAndPitchDataset(AudioToCharWithPriorDataset):
             pitch[i, : pitch_i.shape[0]] = pitch_i
 
         return audio, audio_len, text, text_len, attn_prior, pitch
+
+
+class AudioToCharWithPriorAndPitchAndNLPTokensDataset(AudioToCharWithPriorAndPitchDataset):
+    @property
+    def output_types(self) -> Optional[Dict[str, NeuralType]]:
+        """Returns definitions of module output ports."""
+        return {
+            'audio': NeuralType(('B', 'T'), AudioSignal()),
+            'audio_len': NeuralType(('B',), LengthsType()),
+            'text': NeuralType(('B', 'T'), LabelsType()),
+            'text_len': NeuralType(('B',), LengthsType()),
+            'attn_prior': NeuralType(('B', 'T', 'D'), ProbsType()),
+            'pitch': NeuralType(('B', 'T'), RegressionValuesType()),
+            'nlp_tokens': NeuralType(('B', 'T'), LabelsType()),
+        }
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # TODO(Oktai): hardcode
+        # TODO(Oktai): this code assumes that vocabs.Chars used and space=True
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        self.nlp_padding_value = tokenizer._convert_token_to_id('<pad>')
+        space_value = tokenizer._convert_token_to_id('▁')
+
+        self.id2nlp_tokens = {}
+        for i, e in enumerate(self.collection):
+            tts_tokens = [self.vocab._id2label[t] for t in self.id2enc_text[i] if t not in self.vocab._util_ids]
+            tts_tokens_as_str = "".join(tts_tokens)
+
+            nlp_tokens = tokenizer.tokenize(tts_tokens_as_str)
+            nlp_tokens = [
+                s_t.replace("▁", "") if j == 0 and len(s_t) > 1 else s_t.replace("▁", " ")
+                for j, s_t in enumerate(nlp_tokens)
+            ]
+            nlp_tokens = [" "] + nlp_tokens + [" "]
+
+            nlp_tokens_as_ids = tokenizer.encode(tts_tokens_as_str, add_special_tokens=False)
+            nlp_tokens_as_ids = [space_value] + nlp_tokens_as_ids + [space_value]
+
+            self.id2nlp_tokens[i] = self.match_nlp_tokens_to_tts_tokens(nlp_tokens, tts_tokens, nlp_tokens_as_ids)
+
+    @staticmethod
+    def match_nlp_tokens_to_tts_tokens(nlp_tokens, tts_tokens, nlp_tokens_as_ids):
+        matched_nlp_token_ids = []
+        i, cur_nlp_t_idx, cur_nlp_t_pos = 0, 0, 0
+        while i < len(tts_tokens):
+            tts_token = tts_tokens[i]
+            tts_token_size = len(tts_token)
+            cur_nlp_token_suffix = nlp_tokens[cur_nlp_t_idx][cur_nlp_t_pos:cur_nlp_t_pos + tts_token_size]
+
+            if len(cur_nlp_token_suffix) != tts_token_size or cur_nlp_token_suffix != tts_token:
+                cur_nlp_t_idx, cur_nlp_t_pos = cur_nlp_t_idx + 1, 0
+                continue
+
+            matched_nlp_token_ids.append(nlp_tokens_as_ids[cur_nlp_t_idx])
+
+            if cur_nlp_t_pos + tts_token_size < len(nlp_tokens[cur_nlp_t_idx]):
+                cur_nlp_t_pos = cur_nlp_t_pos + tts_token_size
+            else:
+                cur_nlp_t_idx, cur_nlp_t_pos = cur_nlp_t_idx + 1, 0
+            i += 1
+
+        return matched_nlp_token_ids
+
+    def __getitem__(self, item):
+        audio, audio_len, text, text_len, attn_prior, pitch = super().__getitem__(item)
+        nlp_tokens = self.id2nlp_tokens[item]
+        return audio, audio_len, text, text_len, attn_prior, pitch, torch.tensor(nlp_tokens).long()
+
+    def _collate_fn(self, batch):
+        batch = list(zip(*batch))
+        audio, audio_len, text, text_len, attn_prior, pitch = super()._collate_fn(list(zip(*batch[:6])))
+        nlp_tokens_list = batch[6]
+
+        nlp_tokens = torch.full(text.size(), fill_value=self.nlp_padding_value)
+        for i, nlp_tokens_i in enumerate(nlp_tokens_list):
+            nlp_tokens[i, : nlp_tokens_i.shape[0]] = nlp_tokens_i
+
+        return audio, audio_len, text, text_len, attn_prior, pitch, nlp_tokens
 
 
 class FastPitchDataset(_AudioTextDataset):
