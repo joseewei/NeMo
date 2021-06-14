@@ -19,6 +19,7 @@ import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
 
 from nemo.collections.nlp.models import TextNormalizationModel
+from nemo.collections.nlp.parts.nlp_overrides import NLPDDPPlugin
 from nemo.core.config import hydra_runner
 from nemo.utils import logging
 from nemo.utils.exp_manager import exp_manager
@@ -26,7 +27,7 @@ from nemo.utils.exp_manager import exp_manager
 
 @hydra_runner(config_path="conf", config_name="text_normalization_config")
 def main(cfg: DictConfig) -> None:
-    logging.info(f'Config: {cfg.pretty()}')
+    logging.info(f'\nConfig Params:\n{OmegaConf.to_yaml(cfg)}')
     trainer = pl.Trainer(**cfg.trainer)
     exp_dir = exp_manager(trainer, cfg.get("exp_manager", None))
 
