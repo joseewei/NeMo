@@ -17,12 +17,12 @@ from typing import Callable, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
 from torch.nn.functional import pad
 from torch.nn.init import _calculate_correct_fan
 from torch.nn.modules.batchnorm import BatchNorm1d
 from torch.nn.modules.utils import _single
-import torch.nn.functional as F
 
 from nemo.collections.asr.parts.utils.activations import Swish
 from nemo.utils import logging
@@ -334,35 +334,7 @@ class StatsPoolLayer(nn.Module):
         return pooled
 
 def length_to_mask(length, max_len=None, dtype=None, device=None):
-    """Creates a binary mask for each sequence.
-
-    Reference: https://discuss.pytorch.org/t/how-to-generate-variable-length-mask/23397/3
-
-    Arguments
-    ---------
-    length : torch.LongTensor
-        Containing the length of each sequence in the batch. Must be 1D.
-    max_len : int
-        Max length for the mask, also the size of the second dimension.
-    dtype : torch.dtype, default: None
-        The dtype of the generated mask.
-    device: torch.device, default: None
-        The device to put the mask variable.
-
-    Returns
-    -------
-    mask : tensor
-        The binary mask.
-
-    Example
-    -------
-    >>> length=torch.Tensor([1,2,3])
-    >>> mask=length_to_mask(length)
-    >>> mask
-    tensor([[1., 0., 0.],
-            [1., 1., 0.],
-            [1., 1., 1.]])
-    """
+ 
     assert len(length.shape) == 1
 
     if max_len is None:
@@ -381,25 +353,6 @@ def length_to_mask(length, max_len=None, dtype=None, device=None):
     return mask
 
 class AttentivePoolingLayer(nn.Module):
-    """This class implements an attentive statistic pooling layer for each channel.
-    It returns the concatenated mean and std of the input tensor.
-
-    Arguments
-    ---------
-    channels: int
-        The number of input channels.
-    attention_channels: int
-        The number of attention channels.
-
-    Example
-    -------
-    >>> inp_tensor = torch.rand([8, 120, 64]).transpose(1, 2)
-    >>> asp_layer = AttentiveStatisticsPooling(64)
-    >>> lengths = torch.rand((8,))
-    >>> out_tensor = asp_layer(inp_tensor, lengths).transpose(1, 2)
-    >>> out_tensor.shape
-    torch.Size([8, 1, 128])
-    """
 
     def __init__(self, inp_channels, attention_channels=128, global_context=True):
         super().__init__()
@@ -466,50 +419,6 @@ class AttentivePoolingLayer(nn.Module):
         pooled_stats = pooled_stats.unsqueeze(2)
 
         return pooled_stats
-
-# class AttentivePoolingLayer(nn.Module):
-#     def __init__(self,input_channels, attention_channels, global_context=True, init_mode='xavier_uniform'):
-#         super().__init__()
-#         self.global_context = global_context
-#         self.feat_in = 2 * input_channels
-#         self.attention = nn.Sequential(
-#             nn.Conv1d(3 * input_channels, attention_channels, kernel_size=1),
-#             nn.ReLU(),
-#             nn.BatchNorm1d(attention_channels),
-#             nn.Conv1d(attention_channels, input_channels, kernel_size=1),
-#             nn.Softmax(dim=2),
-#         )
-#         self.bn5 = nn.BatchNorm1d(2 * input_channels)
-
-#         self.apply(lambda x: init_weights(x, mode=init_mode))
-
-#     def forward(self, x):
-#         t = x.shape[-1]
-
-#         if self.global_context:
-#             global_x = torch.cat(
-#                 (
-#                     x,
-#                     torch.mean(x, dim=2, keepdim=True).repeat(1, 1, t),
-#                     torch.sqrt(torch.var(x, dim=2, keepdim=True).clamp(min=1e-4)).repeat(1, 1, t),
-#                 ),
-#                 dim=1,
-#             )
-#         else:
-#             global_x = x
-
-#         w = self.attention(global_x)
-
-#         mu = torch.sum(x * w, dim=2)
-#         sg = torch.sqrt((torch.sum((x ** 2) * w, dim=2) - mu ** 2).clamp(min=1e-4))
-
-#         x = torch.cat((mu, sg), 1)
-
-#         x = self.bn5(x)
-
-#         return x
-
-
 class MaskedConv1d(nn.Module):
     __constants__ = ["use_conv_mask", "real_out_channels", "heads"]
 

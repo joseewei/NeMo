@@ -392,18 +392,13 @@ class ECAPA_Encoder(NeuralModule, Exportable):
                     dilation=dilations[i + 1],
                 )
             )
-        self.mfa = TDNN_Block(
-            filters[-1],
-            filters[-1],
-            kernel_sizes[-1],
-            dilations[-1]
-        )
+        self.mfa = TDNN_Block(filters[-1], filters[-1], kernel_sizes[-1], dilations[-1])
         self.apply(lambda x: init_weights(x, mode=init_mode))
 
     def forward(self, audio_signal, length=None):
         x = audio_signal
         outputs = []
-        
+
         for layer in self.layers:
             x = layer(x)
             outputs.append(x)
@@ -454,13 +449,7 @@ class SpeakerDecoder(NeuralModule, Exportable):
         )
 
     def __init__(
-        self,
-        feat_in,
-        num_classes,
-        emb_sizes=None,
-        pool_mode='xvector',
-        angular=False,
-        init_mode="xavier_uniform",
+        self, feat_in, num_classes, emb_sizes=None, pool_mode='xvector', angular=False, init_mode="xavier_uniform",
     ):
         super().__init__()
         self.angular = angular
@@ -483,19 +472,21 @@ class SpeakerDecoder(NeuralModule, Exportable):
         if self.pool_mode == 'xvector' or self.pool_mode == 'tap':
             self._pooling = StatsPoolLayer(feat_in=feat_in, pool_mode=pool_mode)
         elif self.pool_mode == 'ecapa':
-            self._pooling = AttentivePoolingLayer(
-                inp_channels=feat_in, attention_channels=128, global_context=True
-            )
+            self._pooling = AttentivePoolingLayer(inp_channels=feat_in, attention_channels=128, global_context=True)
         self._feat_in = self._pooling.feat_in
+
+        self.asp_bn = nn.BatchNorm1d(self._feat_in)
 
         shapes = [self._feat_in]
         for size in emb_sizes:
             shapes.append(int(size))
 
         emb_layers = []
-        for shape_in, shape_out in zip(shapes[:-1], shapes[1:]):
-            layer = self.affineLayer(shape_in, shape_out, learn_mean=False)
-            emb_layers.append(layer)
+        # for shape_in, shape_out in zip(shapes[:-1], shapes[1:]):
+        #     layer = self.affineLayer(shape_in, shape_out, learn_mean=False)
+        #     emb_layers.append(layer)
+
+        self.conv_fc = nn.Conv1d(self._feat_in, shapes[-1], kernel_size=1)
 
         self.emb_layers = nn.ModuleList(emb_layers)
 
@@ -515,12 +506,14 @@ class SpeakerDecoder(NeuralModule, Exportable):
     @typecheck()
     def forward(self, encoder_output):
         pool = self._pooling(encoder_output)
-        embs = []
-        pool = pool.squeeze(-1)
-        for layer in self.emb_layers:
-            pool, emb = layer(pool), layer[: self.emb_id](pool)
-            embs.append(emb)
 
+        pool = self.asp_bn(pool)
+        # embs = []
+        # for layer in self.emb_layers:
+        #     pool, emb = layer(pool), layer[: self.emb_id](pool)
+        #     embs.append(emb)
+        embs = self.conv_fc(pool)
+        pool = embs.squeeze(-1)
         if self.angular:
             for W in self.final.parameters():
                 W = F.normalize(W, p=2, dim=1)
@@ -528,7 +521,7 @@ class SpeakerDecoder(NeuralModule, Exportable):
 
         out = self.final(pool)
 
-        return out, embs[-1]
+        return out, embs.squeeze(-1)
 
 
 @dataclass
