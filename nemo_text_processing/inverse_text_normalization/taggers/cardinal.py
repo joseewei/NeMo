@@ -39,14 +39,16 @@ def get_ties_digit(digit_path, tie_path):
     
     digits =  dict((v, k) for k, v in load_labels(digit_path))
     ties =  dict((v, k) for k, v in load_labels(tie_path))
-    d = {}
+    d = []
     for i in range(21, 100):
         s = str(i)
         if s[1] == "0":
             continue
         word = digits[s[1]] + f" {AND} " + ties[s[0]]
-        d[word] = s
-    return pynini.string_map(d.items())
+        d.append((word, s))
+        word = digits[s[1]] + f"{AND}" + ties[s[0]]
+        d.append((word, s))
+    return pynini.string_map(d)
 
 
 class CardinalFst(GraphFst):
@@ -59,8 +61,7 @@ class CardinalFst(GraphFst):
     def __init__(self):
         super().__init__(name="cardinal", kind="classify")
         graph_zero = pynini.string_file(get_abs_path("data/numbers/zero.tsv"))
-        graph_digit = pynini.string_file(get_abs_path("data/numbers/digit.tsv"))
-        graph_digit_ = pynini.string_file(get_abs_path("data/numbers/digit_.tsv"))
+        graph_digit = pynini.string_file(get_abs_path("data/numbers/digit_.tsv"))
         graph_ties = pynini.string_file(get_abs_path("data/numbers/ties.tsv"))
         graph_teen = pynini.string_file(get_abs_path("data/numbers/teen.tsv"))
 
@@ -71,12 +72,12 @@ class CardinalFst(GraphFst):
         graph_ties_digit = get_ties_digit(get_abs_path("data/numbers/digit_.tsv"), get_abs_path("data/numbers/ties.tsv"))
         graph_ties = graph_ties_digit | (graph_ties + pynutil.insert("0"))
 
-        graph_hundred_component = pynini.union(graph_digit_ + delete_space + graph_hundred, pynutil.insert("0"))
+        graph_hundred_component = pynini.union(graph_digit + delete_space + graph_hundred, pynutil.insert("0"))
         graph_hundred_component += delete_space
         graph_hundred_component += pynini.union(
             graph_teen,  pynutil.insert("00"), #  fourteen
             graph_ties, # twenty, twenty four,
-            pynutil.insert("0") + graph_digit                                                                                                                                                  
+            pynutil.insert("0") + graph_digit                                                                                                                                                
         )
 
         graph_hundred_component_at_least_one_none_zero_digit = graph_hundred_component @ (
@@ -99,10 +100,10 @@ class CardinalFst(GraphFst):
             graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("milliarde") + pynini.closure(pynutil.delete("n"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
-        # graph_trillion = pynini.union(
-        #     graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("trillion"),
-        #     pynutil.insert("000", weight=0.1),
-        # )
+        graph_trillion = pynini.union(
+            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("billion") + pynini.closure(pynutil.delete("en"), 0, 1),
+            pynutil.insert("000", weight=0.1),
+        )
         # graph_quadrillion = pynini.union(
         #     graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("quadrillion"),
         #     pynutil.insert("000", weight=0.1),
@@ -117,7 +118,9 @@ class CardinalFst(GraphFst):
         # )
 
         graph = pynini.union(
-            graph_billion
+            graph_trillion
+            + delete_space
+            + graph_billion
             + delete_space
             + graph_million
             + delete_space
@@ -131,8 +134,7 @@ class CardinalFst(GraphFst):
             pynutil.delete(pynini.closure("0")) + pynini.difference(NEMO_DIGIT, "0") + pynini.closure(NEMO_DIGIT), "0"
         )
 
-        labels_exception = [num_to_word(x) for x in range(0, 13)]
-        graph_exception = pynini.union(*labels_exception)
+        graph_exception = pynini.project(pynini.union(graph_digit, graph_zero), 'input')
 
         # graph = pynini.cdrewrite(pynutil.delete(f"{AND}"), NEMO_SPACE, NEMO_SPACE, NEMO_SIGMA) @ graph
 
