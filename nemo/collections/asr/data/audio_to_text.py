@@ -697,7 +697,7 @@ class AudioToCharWithPriorAndPitchAndNLPTokensDataset(AudioToCharWithPriorAndPit
         while i < len(tts_tokens):
             tts_token = tts_tokens[i]
             tts_token_size = len(tts_token)
-            cur_nlp_token_suffix = nlp_tokens[cur_nlp_t_idx][cur_nlp_t_pos:cur_nlp_t_pos + tts_token_size]
+            cur_nlp_token_suffix = nlp_tokens[cur_nlp_t_idx][cur_nlp_t_pos : cur_nlp_t_pos + tts_token_size]
 
             if len(cur_nlp_token_suffix) != tts_token_size or cur_nlp_token_suffix != tts_token:
                 cur_nlp_t_idx, cur_nlp_t_pos = cur_nlp_t_idx + 1, 0

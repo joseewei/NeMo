@@ -101,6 +101,7 @@ def average_pitch(pitch, durs):
     pitch_avg = torch.where(pitch_nelems == 0.0, pitch_nelems, pitch_sums / pitch_nelems)
     return pitch_avg
 
+
 class ConvReLUNorm(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=1, dropout=0.0):
         super(ConvReLUNorm, self).__init__()

@@ -210,7 +210,7 @@ class HifiGanModel(Vocoder, Exportable):
         self.log_dict({"val_loss": loss_mel}, on_epoch=True, sync_dist=True)
 
         # plot audio once per epoch
-        if batch_idx == 0 and isinstance(self.logger, WandbLogger) and HAVE_WANDB:
+        if batch_idx == 0 and self.current_epoch % 5 == 0 and isinstance(self.logger, WandbLogger) and HAVE_WANDB:
             clips = []
             specs = []
             for i in range(min(5, audio.shape[0])):

@@ -29,7 +29,7 @@ from nemo.collections.asr.data.audio_to_text import AudioToCharWithDursF0Dataset
 from nemo.collections.tts.helpers.helpers import binarize_attention_parallel, get_mask_from_lengths
 from nemo.collections.tts.losses.aligner_loss import BinLoss, ForwardSumLoss
 from nemo.collections.tts.models.base import SpectrogramGenerator
-from nemo.collections.tts.modules.fastpitch import regulate_len, average_pitch
+from nemo.collections.tts.modules.fastpitch import average_pitch, regulate_len
 from nemo.collections.tts.modules.talknet import GaussianEmbedding, MaskedInstanceNorm1d, StyleResidual
 from nemo.core import Exportable
 from nemo.core.classes import ModelPT, PretrainedModelInfo, typecheck
@@ -554,7 +554,9 @@ class TalkNet3Model(ModelPT):
 
         return loss, durs_loss, acc, acc_dist_1, acc_dist_3, pitch_loss, mel_loss, ctc_loss, bin_loss
 
-    def forward(self, text, text_len, durs=None, pitch=None, spect=None, spect_len=None, attn_prior=None, nlp_tokens=None):
+    def forward(
+        self, text, text_len, durs=None, pitch=None, spect=None, spect_len=None, attn_prior=None, nlp_tokens=None
+    ):
         if self.training:
             assert pitch is not None
             if not self.learn_alignment:
@@ -568,19 +570,11 @@ class TalkNet3Model(ModelPT):
             if self.conditioning_on_aligner_text_encoder:
                 # TODO(Oktai): need masking?
                 text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
-                enc_out, enc_len = self.encoder(
-                    text,
-                    text_len,
-                    conditioning=self.text_emb(text_proj).transpose(1, 2)
-                )
+                enc_out, enc_len = self.encoder(text, text_len, conditioning=self.text_emb(text_proj).transpose(1, 2))
             elif self.conditioning_on_nlp_model_text_encoder:
                 # TODO(Oktai): need masking?
                 text_proj = self.nlp_model_text_proj(nlp_tokens).transpose(1, 2)
-                enc_out, enc_len = self.encoder(
-                    text,
-                    text_len,
-                    conditioning=self.text_emb(text_proj).transpose(1, 2)
-                )
+                enc_out, enc_len = self.encoder(text, text_len, conditioning=self.text_emb(text_proj).transpose(1, 2))
             else:
                 enc_out, enc_len = self.encoder(text, text_len)
             enc_mask = get_mask_from_lengths(enc_len).unsqueeze(2)
@@ -667,7 +661,17 @@ class TalkNet3Model(ModelPT):
             attn_hard_dur,
         )
 
-    def infer(self, text, text_len, durs=None, spect=None, spect_len=None, attn_prior=None, use_gt_durs=False, nlp_tokens=None):
+    def infer(
+        self,
+        text,
+        text_len,
+        durs=None,
+        spect=None,
+        spect_len=None,
+        attn_prior=None,
+        use_gt_durs=False,
+        nlp_tokens=None,
+    ):
         # Transformer-based encoder
         if self.encoder_type == "transformer":
             enc_out, enc_mask = self.encoder(input=text, conditioning=0)
@@ -676,19 +680,11 @@ class TalkNet3Model(ModelPT):
             if self.conditioning_on_aligner_text_encoder:
                 # TODO(Oktai): need masking?
                 text_proj = self.aligner_text_proj(self.symbol_emb(text).transpose(1, 2)).detach()
-                enc_out, enc_len = self.encoder(
-                    text,
-                    text_len,
-                    conditioning=self.text_emb(text_proj).transpose(1, 2)
-                )
+                enc_out, enc_len = self.encoder(text, text_len, conditioning=self.text_emb(text_proj).transpose(1, 2))
             elif self.conditioning_on_nlp_model_text_encoder:
                 # TODO(Oktai): need masking?
                 text_proj = self.nlp_model_text_proj(nlp_tokens).transpose(1, 2)
-                enc_out, enc_len = self.encoder(
-                    text,
-                    text_len,
-                    conditioning=self.text_emb(text_proj).transpose(1, 2)
-                )
+                enc_out, enc_len = self.encoder(text, text_len, conditioning=self.text_emb(text_proj).transpose(1, 2))
             else:
                 enc_out, enc_len = self.encoder(text, text_len)
             enc_mask = get_mask_from_lengths(enc_len).unsqueeze(2)
@@ -796,7 +792,7 @@ class TalkNet3Model(ModelPT):
             spect=spect if self.learn_alignment else None,
             spect_len=spect_len,
             attn_prior=attn_prior,
-            nlp_tokens=nlp_tokens
+            nlp_tokens=nlp_tokens,
         )
 
         if durs is None:
@@ -856,7 +852,7 @@ class TalkNet3Model(ModelPT):
             spect=spect if self.learn_alignment else None,
             spect_len=spect_len,
             attn_prior=attn_prior,
-            nlp_tokens=nlp_tokens
+            nlp_tokens=nlp_tokens,
         )
 
         if durs is None:

@@ -24,7 +24,7 @@ from omegaconf import DictConfig
 
 
 def hydra_runner(
-    config_path: Optional[str] = None, config_name: Optional[str] = None, schema: Optional[Any] = None
+    config_path: Optional[str] = ".", config_name: Optional[str] = None, schema: Optional[Any] = None
 ) -> Callable[[TaskFunction], Any]:
     """
     Decorator used for passing the Config paths to main function.
@@ -32,6 +32,9 @@ def hydra_runner(
 
     Args:
         config_path: Optional path that will be added to config search directory.
+            NOTE: The default value of `config_path` has changed between Hydra 1.0 and Hydra 1.1+.
+            Please refer to https://hydra.cc/docs/next/upgrades/1.0_to_1.1/changes_to_hydra_main_config_path/
+            for details.
         config_name: Pathname of the config file.
         schema: Structured config  type representing the schema used for validation/providing default values.
     """
@@ -44,28 +47,22 @@ def hydra_runner(
                 return task_function(cfg_passthrough)
             else:
                 args = get_args_parser()
-
                 # Parse arguments in order to retrieve overrides
                 parsed_args = args.parse_args()  # type: argparse.Namespace
-
                 # Get overriding args in dot string format
                 overrides = parsed_args.overrides  # type: list
-
                 # Disable the creation of .hydra subdir
                 # https://hydra.cc/docs/tutorials/basic/running_your_app/working_directory
                 overrides.append("hydra.output_subdir=null")
                 # Hydra logging outputs only to stdout (no log file).
                 # https://hydra.cc/docs/configure_hydra/logging
                 overrides.append("hydra/job_logging=stdout")
-
                 # Set run.dir ONLY for ExpManager "compatibility" - to be removed.
                 overrides.append("hydra.run.dir=.")
-
                 # Check if user set the schema.
                 if schema is not None:
                     # Create config store.
                     cs = ConfigStore.instance()
-
                     # Get the correct ConfigStore "path name" to "inject" the schema.
                     if parsed_args.config_name is not None:
                         path, name = os.path.split(parsed_args.config_name)
@@ -79,10 +76,8 @@ def hydra_runner(
                             sys.exit(1)
                     else:
                         name = config_name
-
                     # Register the configuration as a node under the name in the group.
                     cs.store(name=name, node=schema)  # group=group,
-
                 # Wrap a callable object with name `parse_args`
                 # This is to mimic the ArgParser.parse_args() API.
                 class _argparse_wrapper:
