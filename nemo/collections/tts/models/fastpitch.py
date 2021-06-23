@@ -15,7 +15,6 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 
-import omegaconf
 import torch
 from hydra.utils import instantiate
 from omegaconf import MISSING, DictConfig, OmegaConf, open_dict
