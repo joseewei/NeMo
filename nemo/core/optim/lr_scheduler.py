@@ -366,7 +366,9 @@ class PolynomialHoldDecayAnnealing(WarmupHoldPolicy):
 def register_scheduler(name: str, scheduler: _LRScheduler, scheduler_params: SchedulerParams):
     """
     Checks if the scheduler name exists in the registry, and if it doesnt, adds it.
+
     This allows custom schedulers to be added and called by name during instantiation.
+
     Args:
         name: Name of the optimizer. Will be used as key to retrieve the optimizer.
         scheduler: Scheduler class (inherits from _LRScheduler)
@@ -384,9 +386,11 @@ def register_scheduler(name: str, scheduler: _LRScheduler, scheduler_params: Sch
 def get_scheduler(name: str, **kwargs: Optional[Dict[str, Any]]) -> _LRScheduler:
     """
     Convenience method to obtain an _LRScheduler class and partially instantiate it with optimizer kwargs.
+
     Args:
         name: Name of the scheduler in the registry.
         kwargs: Optional kwargs of the scheduler used during instantiation.
+
     Returns:
         a partially instantiated _LRScheduler
     """
@@ -407,9 +411,11 @@ def prepare_lr_scheduler(
 ) -> Optional[Dict[str, Any]]:
     """
     Constructs an LR Scheduler (optionally) for a given optimizer, based on a config with the following schema
+
     optim:
       name: <name of optimizer>
       lr: <maximal learning rate>
+
       # <additional optimizer arguments>
       args:
         name: auto  # special keyword, resolves to correct optimizer config for given optimizer name
@@ -417,14 +423,17 @@ def prepare_lr_scheduler(
         params:  # optional override parameters for the optimizer config
           betas: [0.8, 0.5]
           weight_decay: 0.001
+
       # scheduler setup
       sched:
         name: <name of scheduler>
         iters_per_batch: null # computed at runtime; mandatory to have
         max_steps: null # computed at runtime or explicitly set here; mandatory to have
+
         # pytorch lightning args <mandatory>
         monitor: val_loss
         reduce_on_plateau: false
+
         # <scheduler config override>
         args:
           name: auto  # special keyword, resolves to correct optimizer config for given optimizer name
@@ -434,11 +443,13 @@ def prepare_lr_scheduler(
             warmup_ratio: null
             min_lr: 0.0
             last_epoch: -1
+
     Args:
         optimizer: An instantiated Optimizer.
         scheduler_config: A dictionary / config dict which follows the above schema.
         train_dataloader: Optional requirement, must be passed if "iters_per_batch" is defined
             instead of "max_steps". Used to compute effective "max_steps".
+
     Returns:
         A dictionary containing the LR Scheduler implementation if the config was successfully parsed
         along with other parameters required by Pytorch Lightning, otherwise None.

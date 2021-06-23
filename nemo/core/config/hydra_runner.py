@@ -47,22 +47,28 @@ def hydra_runner(
                 return task_function(cfg_passthrough)
             else:
                 args = get_args_parser()
+
                 # Parse arguments in order to retrieve overrides
                 parsed_args = args.parse_args()  # type: argparse.Namespace
+
                 # Get overriding args in dot string format
                 overrides = parsed_args.overrides  # type: list
+
                 # Disable the creation of .hydra subdir
                 # https://hydra.cc/docs/tutorials/basic/running_your_app/working_directory
                 overrides.append("hydra.output_subdir=null")
                 # Hydra logging outputs only to stdout (no log file).
                 # https://hydra.cc/docs/configure_hydra/logging
                 overrides.append("hydra/job_logging=stdout")
+
                 # Set run.dir ONLY for ExpManager "compatibility" - to be removed.
                 overrides.append("hydra.run.dir=.")
+
                 # Check if user set the schema.
                 if schema is not None:
                     # Create config store.
                     cs = ConfigStore.instance()
+
                     # Get the correct ConfigStore "path name" to "inject" the schema.
                     if parsed_args.config_name is not None:
                         path, name = os.path.split(parsed_args.config_name)
@@ -76,8 +82,10 @@ def hydra_runner(
                             sys.exit(1)
                     else:
                         name = config_name
+
                     # Register the configuration as a node under the name in the group.
                     cs.store(name=name, node=schema)  # group=group,
+
                 # Wrap a callable object with name `parse_args`
                 # This is to mimic the ArgParser.parse_args() API.
                 class _argparse_wrapper:
