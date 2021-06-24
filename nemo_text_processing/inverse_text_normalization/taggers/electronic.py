@@ -43,7 +43,7 @@ class ElectronicFst(GraphFst):
         username = (
             pynutil.insert("username: \"")
             + pynini.closure(
-                alpha_num + delete_extra_space + pynini.closure(pynini.cross("dot", '.') + delete_extra_space, 0, 1)
+                alpha_num + delete_extra_space + pynini.closure(pynini.cross("punkt", '.') + delete_extra_space, 0, 1)
             )
             + alpha_num
             + pynutil.insert("\"")
@@ -55,7 +55,7 @@ class ElectronicFst(GraphFst):
             pynutil.insert("domain: \"")
             + server
             + delete_extra_space
-            + pynini.cross("dot", ".")
+            + pynini.cross("punkt", ".")
             + delete_extra_space
             + domain
             + pynutil.insert("\"")
