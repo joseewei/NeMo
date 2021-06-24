@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+from collections import defaultdict
 from nemo_text_processing.inverse_text_normalization.utils import get_abs_path, num_to_word
 from nemo_text_processing.text_normalization.data_loader_utils import load_labels
 from nemo_text_processing.text_normalization.graph_utils import (
@@ -37,17 +38,25 @@ AND = "und"
 
 def get_ties_digit(digit_path, tie_path):
     
-    digits =  dict((v, k) for k, v in load_labels(digit_path))
-    ties =  dict((v, k) for k, v in load_labels(tie_path))
+    digits = defaultdict(list)
+    ties = defaultdict(list)
+    for k, v in load_labels(digit_path):
+        digits[v].append(k)
+    
+    for k, v in load_labels(tie_path):
+        ties[v].append(k)
+
     d = []
     for i in range(21, 100):
         s = str(i)
         if s[1] == "0":
             continue
-        word = digits[s[1]] + f" {AND} " + ties[s[0]]
-        d.append((word, s))
-        word = digits[s[1]] + f"{AND}" + ties[s[0]]
-        d.append((word, s))
+
+        for di in digits[s[1]]:
+            for ti in ties[s[0]]:
+                word = di + f" {AND} " + ti
+                d.append((word, s))
+    
     return pynini.string_map(d)
 
 
@@ -61,7 +70,7 @@ class CardinalFst(GraphFst):
     def __init__(self):
         super().__init__(name="cardinal", kind="classify")
         graph_zero = pynini.string_file(get_abs_path("data/numbers/zero.tsv"))
-        graph_digit = pynini.string_file(get_abs_path("data/numbers/digit_.tsv"))
+        graph_digit = pynini.string_file(get_abs_path("data/numbers/digit.tsv"))
         graph_ties = pynini.string_file(get_abs_path("data/numbers/ties.tsv"))
         graph_teen = pynini.string_file(get_abs_path("data/numbers/teen.tsv"))
 
@@ -69,7 +78,7 @@ class CardinalFst(GraphFst):
 
         graph_hundred = pynutil.delete(file_hundred)
 
-        graph_ties_digit = get_ties_digit(get_abs_path("data/numbers/digit_.tsv"), get_abs_path("data/numbers/ties.tsv"))
+        graph_ties_digit = get_ties_digit(get_abs_path("data/numbers/digit.tsv"), get_abs_path("data/numbers/ties.tsv"))
         graph_ties = graph_ties_digit | (graph_ties + pynutil.insert("0"))
 
         graph_hundred_component = pynini.union(graph_digit + delete_space + graph_hundred, pynutil.insert("0"))
@@ -104,21 +113,27 @@ class CardinalFst(GraphFst):
             graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("billion") + pynini.closure(pynutil.delete("en"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
-        # graph_quadrillion = pynini.union(
-        #     graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("quadrillion"),
-        #     pynutil.insert("000", weight=0.1),
-        # )
-        # graph_quintillion = pynini.union(
-        #     graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("quintillion"),
-        #     pynutil.insert("000", weight=0.1),
-        # )
-        # graph_sextillion = pynini.union(
-        #     graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("sextillion"),
-        #     pynutil.insert("000", weight=0.1),
-        # )
+        graph_quadrillion = pynini.union(
+            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("billiarde") + pynini.closure(pynutil.delete("n"), 0, 1),
+            pynutil.insert("000", weight=0.1),
+        )
+        graph_quintillion = pynini.union(
+            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("trillion") + pynini.closure(pynutil.delete("en"), 0, 1),
+            pynutil.insert("000", weight=0.1),
+        )
+        graph_sextillion = pynini.union(
+            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("trilliarde") + pynini.closure(pynutil.delete("n"), 0, 1),
+            pynutil.insert("000", weight=0.1),
+        )
 
         graph = pynini.union(
-            graph_trillion
+            graph_sextillion 
+            + delete_space
+            + graph_quintillion
+            + delete_space
+            + graph_quadrillion
+            + delete_space
+            + graph_trillion
             + delete_space
             + graph_billion
             + delete_space
