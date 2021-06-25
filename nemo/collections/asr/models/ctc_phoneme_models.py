@@ -88,7 +88,6 @@ class EncDecCTCModelPhoneme(EncDecCTCModel):
 
         shuffle = config['shuffle']
 
-        """
         if config.get('is_tarred', False):
             if ('tarred_audio_filepaths' in config and config['tarred_audio_filepaths'] is None) or (
                 'manifest_filepath' in config and config['manifest_filepath'] is None
@@ -110,14 +109,13 @@ class EncDecCTCModelPhoneme(EncDecCTCModel):
             )
             shuffle = False
         else:
-        """
-        if 'manifest_filepath' in config and config['manifest_filepath'] is None:
-            logging.warning(f"Could not load dataset as `manifest_filepath` was None. Provided config : {config}")
-            return None
+            if 'manifest_filepath' in config and config['manifest_filepath'] is None:
+                logging.warning(f"Could not load dataset as `manifest_filepath` was None. Provided config : {config}")
+                return None
 
-        dataset = audio_to_text_dataset.get_phoneme_dataset(
-            config=config, tokenizer=self.tokenizer, augmentor=augmentor
-        )
+            dataset = audio_to_text_dataset.get_phoneme_dataset(
+                config=config, tokenizer=self.tokenizer, augmentor=augmentor
+            )
 
         return torch.utils.data.DataLoader(
             dataset=dataset,

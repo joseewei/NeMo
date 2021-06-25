@@ -501,6 +501,8 @@ class ASRTarredDatasetBuilder:
                     'text': entry['text'],
                     'shard_id': shard_id,  # Keep shard ID for recordkeeping
                 }
+                if 'original_text' in entry:
+                    new_entry['original_text'] = entry['original_text']
 
             new_entries.append(new_entry)
 
