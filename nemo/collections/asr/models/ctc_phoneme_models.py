@@ -42,31 +42,30 @@ class EncDecCTCModelPhoneme(EncDecCTCModel):
         cfg = model_utils.maybe_update_config_version(cfg)
 
         # Get list of valid phonemes
-        if not hasattr(self, 'tokenizer'):
-            if 'phonemes_file' in cfg:
-                phonemes_file = cfg.get('phonemes_file')
-            else:
-                logging.error("ERROR: You must specify a phonemes file in the config.")
-                raise ValueError("`cfg` must have `phonemes_file` path to create a tokenizer!")
-            phonemes_file = self.register_artifact('phonemes_file', phonemes_file)
+        if 'phonemes_file' in cfg:
+            phonemes_file = cfg.get('phonemes_file')
+        else:
+            logging.error("ERROR: You must specify a phonemes file in the config.")
+            raise ValueError("`cfg` must have `phonemes_file` path to create a tokenizer!")
+        phonemes_file = self.register_artifact('phonemes_file', phonemes_file)
 
-            # Create WordTokenizer and override number of classes in the decoder if a placeholder was given
-            self.tokenizer = tokenizers.WordTokenizer(vocab_file=cfg['phonemes_file'])
-            vocabulary = self.tokenizer.vocab
-            # vocabulary = {f"{phoneme} ":index for phoneme,index in self.tokenizer.vocab.items()}
+        # Create WordTokenizer and override number of classes in the decoder if a placeholder was given
+        self.tokenizer = tokenizers.WordTokenizer(vocab_file=cfg['phonemes_file'])
+        vocabulary = self.tokenizer.vocab
+        # vocabulary = {f"{phoneme} ":index for phoneme,index in self.tokenizer.vocab.items()}
 
-            with open_dict(cfg):
-                cfg.decoder.vocabulary = ListConfig(list(vocabulary.keys()))
+        with open_dict(cfg):
+            cfg.decoder.vocabulary = ListConfig(list(vocabulary.keys()))
 
-            num_classes = cfg.decoder['num_classes']
+        num_classes = cfg.decoder['num_classes']
 
-            if num_classes < 1:
-                logging.info(
-                    "\nReplacing placeholder number of classes ({}) with actual number of classes - {}".format(
-                        num_classes, len(vocabulary)
-                    )
+        if num_classes < 1:
+            logging.info(
+                "\nReplacing placeholder number of classes ({}) with actual number of classes - {}".format(
+                    num_classes, len(vocabulary)
                 )
-                cfg.decoder["num_classes"] = len(vocabulary)
+            )
+            cfg.decoder["num_classes"] = len(vocabulary)
 
         super().__init__(cfg=cfg, trainer=trainer)
 
