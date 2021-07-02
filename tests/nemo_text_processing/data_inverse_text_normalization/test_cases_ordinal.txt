@@ -1,33 +1,15 @@
-one hundredth~100th
-twenty five thousand one hundred eleventh~25111th
-second~2nd
-zeroth~0th
-first~1st
-second~2nd
-third~3rd
-fourth~4th
-eleventh~11th
-twelfth~12th
-thirteenth~13th
-twenty first~21st
-twenty third~23rd
-one hundred eleventh~111th
-one thousandth~1000th
-one hundred twenty first~121st
-second~2nd
-tenth~10th
-sixth~6th
-third~3rd
-nineteenth~19th
-third~3rd
-twelfth~12th
-forty eighth~48th
-seventy first~71st
-third~3rd
-forty second~42nd
-seventeenth~17th
-twentieth~20th
-twenty first~21st
-seventh~7th
-second~2nd
-fifth~5th
+ein hundertste~100te
+fünf und zwanzig tausend ein hundert elftem~25111tem
+zweite~2te
+nullte~0te
+erster~1ter
+zweiter~2ter
+dritter~3ter
+vierter~4ter
+elftem~11tem
+dreizehntem~13tem
+ein und zwanzigstes~21tes
+drei und zwanzigstes~23tes
+ein hundert elftes~111tes
+ein tausendstem~1000tem
+ein hundert ein und zwanzigste~121te

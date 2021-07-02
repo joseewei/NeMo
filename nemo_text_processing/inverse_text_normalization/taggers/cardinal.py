@@ -15,6 +15,7 @@
 
 
 from collections import defaultdict
+
 from nemo_text_processing.inverse_text_normalization.utils import get_abs_path, num_to_word
 from nemo_text_processing.text_normalization.data_loader_utils import load_labels
 from nemo_text_processing.text_normalization.graph_utils import (
@@ -36,13 +37,14 @@ except (ModuleNotFoundError, ImportError):
 
 AND = "und"
 
+
 def get_ties_digit(digit_path, tie_path):
-    
+
     digits = defaultdict(list)
     ties = defaultdict(list)
     for k, v in load_labels(digit_path):
         digits[v].append(k)
-    
+
     for k, v in load_labels(tie_path):
         ties[v].append(k)
 
@@ -56,7 +58,7 @@ def get_ties_digit(digit_path, tie_path):
             for ti in ties[s[0]]:
                 word = di + f" {AND} " + ti
                 d.append((word, s))
-    
+
     return pynini.string_map(d)
 
 
@@ -78,15 +80,18 @@ class CardinalFst(GraphFst):
 
         graph_hundred = pynutil.delete(file_hundred)
 
-        graph_ties_digit = get_ties_digit(get_abs_path("data/numbers/digit.tsv"), get_abs_path("data/numbers/ties.tsv"))
+        graph_ties_digit = get_ties_digit(
+            get_abs_path("data/numbers/digit.tsv"), get_abs_path("data/numbers/ties.tsv")
+        )
         graph_ties = graph_ties_digit | (graph_ties + pynutil.insert("0"))
 
         graph_hundred_component = pynini.union(graph_digit + delete_space + graph_hundred, pynutil.insert("0"))
         graph_hundred_component += delete_space
         graph_hundred_component += pynini.union(
-            graph_teen,  pynutil.insert("00"), #  fourteen
-            graph_ties, # twenty, twenty four,
-            pynutil.insert("0") + graph_digit                                                                                                                                                
+            graph_teen,
+            pynutil.insert("00"),  #  fourteen
+            graph_ties,  # twenty, twenty four,
+            pynutil.insert("0") + graph_digit,
         )
 
         graph_hundred_component_at_least_one_none_zero_digit = graph_hundred_component @ (
@@ -102,32 +107,50 @@ class CardinalFst(GraphFst):
         )
 
         graph_million = pynini.union(
-            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("million") + pynini.closure(pynutil.delete("en"), 0, 1),
+            graph_hundred_component_at_least_one_none_zero_digit
+            + delete_space
+            + pynutil.delete("million")
+            + pynini.closure(pynutil.delete("en"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
         graph_billion = pynini.union(
-            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("milliarde") + pynini.closure(pynutil.delete("n"), 0, 1),
+            graph_hundred_component_at_least_one_none_zero_digit
+            + delete_space
+            + pynutil.delete("milliarde")
+            + pynini.closure(pynutil.delete("n"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
         graph_trillion = pynini.union(
-            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("billion") + pynini.closure(pynutil.delete("en"), 0, 1),
+            graph_hundred_component_at_least_one_none_zero_digit
+            + delete_space
+            + pynutil.delete("billion")
+            + pynini.closure(pynutil.delete("en"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
         graph_quadrillion = pynini.union(
-            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("billiarde") + pynini.closure(pynutil.delete("n"), 0, 1),
+            graph_hundred_component_at_least_one_none_zero_digit
+            + delete_space
+            + pynutil.delete("billiarde")
+            + pynini.closure(pynutil.delete("n"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
         graph_quintillion = pynini.union(
-            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("trillion") + pynini.closure(pynutil.delete("en"), 0, 1),
+            graph_hundred_component_at_least_one_none_zero_digit
+            + delete_space
+            + pynutil.delete("trillion")
+            + pynini.closure(pynutil.delete("en"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
         graph_sextillion = pynini.union(
-            graph_hundred_component_at_least_one_none_zero_digit + delete_space + pynutil.delete("trilliarde") + pynini.closure(pynutil.delete("n"), 0, 1),
+            graph_hundred_component_at_least_one_none_zero_digit
+            + delete_space
+            + pynutil.delete("trilliarde")
+            + pynini.closure(pynutil.delete("n"), 0, 1),
             pynutil.insert("000", weight=0.1),
         )
 
         graph = pynini.union(
-            graph_sextillion 
+            graph_sextillion
             + delete_space
             + graph_quintillion
             + delete_space

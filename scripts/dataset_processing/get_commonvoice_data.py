@@ -133,7 +133,6 @@ def main():
 
     target_unpacked_dir = os.path.join(data_root, "CV_unpacked")
 
-    
     if os.path.exists(target_unpacked_dir):
         logging.info('Find existing folder {}'.format(target_unpacked_dir))
     else:

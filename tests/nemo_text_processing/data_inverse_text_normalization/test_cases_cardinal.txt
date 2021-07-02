@@ -55,3 +55,7 @@ achtzehn millionen vierhundertfünfzigtausendneunhundertneunzig~18450990
 achtzehn millionen neun hundert vierzig tausend sieben hundert zwei und zwanzig~18940722
 achtzehn millionen sechs hundert neunzig tausend neun hundert sechzehn~18690916
 achtzehn tausend acht hundert achtzig~18880
+hundert~100
+tausend~1000
+hundert zwanzig~120
+tausend zwanzig~1020

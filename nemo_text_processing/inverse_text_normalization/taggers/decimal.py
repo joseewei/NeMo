@@ -38,7 +38,9 @@ def get_quantity(decimal: 'pynini.FstLike', cardinal_up_to_hundred: 'pynini.FstL
     numbers = cardinal_up_to_hundred @ (
         pynutil.delete(pynini.closure("0")) + pynini.difference(NEMO_DIGIT, "0") + pynini.closure(NEMO_DIGIT)
     )
-    suffix = pynini.union("million", "millionen", "milliarde", "milliarden", "billion", "billionen") # "quadrillion", "quintillion", "sextillion")
+    suffix = pynini.union(
+        "million", "millionen", "milliarde", "milliarden", "billion", "billionen"
+    )  # "quadrillion", "quintillion", "sextillion")
     res = (
         pynutil.insert("integer_part: \"")
         + numbers
