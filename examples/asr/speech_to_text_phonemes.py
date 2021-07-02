@@ -17,7 +17,7 @@
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
 
-from nemo.collections.asr.models.ctc_phoneme_models import EncDecCTCModelPhoneme
+from nemo.collections.asr.models.ctc_phoneme_models import EncDecCTCModel, EncDecCTCModelPhoneme
 from nemo.core.config import hydra_runner
 from nemo.utils import logging
 from nemo.utils.exp_manager import exp_manager
@@ -29,10 +29,16 @@ def main(cfg):
 
     trainer = pl.Trainer(**cfg.trainer)
     exp_manager(trainer, cfg.get("exp_manager", None))
+
     asr_model = EncDecCTCModelPhoneme(cfg=cfg.model, trainer=trainer)
 
     # Initialize the weights of the model from another model, if provided via config
-    asr_model.maybe_init_from_pretrained_checkpoint(cfg)
+    ckpt_path = cfg.get('init_from_nemo_model', None)
+    if ckpt_path is not None:
+        ckpt_model = EncDecCTCModel.restore_from(ckpt_path)
+        ckpt_model.change_vocabulary(list(asr_model.tokenizer.vocab.keys()))
+        asr_model.load_state_dict(ckpt_model.state_dict(), strict=False)
+        del ckpt_model
 
     trainer.fit(asr_model)
 
